@@ -11,7 +11,7 @@ update this file should not be approved.
 | `/products` | Browse product catalog | G | P0 | F1 Product Discovery | TBD | TBD | Not started |
 | `/products/:id` | View product details | G | P0 | F1 Product Discovery | TBD | TBD | Not started |
 | `/cart` | Manage shopping cart | U | P0 | F2 Cart | TBD | TBD | Not started |
-| `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | TBD | In progress |
+| `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | TBD | TBD | Not started |
 | `/seller/products` | Manage seller products | U | P0 | F4 Product Management | TBD | TBD | Not started |
 | `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | TBD | TBD | Not started |
