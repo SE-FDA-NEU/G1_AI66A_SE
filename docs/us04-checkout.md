@@ -159,15 +159,15 @@ Order confirmation
 
 US04 primarily supports the Buyer persona, Nguyễn Minh Anh.
 
-The story addresses the buyer's need to complete a purchase conveniently
-after managing products in the shopping cart.
+This story supports the buyer's goal of completing purchases conveniently
+through the `/checkout` flow.
 
-Relevant buyer needs include:
+It addresses the buyer's key needs by:
 
-- checkout;
-- cart quantity management;
-- clear product availability;
-- successful order confirmation.
+- allowing checkout from the shopping cart;
+- validating cart quantities and product availability;
+- preventing invalid orders when stock is insufficient;
+- providing an order identifier and confirmation after successful checkout.
 
-This story also addresses the buyer's pain point of uncertainty about
-product availability by requiring stock validation before order creation.
+Therefore, US04 directly addresses the buyer's need for a reliable and clear
+checkout process.
