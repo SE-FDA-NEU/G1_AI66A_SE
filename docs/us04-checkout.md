@@ -155,19 +155,60 @@ Generate order ID
 Order confirmation
 ```
 
-## 8. Persona Relevance
+### Persona 1 – Buyer: Nguyễn Minh Anh
 
-US04 primarily supports the Buyer persona, Nguyễn Minh Anh.
+- **Age:** 21
+- **Occupation:** University student
+- **Role:** Buyer
+- **Gender:** [fill from actual interview]
+- **Interview method:** [Face-to-face / Online / Phone]
+- **Interview date:** [dd/mm/yyyy]
 
-This story supports the buyer's goal of completing purchases conveniently
-through the `/checkout` flow.
+#### Background
 
-It addresses the buyer's key needs by:
+Nguyễn Minh Anh is a university student who uses online shopping platforms
+to find and purchase products conveniently.
 
-- allowing checkout from the shopping cart;
-- validating cart quantities and product availability;
-- preventing invalid orders when stock is insufficient;
+As a buyer, Minh Anh expects the shopping process to be simple and clear,
+especially when managing products in the cart and completing checkout.
+
+#### Actual Goals
+
+- Find suitable products easily.
+- View clear and sufficient product information before purchasing.
+- Manage products and quantities in the shopping cart conveniently.
+- Complete checkout with as few unnecessary steps as possible.
+- Know whether selected products are still available before confirming an order.
+- Receive clear confirmation after a successful purchase.
+
+#### Pain Points
+
+- Product information may be unclear or incomplete.
+- Managing several products in the cart can be confusing.
+- Product stock may change between adding an item to the cart and checkout.
+- Checkout errors may not clearly explain what went wrong.
+- The buyer may be uncertain whether the order was successfully created.
+
+#### Key Needs
+
+- Product search and product details.
+- Persistent shopping cart.
+- Cart quantity management.
+- Clear price and order total.
+- Stock validation at checkout.
+- Simple checkout process.
+- Clear error messages.
+- Order confirmation and order history.
+
+#### Relationship to US04
+
+US04 directly supports Nguyễn Minh Anh's need to complete a purchase
+reliably and conveniently.
+
+The story addresses the persona's goals and pain points by:
+
+- validating the products and quantities in the cart;
+- checking stock again before order creation;
+- preventing invalid orders when the cart is empty or stock is insufficient;
+- identifying the product that causes a checkout problem;
 - providing an order identifier and confirmation after successful checkout.
-
-Therefore, US04 directly addresses the buyer's need for a reliable and clear
-checkout process.
