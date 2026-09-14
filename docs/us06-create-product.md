@@ -222,3 +222,31 @@ Creation confirmation
 ---
 
 ## 10. Acceptance Criteria Coverage
+
+### AC1
+
+An authenticated seller submitting valid product data creates a new product.
+
+Covered by Sections 2, 4, 5 and 6.
+
+### AC2
+
+Missing required information causes the request to be rejected and invalid fields to be identified.
+
+Covered by Sections 3 and 7.
+
+### AC3
+
+Negative price or stock prevents product creation.
+
+Covered by Sections 3 and 7.
+
+The requirement is strengthened so that price must be strictly positive.
+
+### AC4
+
+A non-seller cannot access product creation.
+
+Covered by Section 4.
+
+---
