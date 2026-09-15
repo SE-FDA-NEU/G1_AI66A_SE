@@ -15,7 +15,7 @@ update this file should not be approved.
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | TBD | TBD | Not started |
 | `/seller/products` | Manage seller products | U | P0 | F4 Product Management | TBD | TBD | Not started |
 | `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | TBD | TBD | Not started |
-| `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | TBD | TBD | Not started |
+| `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | #21 | #<PR_NUMBER> | In progress |
 
 **Access codes:** G = guest (not logged in) · U = authenticated user · A = admin
 
@@ -33,5 +33,5 @@ Numbered, so issues and tests can cite them.
 | BR4 | A buyer can view only their own orders. | Orders | TBD |
 | BR5 | Sellers can manage only products belonging to their own store. | Seller product management | TBD |
 | BR6 | Sellers can view and manage incoming orders related to their products. | Seller order management | TBD |
-| BR7 | Seller analytics must be calculated from completed or valid order data. | Seller analytics | TBD |
+| BR7 | Seller revenue is calculated only from the authenticated seller's order items in COMPLETED orders, using the item price recorded at purchase time. | Seller analytics | TBD |
 | BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | Checkout/order creation | TBD |
