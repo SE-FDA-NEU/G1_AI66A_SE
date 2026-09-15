@@ -14,6 +14,7 @@ update this file should not be approved.
 | `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | TBD | TBD | Not started |
 | `/seller/products` | Manage seller products | U | P0 | F4 Product Management | TBD | TBD | Not started |
+| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | #18 | #<PR_NUMBER> | In progress |
 | `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | TBD | TBD | Not started |
 | `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | TBD | TBD | Not started |
 
@@ -31,7 +32,7 @@ Numbered, so issues and tests can cite them.
 | BR2 | Buyers can add products to their shopping cart only when the requested quantity is available. | Cart | TBD |
 | BR3 | A buyer must be authenticated before placing an order. | Checkout | TBD |
 | BR4 | A buyer can view only their own orders. | Orders | TBD |
-| BR5 | Sellers can manage only products belonging to their own store. | Seller product management | TBD |
+| BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | Seller product management | TBD |
 | BR6 | Sellers can view and manage incoming orders related to their products. | Seller order management | TBD |
 | BR7 | Seller analytics must be calculated from completed or valid order data. | Seller analytics | TBD |
 | BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | Checkout/order creation | TBD |
