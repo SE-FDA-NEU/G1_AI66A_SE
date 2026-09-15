@@ -1,7 +1,7 @@
 # User Story: Browse Product Catalog (Detailed)
 
 ## 1. Meta Information
-- **Ticket ID:** US-101
+- **Ticket ID:** US01
 - **Epic:** Product Discovery
 - **Story:** As a potential buyer, I want to browse products available on the marketplace, so that I can discover items I may want to purchase.
 - **Priority:** P0 (Must Have)
@@ -82,6 +82,6 @@
   - Mobile view: 2 product cards per row.
 
 ## 5. Definition of Ready (DoR)
-- [x] UI/UX Mockups are attached (Figma link).
+- [ ] UI/UX Mockups are attached (Figma link).
 - [x] API contract is defined.
 - [x] Acceptance criteria cover edge cases (loading, empty, error).

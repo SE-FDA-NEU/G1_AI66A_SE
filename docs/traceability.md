@@ -8,7 +8,7 @@ update this file should not be approved.
 
 | Route | Purpose | Access | Priority | Feature | Story issue | PR | Status |
 |-------|---------|--------|----------|---------|-------------|-----|--------|
-| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | TBD | TBD | Not started |
+| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | In progress |
 | `/products/:id` | View product details | G | P0 | F1 Product Discovery | TBD | TBD | Not started |
 | `/cart` | Manage shopping cart | U | P0 | F2 Cart | TBD | TBD | Not started |
 | `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
