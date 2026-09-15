@@ -49,7 +49,7 @@ Therefore, a single parent `Order` contains multiple `Order_Items`. **Sellers ma
 Need to ensure strict tenant isolation using joins:
 ```sql
 -- Query to fetch orders strictly belonging to the logged-in seller
-SELECT 
+SELECT q
     oi.id AS sub_order_id,
     o.id AS parent_order_id,
     o.created_at,
