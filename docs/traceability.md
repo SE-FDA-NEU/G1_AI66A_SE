@@ -16,7 +16,7 @@ update this file should not be approved.
 | `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | #17 | #27 | In progress |
 | `/seller/products` | Manage seller products | U | P0 | F4 Product Management | TBD | TBD | Not started |
 | `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | #18 | #<PR_NUMBER> | In progress |
-| `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | TBD | TBD | Not started |
+| `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | In progress |
 | `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | TBD | TBD | Not started |
 
 **Access codes:** G = guest (not logged in) · U = authenticated user · A = admin
