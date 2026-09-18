@@ -30,7 +30,7 @@ The cart total is calculated as:
 
 `cartTotal = sum(lineTotal of all cart items)`
 
-The total must be recalculated whenever an item is added, removed, or its qunatity is changed.
+The total must be recalculated whenever an item is added, removed, or its quantity is changed.
 
 ---
 
@@ -38,11 +38,11 @@ The total must be recalculated whenever an item is added, removed, or its qunati
 
 When a buyer adds a product to the cart:
 
-1. The system checks that the product exists/
-2. The system checks that the product is currently available for purchase/
+1. The system checks that the product exists.
+2. The system checks that the product is currently available for purchase.
 3. The selected quantity must be a positive integer.
 4. The selected quantity must not exceed the currently available stock.
-5. If validation succeeds, the item is added to the cart/
+5. If validation succeeds, the item is added to the cart.
 6. If the same product already exists in the cart, its quantity is increased instead of creating a duplicate cart line.
 7. The resulting quantity must still satisfy the stock constraint.
 
@@ -58,12 +58,12 @@ A valid quantity must satisfy:
 
 - It is an integer.
 - It is greater than or equal to 1.
-- It does not excceed the currently available stock.
+- It does not exceed the currently available stock.
 
 If the requested quantity is invalid:
 
 - the update is rejected;
-- the previous valid quantiy remains unchanged;
+- the previous valid quantity remains unchanged;
 - the cart total remains unchanged;
 - the buyer is informed why the update failed.
 
@@ -82,17 +82,17 @@ When a buyer removes an item:
 
 ---
 
-## 6. Quantity & Shock Validation
+## 6. Quantity & Stock Validation
 
 ### BR2 - Cart quantity validation
 
 A buyer may add or update a cart item only when the requested quantity is a positive integer and does not exceed the product's currently available stock.
 
-Adding a product to the shopping cart does not reserve stock/
+Adding a product to the shopping cart does not reserve stock.
 
-Stock may change after a product has been added to the cart
+Stock may change after a product has been added to the cart.
 
-Therefore, the cart preforms an initial stock validation for user feedback, but the final stock validation is performed again during checkout according to BR8.
+Therefore, the cart performs an initial stock validation for user feedback, but the final stock validation is performed again during checkout according to BR8.
 
 This keeps US03 consistent with US04.
 
