@@ -10,7 +10,7 @@ update this file should not be approved.
 |-------|---------|--------|----------|---------|-------------|-----|--------|
 | `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | In progress |
 | `/products/:id` | View product details | G | P0 | F1 Product Discovery | TBD | TBD | Not started |
-| `/cart` | Manage shopping cart | U | P0 | F2 Cart | TBD | TBD | Not started |
+| `/cart` | Manage shopping cart | U | P0 | F2 Cart | #15 | #<PR_NUMBER> | In progress |
 | `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | #17 | #27 | In progress |
 | `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | #17 | #27 | In progress |
@@ -31,7 +31,7 @@ Numbered, so issues and tests can cite them.
 | # | Rule | Enforced where | Tested by |
 |---|------|----------------|-----------|
 | BR1 | Only available products can be displayed in the product catalog. | Product catalog | TBD |
-| BR2 | Buyers can add products to their shopping cart only when the requested quantity is available. | Cart | TBD |
+| BR2 | Buyers may add or update cart items only when the requested quantity is a positive integer and does not exceed current available stock. Adding an item to the cart does not reserve stock. | Cart | TBD |
 | BR3 | A buyer must be authenticated before placing an order. | Checkout | TBD |
 | BR4 | A buyer can view only their own orders. | Orders | TBD |
 | BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | Seller product management | TBD |
