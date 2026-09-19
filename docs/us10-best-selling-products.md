@@ -51,9 +51,13 @@ where each counted order item satisfies all of the following:
 Products with a higher total quantity sold appear above products with a lower
 total quantity sold.
 
-If two products have the same total quantity sold, the ranking should use a
-stable secondary sort, such as product name ascending and then product ID. This
-keeps the display deterministic for users and tests.
+If two products have the same total quantity sold, the ranking must use this
+canonical tie-break order:
+
+1. Product name ascending.
+2. Product ID ascending.
+
+This keeps the display deterministic for users and tests.
 
 Revenue is not used as the primary ranking metric for US10.
 
@@ -80,9 +84,10 @@ The ranking must not include quantities from orders that are still:
 This keeps the report based on completed sales rather than unfinished,
 cancelled, or invalid transactions.
 
-This behaviour is consistent with BR7 in `docs/traceability.md`:
-
-> Seller analytics must be calculated from completed or valid order data.
+This behaviour follows the completed-order convention used by US09 revenue
+analytics. In `docs/traceability.md`, BR7 defines the seller revenue analytics
+rule, while BR10 is the direct business rule for US10 best-selling product
+analytics.
 
 ---
 
