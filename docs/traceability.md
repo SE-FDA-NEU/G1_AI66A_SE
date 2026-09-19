@@ -19,7 +19,7 @@ update this file should not be approved.
 | `/seller/products/:productId/edit` | Update product information and stock | U | P1 | F4 Product Management | #19 | #30 | In progress |
 | `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | In progress |
 | `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | #21 | #33 | In progress |
-| `/seller/analytics/products` | View best-selling product ranking | U | P2 | F6 Analytics | #22 | #36 | In progress |
+| `/seller/analytics/products` | View best-selling product ranking | U | P2 | F6 Analytics | #22 | #39 | In review |
 
 **Access codes:** G = guest (not logged in) · U = authenticated user · A = admin
 
