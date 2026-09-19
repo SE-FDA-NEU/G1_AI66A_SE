@@ -200,3 +200,6 @@ Covered by Section 3 (Out-of-stock product).
 
 Given the product ID does not exist, when I open the URL, then the system shows a clear "Product not found" response.
 
+Covered by Section 4.
+
+---
