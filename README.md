@@ -9,8 +9,8 @@ A mini marketplace where sellers can list products, buyers can add products to c
 
 | Name | GitHub username | Team Role |
 | --- | --- | --- |
-| Nguyen Thuy Quynh | [@Ted Nguyen](https://github.com/Ted Nguyen) | Leader / Member |
-| Nguyen Quang Minh | [@QuangMinhQu](https://github.com/QuangMinhQu) | Member |
+| Nguyen Thuy Quynh | [@teddywristh](https://github.com/teddywristh) | Member |
+| Nguyen Quang Minh | [@MinhQuangQu](https://github.com/MinhQuangQu) | Member |
 | Nguyen Ho Nhat Minh | [@minhnm162](https://github.com/minhnm162) | Member |
 | Le Duc Minh | [@leducminh290506-eng](https://github.com/leducminh290506-eng) | PO / SM / Member |
 
