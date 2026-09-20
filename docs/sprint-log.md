@@ -36,7 +36,7 @@ Define comprehensive user story specifications, acceptance criteria, and traceab
 | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | US09 - Seller revenue analytics | 5 | @QuangMinhQu |
 | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | US10 - Seller views best-selling products | 3 | @minhnm162 |
 
-**Total committed: 34 points**
+**Total committed: 39 points**
 
 ### Result
 
@@ -53,7 +53,7 @@ Define comprehensive user story specifications, acceptance criteria, and traceab
 | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | 5 | Done | |
 | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | 3 | Done | |
 
-**Completed: 34 points. Velocity this sprint: 34**
+**Completed: 39 points. Velocity this sprint: 39**
 
 ### Sprint Review
 
