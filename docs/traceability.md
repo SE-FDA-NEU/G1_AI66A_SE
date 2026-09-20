@@ -9,7 +9,7 @@ update this file should not be approved.
 | Route | Purpose | Access | Priority | Feature | Story issue | PR | Status |
 |-------|---------|--------|----------|---------|-------------|-----|--------|
 | `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | In progress |
-| `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | In progress |
+| `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | Done |
 | `/cart` | Manage shopping cart | U | P0 | F2 Cart | #15 | #<PR_NUMBER> | In progress |
 | `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | #17 | #27 | In progress |
