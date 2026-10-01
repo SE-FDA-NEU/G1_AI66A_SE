@@ -2,6 +2,7 @@
 
 import os
 from typing import Generator
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -9,8 +10,8 @@ from starlette.testclient import TestClient
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-from src.main import create_app
 from src.database import init_db
+from src.main import create_app
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -1,6 +1,7 @@
 """Initial product endpoints skeleton supporting US01 walking skeleton."""
 
 from typing import Any, Dict, List
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 

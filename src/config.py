@@ -1,8 +1,8 @@
 """Application configuration management supporting both pydantic-settings and pydantic fallback."""
 
-from functools import lru_cache
 import json
 import os
+from functools import lru_cache
 from typing import List, Union
 
 from dotenv import load_dotenv
@@ -25,7 +25,9 @@ try:
         )
 
         APP_NAME: str = Field(default="Mini Marketplace", description="Name of the application")
-        APP_ENV: str = Field(default="development", description="Environment: development, test, production")
+        APP_ENV: str = Field(
+            default="development", description="Environment: development, test, production"
+        )
         DEBUG: bool = Field(default=True, description="Debug mode flag")
         APP_HOST: str = Field(default="127.0.0.1", description="Host address for binding")
         APP_PORT: int = Field(default=8000, description="Port number for listening")
@@ -47,7 +49,9 @@ try:
         def validate_database_url(cls, v: str) -> str:
             """Validate database URL is not empty."""
             if not v or not v.strip():
-                raise ValueError("DATABASE_URL must not be empty. Please specify a valid database URL.")
+                raise ValueError(
+                    "DATABASE_URL must not be empty. Please specify a valid database URL."
+                )
             return v.strip()
 
         @field_validator("CORS_ORIGINS", mode="before")
@@ -109,7 +113,9 @@ except ImportError:
         def validate_database_url(cls, v: str) -> str:
             """Validate database URL is not empty."""
             if not v or not v.strip():
-                raise ValueError("DATABASE_URL must not be empty. Please specify a valid database URL.")
+                raise ValueError(
+                    "DATABASE_URL must not be empty. Please specify a valid database URL."
+                )
             return v.strip()
 
         @field_validator("CORS_ORIGINS", mode="before")

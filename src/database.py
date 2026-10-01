@@ -38,7 +38,7 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     """Create all database tables registered with Base at runtime.
-    
+
     This ensures that from a clean checkout, the database is generated dynamically
     without committing runtime database files to Git.
     """

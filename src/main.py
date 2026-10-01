@@ -1,12 +1,12 @@
 """Application entrypoint and FastAPI application factory."""
 
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Dict
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 
 from src import __version__
 from src.api.health import router as health_router
@@ -47,7 +47,11 @@ def create_app() -> FastAPI:
     )
 
     # Configure CORS middleware
-    origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
+    origins = (
+        settings.CORS_ORIGINS
+        if isinstance(settings.CORS_ORIGINS, list)
+        else [settings.CORS_ORIGINS]
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

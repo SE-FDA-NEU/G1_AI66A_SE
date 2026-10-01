@@ -22,7 +22,7 @@ class HealthResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
     """Return application health, version, environment, and database status.
-    
+
     Used by smoke tests and deployment readiness probes.
     """
     settings = get_settings()
