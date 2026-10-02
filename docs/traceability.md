@@ -25,6 +25,22 @@ update this file should not be approved.
 
 **Status:** Not started / In progress / Done
 
+## Task 3: Database-backed product API
+
+Task 3 is implemented for the `/products` catalog backend. The
+`GET /api/v1/products` endpoint now uses the injected SQLAlchemy database
+session to query the `products` table instead of returning a hard-coded
+response. The query filters published, non-deleted products, orders by
+creation time, and supports paginated results through `page` and `limit`.
+Each response includes product fields, stock status, and pagination metadata.
+
+| Task 3 requirement | Implementation | Status |
+|---|---|---|
+| Fetch products from the real database | `src/api/products.py:list_products()` uses `get_db()` and SQL queries | Done |
+| Do not hard-code the product list | Product rows are selected from `products` with bound query parameters | Done |
+| Support the defined product-list API contract | `GET /api/v1/products?page={page}&limit={limit}` returns `data` and `meta` | Done |
+| Apply catalog visibility rules | Query includes `is_published = true` and `deleted_at IS NULL` | Done |
+
 ## Business rules
 
 Numbered, so issues and tests can cite them.
