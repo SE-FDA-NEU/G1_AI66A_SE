@@ -182,6 +182,10 @@ Once the server is started:
   Open [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc) in your browser.
 - **Product Catalog Skeleton (US01):**
   `GET http://127.0.0.1:8000/api/v1/products?page=1&limit=20`
+- **Product Catalog Page:**
+  Open [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products) in
+  your browser. The page fetches catalog data from `/api/v1/products` and
+  renders loading, retry, and empty states.
 
 ---
 

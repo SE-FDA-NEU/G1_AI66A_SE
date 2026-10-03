@@ -13,6 +13,7 @@ from src.api.health import router as health_router
 from src.api.router import api_router
 from src.config import get_settings
 from src.database import init_db
+from src.web import router as web_router
 
 # Configure application logging
 logging.basicConfig(
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
 
     # Include versioned API router
     app.include_router(api_router)
+    app.include_router(web_router)
 
     return app
 

@@ -41,6 +41,21 @@ Each response includes product fields, stock status, and pagination metadata.
 | Support the defined product-list API contract | `GET /api/v1/products?page={page}&limit={limit}` returns `data` and `meta` | Done |
 | Apply catalog visibility rules | Query includes `is_published = true` and `deleted_at IS NULL` | Done |
 
+## Frontend `/products` evidence
+
+The guest-facing `/products` page is implemented in `src/web.py` and registered
+through `src/main.py`. It fetches product data from
+`/api/v1/products?limit=100`; it does not contain a hard-coded product array.
+The page renders product cards, loading feedback, an API error with a Retry
+action, and the empty-state message `No products available at the moment.`
+
+| Frontend requirement | Implementation | Evidence |
+|---|---|---|
+| Display products returned by the backend | `src/web.py` calls the product API and renders the response into the catalog grid | Browser page at `http://127.0.0.1:8000/products` |
+| Display at least 10 records when available | The page renders every record returned by the API request with `limit=100` | Depends on the database containing at least 10 product rows |
+| Display an empty state | `renderProducts()` hides the grid and displays the empty-state message when `data` is empty | Implemented in `src/web.py` |
+| Handle loading and API failures | `loadProducts()` displays loading text and a Retry button for failed requests | Browser validation confirmed the page displays the retry state when the API is unavailable |
+
 ## Business rules
 
 Numbered, so issues and tests can cite them.
