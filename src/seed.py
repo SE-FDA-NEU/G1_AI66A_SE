@@ -1,6 +1,6 @@
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import Session, select
 
-from src.database import engine
+from src.database import engine, init_db
 from src.models.product import Product
 
 
@@ -101,7 +101,7 @@ def build_products() -> list[Product]:
 
 def seed_products():
     # Fresh machine: tạo bảng nếu database chưa tồn tại
-    SQLModel.metadata.create_all(engine)
+    init_db()
 
     products = build_products()
 

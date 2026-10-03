@@ -4,6 +4,11 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
+from sqlmodel import select
+
+from src.database import SessionDep
+from src.models.product import Product
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -26,16 +31,27 @@ class ProductListResponse(BaseModel):
 
 @router.get("", response_model=ProductListResponse)
 def list_products(
+    session: SessionDep,
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Page limit"),
 ) -> ProductListResponse:
-    """Browse catalog endpoint skeleton for US01 (Sprint 2 walking skeleton foundation)."""
+    """Return active products from the database with stable pagination."""
+    total = session.exec(
+        select(func.count()).select_from(Product).where(Product.is_active.is_(True))
+    ).one()
+    products = session.exec(
+        select(Product)
+        .where(Product.is_active.is_(True))
+        .order_by(Product.id)
+        .offset((page - 1) * limit)
+        .limit(limit)
+    ).all()
     return ProductListResponse(
-        data=[],
+        data=[product.model_dump() for product in products],
         meta=ProductMeta(
             current_page=page,
             limit=limit,
-            total=0,
-            total_pages=0,
+            total=total,
+            total_pages=(total + limit - 1) // limit,
         ),
     )
