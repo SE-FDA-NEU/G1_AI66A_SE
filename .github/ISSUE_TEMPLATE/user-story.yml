@@ -1,0 +1,80 @@
+name: "User Story"
+description: "A feature described from the user's point of view"
+title: "[Story] "
+labels: ["story"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Create ONE story per user-visible capability. Break the work into Tasks afterwards
+        (use the checklist at the bottom, or create separate Task issues linked to this one).
+
+  - type: input
+    id: story
+    attributes:
+      label: Story
+      description: "As a <role>, I want <goal> so that <benefit>."
+      placeholder: "As a registered customer, I want to save my delivery address so that I do not retype it on every order."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "P0 - must have (product is broken without it)"
+        - "P1 - should have"
+        - "P2 - nice to have"
+    validations:
+      required: true
+
+  - type: input
+    id: screen
+    attributes:
+      label: Related screen / route
+      description: "Must match a row in docs/traceability.md"
+      placeholder: "/account/addresses"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: "Write them as Given / When / Then. Minimum 2. These are what the reviewer tests."
+      value: |
+        - [ ] Given ... When ... Then ...
+        - [ ] Given ... When ... Then ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: "Break down into units of roughly half a day each. Assign each one to a person."
+      value: |
+        - [ ] Task 1 - @
+        - [ ] Task 2 - @
+        - [ ] Task 3 - @
+
+  - type: dropdown
+    id: estimate
+    attributes:
+      label: Estimate (story points)
+      description: "Modified Fibonacci. Estimate as a team during Sprint Planning, not alone."
+      options: ["1", "2", "3", "5", "8", "13 - too big, split it"]
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: "The whole team understands what 'done' means for this story"
+          required: true
+        - label: "It does not depend on an unfinished story from another team member"
+        - label: "It is small enough to finish inside one sprint"
+          required: true

@@ -1,0 +1,182 @@
+name: Board — auto In Review
+
+# Chuyển thẻ trên board sang "In Review" khi pull request được mở, và về
+# "In Progress" khi PR bị chuyển lại thành draft.
+#
+# GitHub KHÔNG có workflow tự động sẵn cho việc này — chỉ có sẵn trigger cho
+# "item added", "item closed", "PR merged", "code review approved". Vì vậy
+# phải viết tay.
+#
+# ------------------------------------------------------------------------
+# YÊU CẦU — thiếu một trong ba thứ này thì workflow chỉ cảnh báo, không hỏng:
+#
+#   1. Board phải được LINK với repo (tạo project từ tab Projects của repo,
+#      hoặc bật workflow "Auto-add to project" trỏ về repo này).
+#
+#   2. Field tên đúng `Status`, có option tên đúng `In Review` và
+#      `In Progress` — phân biệt hoa thường, có dấu cách.
+#
+#   3. Secret tên `PROJECTS_TOKEN` ở CẤP ORGANIZATION, chứa một fine-grained
+#      PAT có quyền Organization → Projects: Read and write.
+#      GITHUB_TOKEN mặc định KHÔNG có quyền ghi vào Projects v2.
+#      Giảng viên tạo một lần, cả 8 repo dùng chung.
+# ------------------------------------------------------------------------
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  move-card:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Đặt Status cho issue được PR này đóng
+        uses: actions/github-script@v7
+        with:
+          # Chưa có secret thì lùi về token mặc định — bước kiểm tra bên dưới
+          # sẽ ghi cảnh báo rồi thoát, thay vì làm hỏng cả workflow.
+          github-token: ${{ secrets.PROJECTS_TOKEN || github.token }}
+          script: |
+            const draft  = context.payload.action === 'converted_to_draft';
+            const target = draft ? 'In Progress' : 'In Review';
+
+            if (!process.env.HAS_TOKEN) {
+              core.warning(
+                'Chưa có secret PROJECTS_TOKEN. Thẻ trên board sẽ không tự ' +
+                'chuyển — hãy kéo tay sang "' + target + '". ' +
+                'Báo giảng viên để tạo organization secret.'
+              );
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            // --- 1. Tìm board gắn với repo, và field Status của nó ---------
+            const q1 = `
+              query($owner:String!, $repo:String!, $pr:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  projectsV2(first:5) {
+                    nodes {
+                      id
+                      title
+                      field(name: "Status") {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          options { id name }
+                        }
+                      }
+                    }
+                  }
+                  pullRequest(number:$pr) {
+                    closingIssuesReferences(first:10) { nodes { id number } }
+                  }
+                }
+              }`;
+
+            let data;
+            try {
+              data = await github.graphql(q1, { owner, repo, pr: prNumber });
+            } catch (e) {
+              core.warning('Không đọc được board: ' + e.message +
+                           '. Hãy kéo thẻ tay sang "' + target + '".');
+              return;
+            }
+
+            const boards = data.repository.projectsV2.nodes.filter(b => b.field);
+            if (boards.length === 0) {
+              core.warning(
+                'Không thấy board nào gắn với repo này, hoặc board không có ' +
+                'field tên đúng "Status". Kiểm tra lại tên field — phân biệt ' +
+                'hoa thường.'
+              );
+              return;
+            }
+
+            const issues = data.repository.pullRequest.closingIssuesReferences.nodes;
+            if (issues.length === 0) {
+              core.warning(
+                'Pull request này không đóng issue nào. Thêm dòng ' +
+                '"Closes #<số>" vào phần mô tả.'
+              );
+              return;
+            }
+
+            // --- 2. Với mỗi board, tìm item của issue rồi đặt Status -------
+            const qItems = `
+              query($id:ID!) {
+                node(id:$id) {
+                  ... on Issue {
+                    number
+                    projectItems(first:10) {
+                      nodes { id project { id } }
+                    }
+                  }
+                }
+              }`;
+
+            const mUpdate = `
+              mutation($project:ID!, $item:ID!, $field:ID!, $option:String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project,
+                  itemId:    $item,
+                  fieldId:   $field,
+                  value:     { singleSelectOptionId: $option }
+                }) { projectV2Item { id } }
+              }`;
+
+            let moved = 0;
+
+            for (const board of boards) {
+              const option = board.field.options.find(o => o.name === target);
+              if (!option) {
+                core.warning(
+                  `Board "${board.title}" không có option Status tên "${target}". ` +
+                  `Các option hiện có: ${board.field.options.map(o => o.name).join(', ')}`
+                );
+                continue;
+              }
+
+              for (const issue of issues) {
+                let items;
+                try {
+                  items = await github.graphql(qItems, { id: issue.id });
+                } catch (e) {
+                  core.warning(`Không đọc được issue #${issue.number}: ${e.message}`);
+                  continue;
+                }
+
+                const item = items.node.projectItems.nodes
+                                  .find(it => it.project.id === board.id);
+                if (!item) {
+                  core.warning(
+                    `Issue #${issue.number} chưa nằm trên board "${board.title}". ` +
+                    `Bật workflow "Auto-add to project" để issue mới tự vào board.`
+                  );
+                  continue;
+                }
+
+                try {
+                  await github.graphql(mUpdate, {
+                    project: board.id,
+                    item:    item.id,
+                    field:   board.field.id,
+                    option:  option.id,
+                  });
+                  core.info(`Issue #${issue.number} → ${target}`);
+                  moved++;
+                } catch (e) {
+                  core.warning(`Không đặt được Status cho #${issue.number}: ${e.message}`);
+                }
+              }
+            }
+
+            core.info(moved > 0
+              ? `Đã chuyển ${moved} thẻ sang "${target}".`
+              : 'Không chuyển được thẻ nào — xem cảnh báo ở trên.');
+        env:
+          HAS_TOKEN: ${{ secrets.PROJECTS_TOKEN != '' && 'yes' || '' }}

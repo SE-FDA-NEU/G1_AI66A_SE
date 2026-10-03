@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel an in-progress run when new commits are pushed to the same branch,
+# so a busy sprint week does not exhaust the org's Actions minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect stack
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.check.outputs.python }}
+      node: ${{ steps.check.outputs.node }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if ls requirements.txt pyproject.toml setup.py 2>/dev/null | grep -q .; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f package.json ]; then
+            echo "node=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "node=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  python:
+    name: Python tests
+    needs: detect
+    if: needs.detect.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-cov ruff
+
+      - name: Lint
+        run: ruff check . --output-format=github
+        continue-on-error: true   # Week 1-6: warn only. Remove this line from Sprint 2 onward.
+
+      - name: Test
+        run: pytest -v --cov --cov-report=term-missing --junitxml=junit.xml
+
+      - name: Publish test summary
+        if: always()
+        run: |
+          echo "### Test results" >> "$GITHUB_STEP_SUMMARY"
+          python - << 'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET, pathlib
+          f = pathlib.Path("junit.xml")
+          if not f.exists():
+              print("No test report produced. Did the test run crash?")
+          else:
+              r = ET.parse(f).getroot()
+              s = r if r.tag == "testsuite" else r.find("testsuite")
+              if s is None:
+                  print("No test suite found.")
+              else:
+                  total = int(s.get("tests", 0))
+                  bad = int(s.get("failures", 0)) + int(s.get("errors", 0))
+                  print(f"- Tests run: **{total}**")
+                  print(f"- Failed: **{bad}**")
+                  print(f"- Skipped: **{s.get('skipped', 0)}**")
+          PY
+
+  node:
+    name: Node build and tests
+    needs: detect
+    if: needs.detect.outputs.node == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci || npm install
+
+      - name: Lint
+        run: npm run lint --if-present
+        continue-on-error: true   # Week 1-6: warn only. Remove this line from Sprint 2 onward.
+
+      - name: Test
+        run: npm test --if-present
+
+      - name: Build
+        run: npm run build --if-present
+
+  secrets:
+    name: No secrets committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for obvious credentials
+        run: |
+          # Deliberately simple and readable - students should be able to read this
+          # and understand why their commit was blocked.
+          PATTERN='(AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|-----BEGIN [A-Z ]*PRIVATE KEY-----|password\s*=\s*["'"'"'][^"'"'"']{6,})'
+          if git grep -nIE "$PATTERN" -- . ':!*.md' ':!.github/workflows/*' ; then
+            echo "::error::A credential-looking string was found. Move it to an environment variable and rotate the key."
+            exit 1
+          fi
+          echo "Clean."
+
+      - name: No .env or database dumps
+        run: |
+          if git ls-files | grep -E '^(.*/)?\.env$|\.sql$|\.sqlite3?$|\.dump$' ; then
+            echo "::error::Environment files or database dumps must not be committed. Add them to .gitignore."
+            exit 1
+          fi
+          echo "Clean."

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask the lecturer
+    url: https://github.com/orgs/YOUR-ORG/discussions
+    about: Questions about requirements or grading go here, not in issues.

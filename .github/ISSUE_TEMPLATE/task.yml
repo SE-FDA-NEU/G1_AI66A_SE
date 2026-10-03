@@ -1,0 +1,37 @@
+name: "Task"
+description: "A technical unit of work that supports a story"
+title: "[Task] "
+labels: ["task"]
+body:
+  - type: input
+    id: parent
+    attributes:
+      label: Parent story
+      description: "Issue number of the story this belongs to."
+      placeholder: "#12"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs to be done
+      placeholder: "Add a POST /api/addresses endpoint with validation and a unit test."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type of work
+      options: ["frontend", "backend", "database", "testing", "devops", "docs"]
+    validations:
+      required: true
+
+  - type: input
+    id: estimate
+    attributes:
+      label: Estimated hours
+      placeholder: "4"
+    validations:
+      required: true

@@ -1,0 +1,59 @@
+# Canonical label set. Edited here, applied by .github/workflows/labels.yml
+# on every push to main. Do not create labels by hand in the UI - they will
+# be deleted on the next sync and your board filters will break.
+
+# --- Type (exactly one per issue) ---
+- name: story
+  color: "0e8a16"
+  description: "User-visible capability, written from the user's point of view"
+- name: task
+  color: "1d76db"
+  description: "Technical unit of work supporting a story"
+- name: bug
+  color: "d73a4a"
+  description: "Something that used to work and no longer does"
+- name: spike
+  color: "5319e7"
+  description: "Timeboxed investigation - output is knowledge, not code"
+- name: chore
+  color: "c2e0c6"
+  description: "Setup, config, dependency bumps - no user-visible change"
+
+# --- Priority (exactly one per story, matches the Milestone 1 brief) ---
+- name: "P0"
+  color: "b60205"
+  description: "Must have - the product is not viable without it"
+- name: "P1"
+  color: "fbca04"
+  description: "Should have"
+- name: "P2"
+  color: "d4c5f9"
+  description: "Nice to have"
+
+# --- Area ---
+- name: "area/frontend"
+  color: "bfd4f2"
+- name: "area/backend"
+  color: "bfd4f2"
+- name: "area/database"
+  color: "bfd4f2"
+- name: "area/testing"
+  color: "bfd4f2"
+- name: "area/devops"
+  color: "bfd4f2"
+- name: "area/docs"
+  color: "bfd4f2"
+
+# --- Process ---
+- name: blocked
+  color: "000000"
+  description: "Cannot proceed. Say why in a comment and raise it at stand-up."
+- name: "carried-over"
+  color: "e99695"
+  description: "Not finished in its planned sprint. Applied by the team during retro, not hidden."
+- name: "needs-estimate"
+  color: "ededed"
+  description: "Not ready for sprint planning yet"
+- name: "help wanted"
+  color: "008672"
+  description: "Open to any teammate picking this up"
