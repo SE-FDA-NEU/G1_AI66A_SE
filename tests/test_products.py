@@ -47,6 +47,9 @@ def test_products_database_pagination_and_visibility(client: TestClient) -> None
         first = client.get("/api/v1/products?limit=1").json()
         assert [item["code"] for item in first["data"]] == ["TEST-1"]
         assert first["data"][0]["image_url"] == "/first.jpg"
+        assert first["data"][0]["thumbnail_url"] == "/first.jpg"
+        assert isinstance(first["data"][0]["id"], str)
+        assert first["data"][0]["stock_status"] == "out_of_stock"
         assert first["meta"]["total"] == 2
         assert first["meta"]["total_pages"] == 2
         second = client.get("/api/v1/products?page=2&limit=1").json()

@@ -1,6 +1,4 @@
-"""Initial product endpoints skeleton supporting US01 walking skeleton."""
-
-from typing import Any, Dict, List
+"""Product catalog endpoint backed by the real database."""
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -25,8 +23,22 @@ class ProductMeta(BaseModel):
 class ProductListResponse(BaseModel):
     """Product list payload structure."""
 
-    data: List[Dict[str, Any]] = Field(default_factory=list, description="List of products")
+    data: list["ProductResponse"] = Field(default_factory=list, description="List of products")
     meta: ProductMeta
+
+
+class ProductResponse(BaseModel):
+    """Public product representation."""
+
+    id: str
+    code: str
+    name: str
+    description: str | None
+    price: float
+    thumbnail_url: str | None
+    image_url: str | None
+    stock_quantity: int
+    stock_status: str = ""
 
 
 @router.get("", response_model=ProductListResponse)
@@ -47,7 +59,26 @@ def list_products(
         .limit(limit)
     ).all()
     return ProductListResponse(
-        data=[product.model_dump() for product in products],
+        data=[
+            ProductResponse(
+                id=str(product.id),
+                code=product.code,
+                name=product.name,
+                description=product.description,
+                price=float(product.price),
+                thumbnail_url=product.image_url,
+                image_url=product.image_url,
+                stock_quantity=product.stock_quantity,
+                stock_status=(
+                    "out_of_stock"
+                    if product.stock_quantity == 0
+                    else "low_stock"
+                    if product.stock_quantity <= 5
+                    else "in_stock"
+                ),
+            )
+            for product in products
+        ],
         meta=ProductMeta(
             current_page=page,
             limit=limit,
