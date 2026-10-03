@@ -8,7 +8,7 @@ update this file should not be approved.
 
 | Route | Purpose | Access | Priority | Feature | Story issue | PR | Status |
 |-------|---------|--------|----------|---------|-------------|-----|--------|
-| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | In progress |
+| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13), [#45](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/45) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24), [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60) | In progress |
 | `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | Done |
 | `/cart` | Manage shopping cart | U | P0 | F2 Cart | #15 | #<PR_NUMBER> | In progress |
 | `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
@@ -43,17 +43,18 @@ Each response includes product fields, stock status, and pagination metadata.
 
 ## Frontend `/products` evidence
 
-The guest-facing `/products` page is implemented in `src/web.py` and registered
-through `src/main.py`. It fetches product data from
+The guest-facing `/products` page is implemented in
+`src/web/pages/products.html`, with route wiring in `src/web/router.py` and
+browser behavior in `src/web/static/products.js`. It fetches product data from
 `/api/v1/products?limit=100`; it does not contain a hard-coded product array.
 The page renders product cards, loading feedback, an API error with a Retry
 action, and the empty-state message `No products available at the moment.`
 
 | Frontend requirement | Implementation | Evidence |
 |---|---|---|
-| Display products returned by the backend | `src/web.py` calls the product API and renders the response into the catalog grid | Browser page at `http://127.0.0.1:8000/products` |
+| Display products returned by the backend | `src/web/static/products.js` calls the product API and renders the response into the catalog grid | Browser page at `http://127.0.0.1:8000/products` |
 | Display at least 10 records when available | The page renders every record returned by the API request with `limit=100` | Depends on the database containing at least 10 product rows |
-| Display an empty state | `renderProducts()` hides the grid and displays the empty-state message when `data` is empty | Implemented in `src/web.py` |
+| Display an empty state | `renderProducts()` hides the grid and displays the empty-state message when `data` is empty | Implemented in `src/web/static/products.js` |
 | Handle loading and API failures | `loadProducts()` displays loading text and a Retry button for failed requests | Browser validation confirmed the page displays the retry state when the API is unavailable |
 
 ## Business rules
