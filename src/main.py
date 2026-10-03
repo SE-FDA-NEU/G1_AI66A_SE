@@ -7,12 +7,15 @@ from typing import AsyncGenerator, Dict
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src import __version__
 from src.api.health import router as health_router
 from src.api.router import api_router
 from src.config import get_settings
 from src.database import init_db
+from src.web.router import STATIC_DIR
+from src.web.router import router as web_router
 
 # Configure application logging
 logging.basicConfig(
@@ -78,6 +81,10 @@ def create_app() -> FastAPI:
 
     # Include versioned API router
     app.include_router(api_router)
+
+    # Browser UI pages; static assets stay under /static so they never shadow the API
+    app.include_router(web_router)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     return app
 

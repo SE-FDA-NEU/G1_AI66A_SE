@@ -1,63 +1,66 @@
-"""Database engine, session management, and runtime initialization."""
+from collections.abc import Generator
+from typing import Annotated
 
-import logging
-from typing import Generator
-
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from fastapi import Depends
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
 
 from src.config import get_settings
-from src.models.base import Base
 
-logger = logging.getLogger(__name__)
 
 settings = get_settings()
+DATABASE_URL = settings.DATABASE_URL
 
-# Engine creation: handle SQLite specific threading configuration
-connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
-
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    echo=False,
+connect_args = (
+    {"check_same_thread": False}
+    if DATABASE_URL.startswith("sqlite")
+    else {}
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+database_url = make_url(DATABASE_URL)
+pool_options = (
+    {"poolclass": StaticPool}
+    if database_url.get_backend_name() == "sqlite"
+    and database_url.database in (None, "", ":memory:")
+    else {}
+)
 
-
-def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency yielding a database session per request."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+engine = create_engine(
+    DATABASE_URL,
+    echo=settings.DEBUG,
+    connect_args=connect_args,
+    **pool_options,
+)
 
 
 def init_db() -> None:
-    """Create all database tables registered with Base at runtime.
+    """Register application models and create missing tables."""
+    from src.models.product import Product  # noqa: F401
 
-    This ensures that from a clean checkout, the database is generated dynamically
-    without committing runtime database files to Git.
-    """
-    logger.info("Initializing database schema at runtime using %s", settings.DATABASE_URL)
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database schema initialized successfully.")
+    SQLModel.metadata.create_all(engine)
 
 
 def check_db_connection() -> bool:
-    """Verify active database connectivity with a lightweight ping."""
+    """Return whether the configured database accepts a simple query."""
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
         return True
-    except Exception as exc:
-        logger.error("Database connection check failed: %s", exc)
+    except SQLAlchemyError:
         return False
 
 
-if __name__ == "__main__":
-    init_db()
-    print("Database initialization completed successfully.")
+def get_session() -> Generator[Session, None, None]:
+    with Session(engine) as session:
+        yield session
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Preserve the session dependency used by existing callers."""
+    yield from get_session()
+
+
+SessionDep = Annotated[Session, Depends(get_session)]

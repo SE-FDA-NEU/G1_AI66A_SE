@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Products | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/products.css">
+  <script src="/static/products.js" defer></script>
+</head>
+<body>
+  <main class="catalog">
+    <h1 class="catalog__title">Products</h1>
+
+    <p id="products-status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <ul id="products-loading" class="product-grid" aria-hidden="true">
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+      <li class="skeleton-card"></li>
+    </ul>
+
+    <ul id="products-grid" class="product-grid" hidden></ul>
+
+    <section id="products-empty" class="state" hidden>
+      <p class="state__message">No products available at the moment.</p>
+    </section>
+
+    <section id="products-error" class="state" hidden>
+      <p class="state__message">Something went wrong. Please try again later.</p>
+      <button id="products-retry" class="button" type="button">Retry</button>
+    </section>
+  </main>
+</body>
+</html>

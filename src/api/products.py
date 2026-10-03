@@ -1,13 +1,12 @@
 """Product catalog endpoint backed by the real database."""
 
-from math import ceil
-
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlmodel import select
 
-from src.database import get_db
+from src.database import SessionDep
+from src.models.product import Product
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -32,69 +31,58 @@ class ProductResponse(BaseModel):
     """Public product representation."""
 
     id: str
+    code: str
     name: str
     description: str | None
     price: float
     thumbnail_url: str | None
+    image_url: str | None
     stock_quantity: int
     stock_status: str = ""
 
 
 @router.get("", response_model=ProductListResponse)
 def list_products(
+    session: SessionDep,
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Page limit"),
-    db: Session = Depends(get_db),
 ) -> ProductListResponse:
-    """Return a paginated list of published products from the database."""
-    total = db.execute(
-        text(
-            """
-            SELECT COUNT(*)
-            FROM products
-            WHERE is_published = :published AND deleted_at IS NULL
-            """
-        ),
-        {"published": True},
-    ).scalar_one()
-    rows = db.execute(
-        text(
-            """
-            SELECT id, name, description, price, thumbnail_url, stock_quantity
-            FROM products
-            WHERE is_published = :published AND deleted_at IS NULL
-            ORDER BY created_at DESC
-            LIMIT :limit OFFSET :offset
-            """
-        ),
-        {"published": True, "limit": limit, "offset": (page - 1) * limit},
-    ).mappings().all()
-
-    products = [
-        ProductResponse(
-            id=row["id"],
-            name=row["name"],
-            description=row["description"],
-            price=float(row["price"]),
-            thumbnail_url=row["thumbnail_url"],
-            stock_quantity=row["stock_quantity"],
-            stock_status=(
-                "out_of_stock"
-                if row["stock_quantity"] == 0
-                else "low_stock"
-                if row["stock_quantity"] <= 5
-                else "in_stock"
-            ),
-        )
-        for row in rows
-    ]
-
+    """Return active products from the database with stable pagination."""
+    total = session.exec(
+        select(func.count()).select_from(Product).where(Product.is_active.is_(True))
+    ).one()
+    products = session.exec(
+        select(Product)
+        .where(Product.is_active.is_(True))
+        .order_by(Product.id)
+        .offset((page - 1) * limit)
+        .limit(limit)
+    ).all()
     return ProductListResponse(
-        data=products,
+        data=[
+            ProductResponse(
+                id=str(product.id),
+                code=product.code,
+                name=product.name,
+                description=product.description,
+                price=float(product.price),
+                thumbnail_url=product.image_url,
+                image_url=product.image_url,
+                stock_quantity=product.stock_quantity,
+                stock_status=(
+                    "out_of_stock"
+                    if product.stock_quantity == 0
+                    else "low_stock"
+                    if product.stock_quantity <= 5
+                    else "in_stock"
+                ),
+            )
+            for product in products
+        ],
         meta=ProductMeta(
             current_page=page,
             limit=limit,
             total=total,
-            total_pages=ceil(total / limit) if total else 0,
+            total_pages=(total + limit - 1) // limit,
         ),
     )
