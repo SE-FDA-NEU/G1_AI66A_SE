@@ -182,6 +182,13 @@ Once the server is started:
   Open [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc) in your browser.
 - **Product Catalog Skeleton (US01):**
   `GET http://127.0.0.1:8000/api/v1/products?page=1&limit=20`
+- **Product Catalog Page:**
+  Open [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products) in
+  your browser. The same FastAPI/Uvicorn server serves the page; there is no
+  separate frontend build or npm step. Run `python -m src.seed` first to load
+  the 45 sample products. The page requests `/api/v1/products?page=1&limit=20`,
+  shows the first 20 products, and renders loading, error with Retry, and empty
+  states.
 
 ---
 
