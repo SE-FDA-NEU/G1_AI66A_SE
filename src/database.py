@@ -2,7 +2,7 @@ from collections.abc import Generator
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import StaticPool
@@ -34,10 +34,21 @@ engine = create_engine(
     **pool_options,
 )
 
+if database_url.get_backend_name() == "sqlite":
+
+    @event.listens_for(engine, "connect")
+    def enable_sqlite_foreign_keys(
+        dbapi_connection,
+        connection_record,
+    ):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 def init_db() -> None:
     """Register application models and create missing tables."""
-    from src.models.product import Product  # noqa: F401
+    import src.models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
 
