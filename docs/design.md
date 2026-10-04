@@ -1,3 +1,107 @@
+# System Design - Mini Marketplace
+
+This document is the Sprint 2 system design. Each section has an owner issue;
+#50 assembles the complete document.
+
+| Section | Content | Issue |
+|---|---|---|
+| 1. Architecture | C4 container diagram, containers, request flow, what runs today | #43 |
+| 2. Data Model | ERD, tables, constraints, transaction rules | #44 |
+| 3. API Design | REST contract for the P0 stories | #47 |
+| 4. Walking Skeleton | Route, table, query and screenshot of the running page | #50 (to be added) |
+| 5. Architecture Decision Records | ADR-001 and ADR-002 | #43 |
+| 6. What Changed Since Milestone 1 | Changes from feedback, review and implementation | #50 (to be added) |
+
+---
+
+## 1. Architecture
+
+This section describes the system as it runs in Sprint 2: the walking skeleton
+that shows real products from the database on the `/products` page. The other
+P0 stories are designed in sections 2 and 3 and have no runtime code yet.
+
+### 1.1 Container diagram
+
+![C4 container diagram of the Mini Marketplace](images/mini-marketplace-c4.svg)
+
+The diagram follows the C4 model at container level: each box is an application
+or a data store, and the dashed line is the system boundary. Its source is
+[`images/mini-marketplace-c4.mmd`](images/mini-marketplace-c4.mmd); after editing
+it, render the SVG again with the Mermaid CLI. Version 11.17.0 was used; later
+11.x releases need a newer headless Chrome.
+
+```bash
+npx -p @mermaid-js/mermaid-cli@11.17.0 mmdc -i docs/images/mini-marketplace-c4.mmd -o docs/images/mini-marketplace-c4.svg
+```
+
+### 1.2 Containers
+
+| Container | Technology | Responsibility | Code |
+|---|---|---|---|
+| Web UI | HTML, CSS and JavaScript running in the browser | Shows the product catalog with loading, empty and error/Retry states | `src/web/pages/products.html`, `src/web/static/` |
+| Web/API application | Python, FastAPI, Uvicorn | Serves the page and the `/static` files, exposes the REST API under `/api/v1`, validates requests and queries the database | `src/main.py`, `src/web/router.py`, `src/api/`, `src/config.py`, `src/database.py` |
+| Marketplace database | SQLite file (`marketplace.db`, location set by `DATABASE_URL`) | Stores the `products` table today. The other tables of section 2, with their foreign keys and CHECK constraints, are designed; issue #46 implements them | `src/models/product.py` |
+| Database init and seed CLI | Python console commands using SQLModel | `python -m src.seed` creates missing tables and loads 45 sample products, skipping codes that already exist; `python -m src.database` only creates missing tables | `src/seed.py`, `src/database.py` |
+
+The CLI is not a server: a developer or setup tester runs it on demand. The
+settings loader, the database session layer and the routers are components
+inside the Web/API application, not separate containers.
+
+The application and the CLI both open the SQLite file directly through
+SQLModel/SQLAlchemy. There is no database server and no network protocol between
+them and the database.
+
+**Database connection layer.** `src/config.py` reads `DATABASE_URL` from the
+environment or `.env`. `src/database.py` builds one engine from it, and each
+request receives its own session through `SessionDep`. `init_db()` creates
+missing tables at start-up and from the CLI. `/health` runs `SELECT 1` and
+reports `"database": "connected"` or `"disconnected"`, and a failed catalog
+query returns `500` with a generic message. Issue #48 owns this layer and its
+error handling.
+
+### 1.3 Request flow for `/products`
+
+1. The browser requests `GET /products`. The application returns
+   `products.html` (`src/web/router.py`), and the page loads
+   `/static/products.css` and `/static/products.js` from the same server.
+2. `products.js` calls `GET /api/v1/products?page=1&limit=20` on the same
+   origin, with a 10 second timeout.
+3. `list_products()` (`src/api/products.py`) receives a session through
+   `SessionDep` and runs two queries on `products`: a `COUNT(*)` and a paged
+   `SELECT` filtered on `is_active = TRUE` and ordered by `id`.
+4. The API returns `{data, meta}`. The page builds one card per item (name,
+   price in VND, stock badge, image with a placeholder fallback).
+5. An empty catalog (`data: []`, `meta.total: 0`) shows the empty state. An HTTP
+   error, a network failure, the timeout or a malformed response shows the error
+   message with Retry. A failed database query returns `500` with a generic
+   message, so it is never shown as an empty catalog.
+
+### 1.4 What runs today and what is design only
+
+| Area | Status in Sprint 2 |
+|---|---|
+| `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and tested: 45 tests pass on `main` at `8d8e231` |
+| Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implementation in progress in #46. The current `products` table has no foreign key or CHECK constraint, and its `seller_id` is nullable |
+| Product detail, cart, checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
+| Buyer and seller authentication | Design only; nothing is implemented, and `SECRET_KEY` is not read by any code yet |
+| Deployment | One local process (`python -m src.main`) and one SQLite file; the page is served by the same process, so there is no separate frontend deployment |
+
+### 1.5 Running catalog API compared with the API contract
+
+`GET /api/v1/products` already follows the path, pagination parameters and
+`{data, meta}` shape of section 3. Three details still differ:
+
+| Detail | Section 3 contract | Running code (`src/api/products.py`) |
+|---|---|---|
+| Product `id` | Internal integer | Returned as a string, for example `"1"` |
+| Invalid `page` or `limit` | `400 Bad Request` | `422 Unprocessable Entity`, from FastAPI query validation |
+| Error body | `{"error": {"code", "message"}}` | FastAPI's `{"detail": "..."}` |
+
+The API owner (#47) decides whether the code moves to the contract or the
+contract records the current behaviour.
+
+---
+
 ## 2. Data Model
 
 The Mini Marketplace uses a relational database model to support the P0 buyer and seller workflows defined in Milestone 1.
