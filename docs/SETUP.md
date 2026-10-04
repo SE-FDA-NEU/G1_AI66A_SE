@@ -109,31 +109,31 @@ Settings are read once at start-up, so restart the app after editing `.env`.
 
 ## 4. Database
 
-The app uses a SQLite file, so there is no database server to install. Create
-the table, then load the sample data:
+The app uses a SQLite file, so there is no database server to install. One
+command creates the database and loads the sample data:
 
 ```bash
-python -m src.database
 python -m src.seed
 ```
 
-Expected output on a new database:
+The seed first creates the database file and any missing table, then adds the
+sample products. Expected output on a new database:
 
 ```text
-Database initialization completed successfully.
 Added: 45 products
 Total products: 45
 Active products: 45
 ```
 
 With `DEBUG=true` (the template value), SQLAlchemy also prints every SQL
-statement as `INFO sqlalchemy.engine.Engine ...` lines, so the lines above
-appear among them.
+statement as `INFO sqlalchemy.engine.Engine ...` lines, including
+`CREATE TABLE products` on a new database, so the lines above appear among them.
 
 - **Expected rows after seeding: 45 products**, codes `P-100` to `P-144`, all active.
 - Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 45). Products whose code already exists are skipped, and edited rows are not reset.
 - A database that already holds other products reports a different total. Use a new database file for a fresh-machine check.
-- `python -m src.database` only creates missing tables. It does not migrate an existing table to a newer schema.
+- Optional: `python -m src.database` creates the missing tables without sample data and prints `Database initialization completed successfully.` The fresh-machine setup does not need it.
+- Both commands only create missing tables. Neither migrates an existing table to a newer schema.
 - The database file `marketplace.db` is created in the repository root and is ignored by Git. Never commit it.
 - The app also creates missing tables when it starts, but it never loads sample data.
 
@@ -207,7 +207,7 @@ follows it on their own machine (issue #52). Record that run here.
 | Guide commit | _Pending: SHA of the guide that was followed_ |
 | Test date | _Pending: date and time zone_ |
 | Test duration | _Pending: start and end time of the whole setup, not the pytest time_ |
-| Steps completed | _Pending: installation, `.env`, database, seed, start, success URL_ |
+| Steps completed | _Pending: installation, `.env`, database creation and seed (`python -m src.seed`), start, success URL_ |
 | Result | _Pending: Pass / Fail / Retest required_ |
 | Problems and fixes | _Pending_ |
 | Evidence | _Pending: screenshot or log links_ |
@@ -254,8 +254,8 @@ and then 0, `pytest` reported 45 passed, and every check in section 5 matched.
 ├── src/
 │   ├── __init__.py                # Package version metadata
 │   ├── config.py                  # Pydantic environment configuration loader
-│   ├── database.py                # Database engine and sessions; `python -m src.database` creates tables
-│   ├── seed.py                    # Sample products; `python -m src.seed` loads them
+│   ├── database.py                # Database engine and sessions; `python -m src.database` creates missing tables only
+│   ├── seed.py                    # Sample products; `python -m src.seed` creates missing tables and loads them
 │   ├── main.py                    # Application entrypoint & ASGI app factory
 │   ├── models/
 │   │   ├── __init__.py            # Model registry
