@@ -78,3 +78,29 @@ Ensure PR reviews include explicit verification of traceability.md updates befor
 | @QuangMinhQu | Yes | Yes | Yes |
 | @minhnm162 | Yes | Yes | Yes |
 | @leducminh290506-eng | Yes | Yes | Yes |
+
+---
+
+## Sprint 2 - 2026-09-21 to 2026-10-04
+
+<!-- Goal, committed work, result, review, retro and attendance: filled in by the Sprint 2 SM (@minhnm162). -->
+
+### Walking skeleton evidence: `/products` from the database (#45, #49)
+
+The `/products` page calls `GET /api/v1/products`, which reads the SQLite
+`products` table and returns JSON that the page renders as product cards.
+Status as of 2026-10-04.
+
+| Item | Where | Status |
+|---|---|---|
+| Database setup, seed data and API | [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#65](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/65) | #58 and #59 merged; #65 in review |
+| `/products` page | [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60) (Task 4 of #45); cleanup and evidence in [#61](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/61) | #60 merged; #61 in review |
+| SQL query used | [Traceability: Task 3](traceability.md#task-3-database-backed-product-api) | `WHERE is_active = TRUE ORDER BY id LIMIT :limit OFFSET :offset` |
+| Backend evidence: commands, API output, checks | [Backend evidence for issue #49](traceability.md#backend-evidence-for-issue-49) | Recorded |
+| Frontend evidence: checks, environment, steps | [Evidence for issue #49](traceability.md#evidence-for-issue-49) | Recorded |
+| Independent check of the 4 scenarios (Task 5 of #45) | [#64](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/64) | In progress |
+
+![/products showing 20 of the 45 seeded products](images/issue49-catalog.png)
+
+Other states: [empty catalog](images/issue49-empty-state.png),
+[API error with Retry](images/issue49-error-retry.png).
