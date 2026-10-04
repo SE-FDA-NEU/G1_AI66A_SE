@@ -116,8 +116,10 @@ command creates the database and loads the sample data:
 python -m src.seed
 ```
 
-The seed first creates the database file and any missing table, then adds the
-sample products. Expected output on a new database:
+The seed first creates the database file and any missing table of the data
+model (`users`, `products`, `cart_items`, `orders`, `seller_orders`,
+`order_items`), then adds a demo seller and the sample products. Expected output
+on a new database:
 
 ```text
 Added: 45 products
@@ -126,14 +128,14 @@ Active products: 45
 ```
 
 With `DEBUG=true` (the template value), SQLAlchemy also prints every SQL
-statement as `INFO sqlalchemy.engine.Engine ...` lines, including
-`CREATE TABLE products` on a new database, so the lines above appear among them.
+statement as `INFO sqlalchemy.engine.Engine ...` lines, including one
+`CREATE TABLE` per table on a new database, so the lines above appear among them.
 
-- **Expected rows after seeding: 45 products**, codes `P-100` to `P-144`, all active.
-- Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 45). Products whose code already exists are skipped, and edited rows are not reset.
+- **Expected rows after seeding: 1 user and 45 products.** The user is the demo seller (`demo.seller@marketplace.local`, role `seller`) that owns every product. The products have codes `P-100` to `P-144` and are all active. The other four tables stay empty.
+- Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 45) and reuses the demo seller. Products whose code already exists are skipped, and edited rows are not reset.
 - A database that already holds other products reports a different total. Use a new database file for a fresh-machine check.
 - Optional: `python -m src.database` creates the missing tables without sample data and prints `Database initialization completed successfully.` The fresh-machine setup does not need it.
-- Both commands only create missing tables. Neither migrates an existing table to a newer schema.
+- Both commands only create missing tables; neither changes a table that already exists. **If your `marketplace.db` was created before you pulled a schema change, delete it and seed again** (see section 6). An old table keeps working without the new rules and nothing reports it: a database created before #46 (2026-10-04) keeps a `products` table without its foreign key and CHECK constraints.
 - The database file `marketplace.db` is created in the repository root and is ignored by Git. Never commit it.
 - The app also creates missing tables when it starts, but it never loads sample data.
 
@@ -191,7 +193,7 @@ and `APP_PORT`.
 | `ModuleNotFoundError: No module named 'sqlmodel'` (or `fastapi`, or `src`) | The command ran outside the virtual environment or outside the repository root. `python -m pip --version` must show a path inside `.venv`. Activate the environment again (or use the direct path above), `cd` to the repository root and rerun `python -m pip install -r requirements.txt`. |
 | `[Errno 98] Address already in use` with the template `.env` (`DEBUG=true`), or `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` with `DEBUG=false`; on Windows the message starts with `[WinError 10048]` | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
 | `/products` shows "No products available at the moment." or the API reports `"total": 0` | The server reads a database that was never seeded. Check that no `DATABASE_URL` is set in the shell (`echo $DATABASE_URL`, `echo %DATABASE_URL%` or `$env:DATABASE_URL`), run `python -m src.seed` from the repository root, then reload the page. |
-| After pulling new code, `python -m src.seed` fails with `sqlite3.OperationalError: no such column: ...` (for example `products.seller_id`), or `/products` shows "Something went wrong. Please try again later." with Retry while the API returns `500` and `/health` still reports `"database":"connected"` | `marketplace.db` was created by an older version of the code. The seed and the app create missing tables but never change existing ones. Stop the app, delete the file (it holds only sample data) with `rm marketplace.db` (macOS/Linux), `del marketplace.db` (Command Prompt) or `Remove-Item marketplace.db` (PowerShell), then run `python -m src.seed` again. |
+| `marketplace.db` was created before a schema change you pulled. A new column makes `python -m src.seed` fail with `sqlite3.OperationalError: no such column: ...` and `/products` show "Something went wrong. Please try again later." with Retry (the API returns `500`, while `/health` still reports `"database":"connected"`). A new constraint or foreign key gives no error at all. | The seed and the app create missing tables but never change existing ones. Stop the app, delete the file (it holds only sample data) with `rm marketplace.db` (macOS/Linux), `del marketplace.db` (Command Prompt) or `Remove-Item marketplace.db` (PowerShell), then run `python -m src.seed` again. |
 
 ---
 
