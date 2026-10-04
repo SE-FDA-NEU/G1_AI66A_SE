@@ -2,22 +2,28 @@
 
 A mini marketplace where sellers can list products, buyers can add products to cart and place orders, with order management and basic sales analytics.
 
+**Setup Guide:** [docs/SETUP.md](docs/SETUP.md)
+
 ## Team & Roles
 
 - **Product Owner (PO):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
 - **Scrum Master (SM - Sprint 1):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
+- **Scrum Master (SM - Sprint 2):** [@minhnm162](https://github.com/minhnm162)
 
 | Name | GitHub username | Team Role |
 | --- | --- | --- |
 | Nguyen Thuy Quynh | [@teddywristh](https://github.com/teddywristh) | Member |
 | Nguyen Quang Minh | [@MinhQuangQu](https://github.com/MinhQuangQu) | Member |
-| Nguyen Ho Nhat Minh | [@minhnm162](https://github.com/minhnm162) | Member |
-| Le Duc Minh | [@leducminh290506-eng](https://github.com/leducminh290506-eng) | PO / SM / Member |
+| Nguyen Ho Nhat Minh | [@minhnm162](https://github.com/minhnm162) | SM - Sprint 2 / Member |
+| Le Duc Minh | [@leducminh290506-eng](https://github.com/leducminh290506-eng) | PO / SM - Sprint 1 / Member |
+
 
 ## GitHub Project Board
+
 - **Sprint Board Link:** [https://github.com/orgs/SE-FDA-NEU/projects/6/views/1?layout=board](https://github.com/orgs/SE-FDA-NEU/projects/6/views/1?layout=board)
 
 ## Definition of Done (DoD)
+
 - Refer to the full team Definition of Done document: [Definition of Done](docs/definition-of-done.md)
 
 ---
@@ -87,3 +93,4 @@ The application will be accessible at:
 - **Health Check:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 - **Interactive API Documentation:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Walking Skeleton Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
+- **Products Page (US01):** [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products)
