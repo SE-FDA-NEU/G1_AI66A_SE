@@ -80,11 +80,10 @@ cp .env.example .env
 ### 2. Create and Seed the Database
 
 ```bash
-python -m src.database
 python -m src.seed
 ```
 
-On a new database the seed prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
+The seed creates the SQLite database and its table, then loads the sample data. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
 
 ### 3. Run the Tests
 
