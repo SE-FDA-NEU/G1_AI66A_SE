@@ -43,19 +43,20 @@ Each response includes product fields, stock status, and pagination metadata.
 
 ## Frontend `/products` evidence
 
-The guest-facing `/products` page is implemented in
-`src/web/pages/products.html`, with route wiring in `src/web/router.py` and
-browser behavior in `src/web/static/products.js`. It fetches product data from
-`/api/v1/products?limit=100`; it does not contain a hard-coded product array.
-The page renders product cards, loading feedback, an API error with a Retry
-action, and the empty-state message `No products available at the moment.`
+The guest-facing `/products` page is served by the same FastAPI app as the API:
+`src/web/router.py` returns `src/web/pages/products.html`, and `src/main.py`
+mounts `src/web/static/` at `/static`. Browser behavior lives in
+`src/web/static/products.js`, which requests `/api/v1/products?page=1&limit=20`
+and renders only `response.data`; it does not contain a hard-coded product
+array. The page renders product cards, a loading skeleton, an API error with a
+Retry action, and the empty-state message `No products available at the moment.`
 
 | Frontend requirement | Implementation | Evidence |
 |---|---|---|
-| Display products returned by the backend | `src/web/static/products.js` calls the product API and renders the response into the catalog grid | Browser page at `http://127.0.0.1:8000/products` |
-| Display at least 10 records when available | The page renders every record returned by the API request with `limit=100` | Depends on the database containing at least 10 product rows |
-| Display an empty state | `renderProducts()` hides the grid and displays the empty-state message when `data` is empty | Implemented in `src/web/static/products.js` |
-| Handle loading and API failures | `loadProducts()` displays loading text and a Retry button for failed requests | Browser validation confirmed the page displays the retry state when the API is unavailable |
+| Display products returned by the backend | `loadProducts()` in `src/web/static/products.js` fetches the first page and builds each card with `createProductCard()` | Browser page at `http://127.0.0.1:8000/products` |
+| Display at least 10 records when available | The request asks for `page=1&limit=20`, so the page shows up to 20 products | With the 45 seeded products, the page shows 20 of 45 |
+| Display an empty state | `loadProducts()` shows the empty state when `data` is empty and `meta.total` is 0 | An empty `products` table shows the empty-state message |
+| Handle loading and API failures | `loadProducts()` shows a loading skeleton; HTTP errors, network failures, a 10 s timeout and malformed payloads show an error with a Retry button | An API `500` shows the error state; Retry reloads the products |
 
 ## Business rules
 
