@@ -80,7 +80,7 @@ error handling.
 
 | Area | Status in Sprint 2 |
 |---|---|
-| `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and tested: 45 tests pass on `main` at `8d8e231` |
+| `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and covered by automated tests in `tests/` |
 | Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implementation in progress in #46. The current `products` table has no foreign key or CHECK constraint, and its `seller_id` is nullable |
 | Product detail, cart, checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
 | Buyer and seller authentication | Design only; nothing is implemented, and `SECRET_KEY` is not read by any code yet |
