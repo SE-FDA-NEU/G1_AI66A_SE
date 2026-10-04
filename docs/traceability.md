@@ -6,24 +6,51 @@ This table is the single source of truth for Milestone 1 section 6 and for the
 Milestone 4 report. Keep it current - a PR that adds a route and does not
 update this file should not be approved.
 
-| Route | Purpose | Access | Priority | Feature | Story issue | PR | Status |
-|-------|---------|--------|----------|---------|-------------|-----|--------|
-| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13), [#45](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/45) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24), [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60) | In progress |
-| `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | Done |
-| `/cart` | Manage shopping cart | U | P0 | F2 Cart | #15 | #<PR_NUMBER> | In progress |
-| `/checkout` | Place an order | U | P0 | F3 Ordering | #16 | #23 | In progress |
-| `/orders` | View buyer orders | U | P1 | F3 Ordering | #17 | #27 | In progress |
-| `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | #17 | #27 | In progress |
-| `/seller/products` | Manage seller products | U | P0 | F4 Product Management | TBD | TBD | Not started |
-| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | #18 | #28 | In progress |
-| `/seller/products/:productId/edit` | Update product information and stock | U | P1 | F4 Product Management | #19 | #30 | In progress |
-| `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | In progress |
-| `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | #21 | #33 | In progress |
-| `/seller/analytics/products` | View best-selling product ranking | U | P2 | F6 Analytics | #22 | #39 | In review |
+| Route | Purpose | Access | Priority | Feature | Story issue | Spec PR (Milestone 1) | Implementation PR (Sprint 2) | Runtime |
+|---|---|---|---|---|---|---|---|---|
+| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13), [#45](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/45) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | [#57](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/57), [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60), [#61](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/61), [#64](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/64), [#65](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/65), [#68](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/68), [#70](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/70) | Partial |
+| `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | None yet | Not implemented |
+| `/cart` | Manage shopping cart | U | P0 | F2 Cart | [#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15) | [#31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/31) | None yet | Not implemented |
+| `/checkout` | Place an order | U | P0 | F3 Ordering | [#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16) | [#23](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/23) | None yet | Not implemented |
+| `/orders` | View buyer orders | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
+| `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
+| `/seller/products` | Manage seller products | U | P0 | F4 Product Management | None | None | None yet | Not implemented; not in the Milestone 1 requirements (gap G8) |
+| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | [#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18) | [#32](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/32) | None yet | Not implemented |
+| `/seller/products/:productId/edit` | Update product information and stock | U | P1 | F4 Product Management | [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | [#34](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/34) | None yet | Not implemented |
+| `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | None yet | Not implemented |
+| `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | [#33](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/33) | None yet | Not implemented |
+| `/seller/analytics/products` | View best-selling product ranking | U | P2 | F6 Analytics | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | [#39](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/39) | None yet | Not implemented |
 
 **Access codes:** G = guest (not logged in) · U = authenticated user · A = admin
 
-**Status:** Not started / In progress / Done
+**Spec PR:** the merged Milestone 1 pull request that specified the story. A
+merged spec PR means the story is specified, not built.
+
+**Runtime** on `main` at `37e80c3`: Implemented / Partial / Not implemented.
+`/products` is Partial because the walking skeleton covers part of US01; see
+[P0 story map](#p0-story-map).
+
+## P0 story map
+
+Each P0 story traced from the Milestone 1 requirements through the screen, the
+endpoint in the [API design](design.md#33-p0-endpoint-contract) and the tables
+in the [data model](design.md#22-table-definitions) to what runs today. The
+data model (PR #66, approved by @MinhQuangQu) and the API contract (PR #63,
+approved by @minhnm162; restored and aligned with `seller_orders` in PR #69,
+approved by @minhnm162) are merged for all six stories. All six tables exist in
+the database since PR #68 (#46), but only the catalog reads them.
+
+| Story | Screen | Endpoint | Tables | Runtime on `main` | Tests and evidence |
+|---|---|---|---|---|---|
+| [US01](us01-browse-product-catalog.md) Browse product catalog ([#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13)) | `/products` | `GET /api/v1/products` | `products`; `users` as the owning seller | Partial. The page and the API read the database. The page shows only the first 20 products, with no page controls or filters (G3), and out-of-stock products are still listed (G2). | `tests/test_products.py`, `tests/test_issue45_scenarios.py`, `tests/test_products_page.py`; items E1 to E6 in the [evidence index](evidence/sprint2.md) |
+| [US02](us02-view-product-detail.md) View product details ([#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14)) | `/products/:productId` | `GET /api/v1/products/{productCode}` | `products` | Not implemented | None yet; the screen and the endpoint name the product differently (G4) |
+| [US03](us03-cart.md) Cart management ([#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15)) | `/cart` | `GET /api/v1/cart`; `POST /api/v1/cart/items`; `PATCH` and `DELETE /api/v1/cart/items/{productCode}` | `cart_items`, `products`, `users` | Not implemented; the tables exist | None yet |
+| [US04](us04-checkout.md) Checkout and order placement ([#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16)) | `/checkout` | `POST /api/v1/orders` | `orders`, `seller_orders`, `order_items`, `cart_items`, `products`, `users` | Not implemented; the tables exist | None yet |
+| [US06](us06-create-product.md) Create product listing ([#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18)) | `/seller/products/new` | `POST /api/v1/seller/products` | `products`, `users` | Not implemented | None yet |
+| [US08](us08-seller-order-management.md) Seller order management ([#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20)) | `/seller/orders` | `GET /api/v1/seller/orders`; `PATCH /api/v1/seller/orders/{subOrderId}/status` | `seller_orders`, `order_items`, `orders`, `products`, `users` | Not implemented; the tables exist | None yet |
+
+Routes that run on `main` at `37e80c3`: the `/products` page, `GET /api/v1/products`,
+`GET /health`, `GET /api/v1/health` and `GET /`. No other P0 endpoint exists yet.
 
 ## Task 3: Database-backed product API
 
