@@ -263,12 +263,17 @@ served `/products` on port 8001.
 │   ├── __init__.py                # Package version metadata
 │   ├── config.py                  # Pydantic environment configuration loader
 │   ├── database.py                # Database engine and sessions; `python -m src.database` creates missing tables only
-│   ├── seed.py                    # Sample products; `python -m src.seed` creates missing tables and loads them
+│   ├── seed.py                    # Demo seller and sample products; `python -m src.seed` creates missing tables and loads them
 │   ├── main.py                    # Application entrypoint & ASGI app factory
 │   ├── models/
-│   │   ├── __init__.py            # Model registry
+│   │   ├── __init__.py            # Model registry; importing it registers every table
 │   │   ├── base.py                # SQLAlchemy DeclarativeBase and common mixins
-│   │   └── product.py             # Product table (SQLModel)
+│   │   ├── user.py                # users table (buyers and sellers)
+│   │   ├── product.py             # products table
+│   │   ├── cart_item.py           # cart_items table
+│   │   ├── order.py               # orders table
+│   │   ├── seller_order.py        # seller_orders table
+│   │   └── order_item.py          # order_items table
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── router.py              # Main API router (/api/v1)
