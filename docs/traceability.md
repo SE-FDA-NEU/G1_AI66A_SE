@@ -59,6 +59,51 @@ from `stock_quantity`: `out_of_stock` at 0, `low_stock` up to 5, otherwise
 | Apply catalog visibility rules | Both queries filter on `is_active = TRUE` | Done |
 | Keep query failures apart from an empty catalog | A database error is logged on the server and returns `500` with a generic message; an empty table returns `200` with `data: []` and `total: 0` | Done |
 
+### Backend evidence for issue #49
+
+Run on 2026-10-04 against commit `489f187` with a new SQLite database file.
+Environment: Ubuntu 24.04 on WSL2, Python 3.12.3, FastAPI 0.142.2,
+SQLModel 0.0.22, SQLAlchemy 2.0.54, Uvicorn 0.54.0.
+
+```text
+$ python -m src.database
+Database initialization completed successfully.
+$ python -m src.seed
+Added: 45 products
+Total products: 45
+Active products: 45
+$ python -m src.seed
+Added: 0 products
+Total products: 45
+Active products: 45
+$ python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
+$ curl "http://127.0.0.1:8000/api/v1/products?page=1&limit=20"
+```
+
+First item and `meta` of that response:
+
+```json
+{"id": "1", "code": "P-100", "name": "Wireless Mouse", "description": "Wireless mouse for study and office work", "price": 180000.0, "thumbnail_url": "/images/p-100.jpg", "image_url": "/images/p-100.jpg", "stock_quantity": 12, "stock_status": "in_stock"}
+{"current_page": 1, "limit": 20, "total": 45, "total_pages": 3}
+```
+
+| Check | Result |
+|---|---|
+| Pages 1 to 4 with `limit=20` | 20, 20, 5 and 0 items; 45 distinct codes; `total` 45 and `total_pages` 3 on every page |
+| `page=0`, `limit=0`, `limit=101` | `422` |
+| `P-100` set to `is_active = 0` | Not in `data`; `total` drops to 44 |
+| Name and price of `P-101` changed in the database | The next response shows the new values |
+| `products` table renamed, so the query fails | `500` with `{"detail": "Unable to load products right now. Please try again later."}`; the server log shows `Product catalog query failed` with the traceback |
+| All rows deleted | `200` with `data: []`, `total: 0`, `total_pages: 0` |
+
+The `/products` browser checks from the frontend evidence below were rerun on
+this commit and database (20/20 passed). Screenshots:
+[catalog](images/issue49-catalog.png),
+[empty state](images/issue49-empty-state.png),
+[error with Retry](images/issue49-error-retry.png).
+Automated coverage is in `tests/test_products.py` and `tests/test_database.py`
+(`pytest`: 22 passed).
+
 ## Business rules
 
 Numbered, so issues and tests can cite them.
