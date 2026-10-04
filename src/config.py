@@ -8,7 +8,6 @@ from typing import List, Union
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 
-
 # Automatically load .env if present
 load_dotenv()
 

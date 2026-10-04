@@ -10,7 +10,6 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from src.config import get_settings
 
-
 settings = get_settings()
 DATABASE_URL = settings.DATABASE_URL
 
