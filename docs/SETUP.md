@@ -176,7 +176,7 @@ activated (or stop the server first):
 python -m pytest -v
 ```
 
-Expected: every test passes (45 passed at commit `8d8e231`). The tests use an
+Expected: every test passes. The tests use an
 in-memory database and do not touch `marketplace.db`.
 
 `uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload` also starts the
@@ -217,13 +217,16 @@ follows it on their own machine (issue #52). Record that run here.
 
 Author check, not the independent verification: on 2026-10-04 the author ran
 the macOS/Linux commands of sections 2 to 5 on a clean clone of `main` at
-`8d8e231` (this guide changes documentation only) with a new virtual
-environment, on Ubuntu 24.04 under WSL2 with Git 2.43.0, Python 3.13.12 and
-pip 26.2.1. `pip check` was clean. On a new database, `python -m src.seed`
-alone created the `products` table and added 45 products, then 0 on the second
-run. `pytest` reported 45 passed and every check in section 5 matched. Both
-port-in-use messages in section 6 appeared, and with `APP_PORT=8001` the app
-served `/products` on port 8001.
+`85c98fe` (after #46 and #48; this guide changes documentation only) with a new
+virtual environment, on Ubuntu 24.04 under WSL2 with Git 2.43.0, Python 3.13.12
+and pip 26.2.1, in about 25 seconds with a warm pip cache. `pip check` was
+clean. On a new database, `python -m src.seed` alone created the six tables,
+the demo seller and 45 products, then added 0 on the second run. `pytest`
+reported 46 passed and every check in section 5 matched. Both port-in-use
+messages in section 6 appeared, and with `APP_PORT=8001` the app served
+`/products` on port 8001. A database seeded by the code before #46 kept working
+after the update, with no error and without the new constraints, which is why
+section 4 asks to delete it.
 
 ---
 
