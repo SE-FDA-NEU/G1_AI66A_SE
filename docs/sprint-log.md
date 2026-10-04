@@ -83,25 +83,160 @@ Ensure PR reviews include explicit verification of traceability.md updates befor
 
 ## Sprint 2 - 2026-09-21 to 2026-10-04
 
-<!-- Goal, committed work, result, review, retro and attendance: filled in by the Sprint 2 SM (@minhnm162). -->
+### Sprint goal
 
-### Walking skeleton evidence: `/products` from the database (#45, #49)
+Complete the Mini Marketplace system design and deliver a working walking skeleton in which the `/products` page retrieves product data from a real SQLite database.
 
-The `/products` page calls `GET /api/v1/products`, which reads the SQLite
-`products` table and returns JSON that the page renders as product cards.
-Status as of 2026-10-05. The full index of Sprint 2 pull requests, reviews,
-tests and gaps is in [Sprint 2 evidence](evidence/sprint2.md).
+### Roles
 
-| Item | Where | Status |
+- Product Owner: `@leducminh290506-eng`
+- Scrum Master: `@minhnm162`
+
+Sprint 2 uses a different Scrum Master from Sprint 1.
+
+### Two mandatory chore issues
+
+| Issue | Assignee | Status |
 |---|---|---|
-| Database setup, seed data and API | [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#65](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/65) | All merged; #65 on 2026-10-04 |
-| `/products` page | [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60) (Task 4 of #45); cleanup and evidence in [#61](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/61) | Both merged; #61 on 2026-10-04 |
-| SQL query used | [Traceability: Task 3](traceability.md#task-3-database-backed-product-api) | `WHERE is_active = TRUE ORDER BY id LIMIT :limit OFFSET :offset` |
-| Backend evidence: commands, API output, checks | [Backend evidence for issue #49](traceability.md#backend-evidence-for-issue-49) | Recorded |
-| Frontend evidence: checks, environment, steps | [Evidence for issue #49](traceability.md#evidence-for-issue-49) | Recorded |
-| Independent check of the 4 scenarios (Task 5 of #45) | [#64](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/64) | Merged on 2026-10-04, approved by @minhnm162 |
+| [Chore] Refine backlog for Sprint 2 | @leducminh290506-eng (PO) | Done |
+| [#54 Sprint 2 wrap-up and sprint log](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/54) | @minhnm162 (SM) | In Progress |
 
-![/products showing 20 of the 45 seeded products](images/issue49-catalog.png)
+### Committed
 
-Other states: [empty catalog](images/issue49-empty-state.png),
-[API error with Retry](images/issue49-error-retry.png).
+| Issue | Task | Points | Owner |
+|---|---|---:|---|
+| #43 | Define system architecture and ADRs | [EDIT] | [EDIT] |
+| #44 | Design relational database schema and ERD | [EDIT] | @minhnm162 |
+| #45 | Story: view products from the database | [EDIT] | [EDIT] |
+| #46 | Implement database schema and seed dataset | [EDIT] | [EDIT] |
+| #47 | Define REST API contract for P0 stories | [EDIT] | [EDIT] |
+| #48 | Implement application database connection | [EDIT] | @minhnm162 |
+| #49 | Implement GET /products using real database data | [EDIT] | [EDIT] |
+| #50 | Complete Sprint 2 system design documentation | [EDIT] | [EDIT] |
+| #51 | Create fresh-machine setup guide | [EDIT] | [EDIT] |
+| #52 | Verify setup on a non-author machine | [EDIT] | [EDIT] |
+| #53 | Update Sprint 2 traceability and implementation evidence | [EDIT] | [EDIT] |
+| #54 | Sprint 2 wrap-up and sprint log | [EDIT] | @minhnm162 |
+| #56 | Bootstrap runnable application skeleton | [EDIT] | [EDIT] |
+
+**Total committed: [EDIT] points**
+
+### Result
+
+| Issue | Points | Status | If not done, why |
+|---|---:|---|---|
+| #43 | [EDIT] | Done | |
+| #44 | [EDIT] | Done | |
+| #45 | [EDIT] | Done | |
+| #46 | [EDIT] | Done | |
+| #47 | [EDIT] | Done | |
+| #48 | [EDIT] | Done | |
+| #49 | [EDIT] | Done | |
+| #50 | [EDIT] | Done | |
+| #51 | [EDIT] | Done | |
+| #52 | [EDIT] | Done | |
+| #53 | [EDIT] | Done | |
+| #54 | [EDIT] | In Progress | Sprint wrap-up is being completed |
+| #56 | [EDIT] | Done | |
+
+**Completed: [EDIT] points. Velocity this sprint: [EDIT]**
+
+### Completed issues
+
+- #43 — Define system architecture and ADRs
+- #44 — Design relational database schema and ERD
+- #45 — Story: view products from the database
+- #46 — Implement database schema and seed dataset for walking skeleton
+- #47 — Define REST API contract for Mini Marketplace P0 stories
+- #48 — Implement application database connection for walking skeleton
+- #49 — Implement GET /products using real database data
+- #50 — Complete Sprint 2 system design documentation
+- #51 — Create fresh-machine setup guide for Mini Marketplace
+- #52 — Verify Mini Marketplace setup on a non-author machine
+- #53 — Update Sprint 2 traceability and implementation evidence
+- #56 — Bootstrap runnable application skeleton
+
+### Merged pull requests
+
+The full Sprint 2 pull-request index is recorded in [Sprint 2 evidence](evidence/sprint2.md).
+
+Known merged Sprint 2 PRs include:
+
+- #58 — Database setup / backend work
+- #59 — Database-related implementation
+- #60 — `/products` page
+- #61 — Walking skeleton cleanup and evidence
+- #64 — Independent verification of Issue #45 scenarios
+- #65 — Database/schema integration
+
+[EDIT: add any remaining merged Sprint 2 PRs]
+
+### Walking skeleton evidence
+
+The `/products` page calls `GET /api/v1/products`, which reads the SQLite `products` table and returns JSON that the page renders as product cards.
+
+| Item | Evidence |
+|---|---|
+| Database setup and seed | `python -m src.seed` |
+| Seed result | 1 demo seller and 45 products |
+| Product API | `GET /api/v1/products` |
+| Frontend route | `GET /products` |
+| Database | SQLite |
+| Independent walking-skeleton verification | PR #64 |
+
+![Products page](images/issue49-catalog.png)
+
+Additional states:
+
+- [Empty catalog](images/issue49-empty-state.png)
+- [API error with Retry](images/issue49-error-retry.png)
+
+### Sprint 2 requirements
+
+| Requirement | Result |
+|---|---|
+| At least 5 Sprint 2 issues are closed | PASS |
+| At least 4 Sprint 2 PRs are merged | PASS |
+| Every Sprint 2 PR has been reviewed by another team member | [VERIFY] |
+| Every team member has at least one merged PR | [VERIFY] |
+| Every team member has given at least one review | [VERIFY] |
+| Every team member has at least one closed issue | [VERIFY] |
+| Sprint 2 SM differs from Sprint 1 SM | PASS |
+
+### Milestone 2 final check
+
+| Requirement | Result |
+|---|---|
+| `docs/design.md` contains all six required sections | PASS |
+| `docs/SETUP.md` exists on `main` | PASS |
+| Setup guide was verified on a non-author machine | PASS |
+| Walking skeleton uses a real database | PASS |
+| Database seed creates at least 10 rows | PASS |
+| Project board is available | PASS |
+| Sprint 2 committed, completed and velocity values recorded | [PENDING POINTS] |
+| Sprint 2 minimum GitHub contribution requirements verified | [VERIFY] |
+| Final submission PDF generated from merged documentation | [FINAL SUBMISSION STEP] |
+
+### Sprint Review
+
+- What we demonstrated: a complete walking skeleton from `/products` → FastAPI → SQLite → browser, together with the Sprint 2 architecture, data model, API design, setup guide and implementation evidence.
+- Feedback received: database schema, API contract and setup documentation needed to remain consistent with the merged implementation.
+- Backlog changes as a result: schema, seed, database connectivity, API contract and fresh-machine setup work were aligned before the Sprint 2 submission.
+
+### Retrospective
+
+| Keep doing | Stop doing | Start doing |
+|---|---|---|
+| Reviewing PRs before merge | Allowing documentation to become stale after code changes | Updating design and setup evidence immediately after implementation changes |
+
+**One concrete action for next sprint:**  
+Keep `docs/design.md`, `docs/SETUP.md`, and `docs/traceability.md` synchronized with every merged implementation PR. Owner: `@minhnm162`.
+
+### Attendance
+
+| Member | Planning | Review | Retro |
+|---|---|---|---|
+| @leducminh290506-eng | Yes | Yes | Yes |
+| @QuangMinhQu | Yes | Yes | Yes |
+| @teddywristh | Yes | Yes | Yes |
+| @minhnm162 | Yes | Yes | Yes |
