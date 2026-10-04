@@ -174,7 +174,7 @@ activated (or stop the server first):
 python -m pytest -v
 ```
 
-Expected: every test passes (45 passed at commit `840ad96`). The tests use an
+Expected: every test passes (45 passed at commit `8d8e231`). The tests use an
 in-memory database and do not touch `marketplace.db`.
 
 `uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload` also starts the
@@ -189,7 +189,7 @@ and `APP_PORT`.
 |---|---|
 | PowerShell refuses `.\.venv\Scripts\Activate.ps1` with "running scripts is disabled on this system" | Skip activation and call the environment's Python directly: replace `python` with `.\.venv\Scripts\python.exe` in every later command, for example `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` and `.\.venv\Scripts\python.exe -m src.main`. |
 | `ModuleNotFoundError: No module named 'sqlmodel'` (or `fastapi`, or `src`) | The command ran outside the virtual environment or outside the repository root. `python -m pip --version` must show a path inside `.venv`. Activate the environment again (or use the direct path above), `cd` to the repository root and rerun `python -m pip install -r requirements.txt`. |
-| `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` (on Windows the message starts with `[WinError 10048]`) | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
+| `[Errno 98] Address already in use` with the template `.env` (`DEBUG=true`), or `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` with `DEBUG=false`; on Windows the message starts with `[WinError 10048]` | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
 | `/products` shows "No products available at the moment." or the API reports `"total": 0` | The server reads a database that was never seeded. Check that no `DATABASE_URL` is set in the shell (`echo $DATABASE_URL`, `echo %DATABASE_URL%` or `$env:DATABASE_URL`), run `python -m src.seed` from the repository root, then reload the page. |
 
 ---
@@ -213,10 +213,14 @@ follows it on their own machine (issue #52). Record that run here.
 | Evidence | _Pending: screenshot or log links_ |
 
 Author check, not the independent verification: on 2026-10-04 the author ran
-the macOS/Linux commands on a clean clone of `main` at `840ad96` (this guide
-changes documentation only), on Ubuntu 24.04 under WSL2 with Git 2.43.0,
-Python 3.12.3 and pip 26.2.1. `pip check` was clean, the seed added 45 products
-and then 0, `pytest` reported 45 passed, and every check in section 5 matched.
+the macOS/Linux commands of sections 2 to 5 on a clean clone of `main` at
+`8d8e231` (this guide changes documentation only) with a new virtual
+environment, on Ubuntu 24.04 under WSL2 with Git 2.43.0, Python 3.13.12 and
+pip 26.2.1. `pip check` was clean. On a new database, `python -m src.seed`
+alone created the `products` table and added 45 products, then 0 on the second
+run. `pytest` reported 45 passed and every check in section 5 matched. Both
+port-in-use messages in section 6 appeared, and with `APP_PORT=8001` the app
+served `/products` on port 8001.
 
 ---
 
@@ -248,6 +252,7 @@ and then 0, `pytest` reported 45 passed, and every check in section 5 matched.
 │   ├── SETUP.md                   # This setup and run guide
 │   ├── requirements.md           # Product requirements & user stories (US01-US10)
 │   ├── traceability.md           # Traceability matrix and implementation evidence
+│   ├── design.md                  # System design
 │   ├── sprint-log.md             # Sprint log
 │   ├── images/                    # Screenshots used as evidence
 │   └── ...
