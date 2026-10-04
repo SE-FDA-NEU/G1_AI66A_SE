@@ -1,3 +1,4 @@
+
 # System Design - Mini Marketplace
 
 This document is the Sprint 2 system design. Each section has an owner issue;
@@ -8,9 +9,9 @@ This document is the Sprint 2 system design. Each section has an owner issue;
 | 1. Architecture | C4 container diagram, containers, request flow, what runs today | #43 |
 | 2. Data Model | ERD, tables, constraints, transaction rules | #44 |
 | 3. API Design | REST contract for the P0 stories | #47 |
-| 4. Walking Skeleton | Route, table, query and screenshot of the running page | #50 (to be added) |
+| 4. Walking Skeleton | Route, table, query and screenshot of the running page | #50 |
 | 5. Architecture Decision Records | ADR-001 and ADR-002 | #43 |
-| 6. What Changed Since Milestone 1 | Changes from feedback, review and implementation | #50 (to be added) |
+| 6. What Changed Since Milestone 1 | Changes from feedback, review and implementation | #50 |
 
 ---
 
@@ -40,7 +41,7 @@ npx -p @mermaid-js/mermaid-cli@11.17.0 mmdc -i docs/images/mini-marketplace-c4.m
 |---|---|---|---|
 | Web UI | HTML, CSS and JavaScript running in the browser | Shows the product catalog with loading, empty and error/Retry states | `src/web/pages/products.html`, `src/web/static/` |
 | Web/API application | Python, FastAPI, Uvicorn | Serves the page and the `/static` files, exposes the REST API under `/api/v1`, validates requests and queries the database | `src/main.py`, `src/web/router.py`, `src/api/`, `src/config.py`, `src/database.py` |
-| Marketplace database | SQLite file (`marketplace.db`, location set by `DATABASE_URL`) | Stores the `products` table today. The other tables of section 2, with their foreign keys and CHECK constraints, are designed; issue #46 implements them | `src/models/product.py` |
+| Marketplace database | SQLite file (`marketplace.db`, location set by `DATABASE_URL`) | Stores the six relational tables of section 2 (`users`, `products`, `cart_items`, `orders`, `seller_orders`, `order_items`), with foreign keys and CHECK constraints enabled | `src/models/` |
 | Database init and seed CLI | Python console commands using SQLModel | `python -m src.seed` creates missing tables and loads 45 sample products, skipping codes that already exist; `python -m src.database` only creates missing tables | `src/seed.py`, `src/database.py` |
 
 The CLI is not a server: a developer or setup tester runs it on demand. The
@@ -81,7 +82,7 @@ error handling.
 | Area | Status in Sprint 2 |
 |---|---|
 | `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and covered by automated tests in `tests/` |
-| Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implementation in progress in #46. The current `products` table has no foreign key or CHECK constraint, and its `seller_id` is nullable |
+| Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implemented in #46 (PR #68) with models in `src/models/` and foreign key enforcement enabled in `src/database.py` |
 | Product detail, cart, checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
 | Buyer and seller authentication | Design only; nothing is implemented, and `SECRET_KEY` is not read by any code yet |
 | Deployment | One local process (`python -m src.main`) and one SQLite file; the page is served by the same process, so there is no separate frontend deployment |
@@ -613,6 +614,180 @@ The contract covers every P0 story listed in the Milestone 1 requirements:
 
 ---
 
+## 4. Walking Skeleton
+
+The Sprint 2 walking skeleton demonstrates an end-to-end slice through all architectural tiers:
+**Web UI (browser) → FastAPI application → SQLModel/SQLAlchemy session → SQLite database**.
+It proves that the stack can be configured, initialized, seeded, queried, and rendered on any development machine.
+
+### 4.1 Selected Route
+
+The walking skeleton implements the guest-facing product discovery flow (US01):
+
+- **Browser Route:** `GET /products`
+  - Served by `src/web/router.py` returning `src/web/pages/products.html`.
+  - Dependent assets served statically from `/static`: `products.css`, `products.js`, and `product-placeholder.svg`.
+  - The client script (`src/web/static/products.js`) executes in the browser and calls the backend API on the same origin (`/api/v1/products?page=1&limit=20`) using `fetch()` with an explicit 10-second timeout.
+- **REST API Route:** `GET /api/v1/products`
+  - Defined in `src/api/products.py:list_products()` under the `/api/v1` router prefix.
+  - Receives query parameters `page` (default: 1) and `limit` (default: 20, max: 100).
+  - Validated by FastAPI/Pydantic (`page >= 1`, `1 <= limit <= 100`), returning `422 Unprocessable Entity` on invalid pagination parameters.
+  - Returns a standard envelope containing `data` (list of product summaries) and `meta` (pagination metadata: `current_page`, `limit`, `total`, `total_pages`).
+- **Health Verification Routes:** `GET /health` and `GET /api/v1/health`
+  - Defined in `src/api/health.py`.
+  - Executes `SELECT 1` against the database through `check_db_connection()` to confirm database accessibility.
+
+### 4.2 Database Table Used
+
+The primary persistence entity used by the walking skeleton is the `products` table (`src/models/product.py`), associated with the `users` table (`src/models/user.py`):
+
+- **Table:** `products`
+- **Model:** `src.models.product.Product` inheriting from `SQLModel` with `table=True`
+- **Schema Columns:**
+  - `id`: Integer primary key (`autoincrement=True`).
+  - `code`: Unique varchar(20) identifier (e.g., `"P-100"`).
+  - `seller_id`: Integer foreign key referencing `users.id` (identifies the owning seller account).
+  - `name`: Varchar(200) product title.
+  - `description`: Optional text description.
+  - `price`: Decimal/float monetary price in VND (constrained by `price > 0`).
+  - `stock_quantity`: Integer current stock (constrained by `stock_quantity >= 0`).
+  - `reserved_stock`: Integer reserved stock during pending checkout (default `0`, constrained by `reserved_stock >= 0`).
+  - `image_url`: Optional text URL or static asset path for product imagery.
+  - `is_active`: Boolean catalog visibility flag (default `True`).
+  - `version`: Integer optimistic locking counter (default `1`, constrained by `version >= 1`).
+
+### 4.3 Database / SQL Query Used to Retrieve Data
+
+The endpoint `list_products()` in `src/api/products.py` queries the database via an injected SQLModel session (`SessionDep`). It issues two distinct SQL queries:
+
+1. **Total Count Query (Active Products):**
+   ```sql
+   SELECT COUNT(*) FROM products
+   WHERE is_active = TRUE;
+   ```
+   Computes the total number of catalog-visible records to calculate pagination metadata (`total`, `total_pages = ceil(total / limit)`).
+
+2. **Paged Data Retrieval Query:**
+   ```sql
+   SELECT id, code, seller_id, name, description, price, stock_quantity, reserved_stock, image_url, is_active, version
+   FROM products
+   WHERE is_active = TRUE
+   ORDER BY id ASC
+   LIMIT :limit OFFSET :offset;
+   ```
+   Where `:offset = (page - 1) * limit`.
+
+**Key Query Characteristics:**
+- **Deterministic ordering:** Ordering by `id ASC` ensures pagination stability across successive requests without record duplication or skipping.
+- **Business rule enforcement (BR1):** `WHERE is_active = TRUE` guarantees that hidden or inactive items are excluded from both the data slice and the total count.
+- **Error boundary isolation:** Database query execution is wrapped in a `try...except SQLAlchemyError` block. If an unexpected database failure occurs, the error is logged server-side with stack trace details, and the API returns `500 Internal Server Error` with a generic message (`"Unable to load products right now. Please try again later."`). It **never** disguises a database error as an empty catalog (`200 OK` with `data: []`).
+
+### 4.4 Confirmation of Database Creation and Seeding
+
+The database setup and seeding process is verified through automated commands and test suites:
+
+- **Database Initialization:**
+  - Executed via `python -m src.database` or automatically on application startup via `init_db()` (`src/database.py`).
+  - Uses `SQLModel.metadata.create_all(engine)` to create all tables (`users`, `products`, `cart_items`, `orders`, `seller_orders`, `order_items`) if they do not already exist in the SQLite database file (`marketplace.db`).
+  - Enables SQLite foreign key constraint enforcement across all sessions via a SQLAlchemy connect listener (`PRAGMA foreign_keys = ON`).
+
+- **Database Seeding:**
+  - Executed via `python -m src.seed`.
+  - Ensures a default seller user (`id=1`, `email="seller@marketplace.local"`, `role="seller"`) exists.
+  - Seeds 45 realistic sample products across multiple categories (electronics, accessories, stationery) with valid prices, positive stock quantities, and `is_active = True`.
+  - **Idempotency:** When executed on a fresh database, it reports:
+    ```text
+    Database tables created or verified.
+    Default seller user ready (ID: 1).
+    Added: 45 products
+    Total products: 45
+    Active products: 45
+    ```
+    When executed again against the same database, it detects existing product codes and inserts zero duplicates:
+    ```text
+    Database tables created or verified.
+    Default seller user ready (ID: 1).
+    Added: 0 products
+    Total products: 45
+    Active products: 45
+    ```
+
+- **Verification Evidence:**
+  - Verified by automated tests in `tests/test_database.py` and `tests/test_products.py` (46 passing tests).
+  - Four independent scenarios verified in `tests/test_issue45_scenarios.py`:
+    1. Scenario 1: Display products loaded dynamically from the database.
+    2. Scenario 2: At least 10 products available and displayed on default page view (seed provides 45; default page displays 20).
+    3. Scenario 3: No hardcoded product arrays in frontend or API code.
+    4. Scenario 4: Clean distinction between empty database (`200 OK` with `data: []`) and database error (`500 Internal Server Error`).
+
+### 4.5 Screenshot of the Running Page
+
+The walking skeleton UI running at `http://127.0.0.1:8000/products` displays the seeded products dynamically:
+
+![Catalog page showing 20 of the 45 seeded products](images/issue49-catalog.png)
+
+Additional UI states handled by the frontend implementation:
+- **Empty State:** When no active products exist in the database, the page displays a clean user-friendly empty banner:
+  ![Empty state for an empty products table](images/issue49-empty-state.png)
+- **Error State with Retry:** When the backend API is unreachable or returns a 500 error, the page displays an error notification with a functional Retry action:
+  ![Error state with Retry while the API returns 500](images/issue49-error-retry.png)
+
+### 4.6 Environment Configuration (`.env.example`)
+
+The application configuration is managed using `pydantic-settings` (`src/config.py`), reading configuration keys from environment variables or a local `.env` file.
+
+The template `.env.example` provides the following defaults:
+
+```ini
+# Application Environment Configuration
+# Copy this file to .env and adjust variables as needed:
+# cp .env.example .env (Linux/macOS)
+# Copy-Item .env.example .env (Windows PowerShell)
+
+APP_NAME="Mini Marketplace"
+APP_ENV=development
+DEBUG=true
+APP_HOST=127.0.0.1
+APP_PORT=8000
+
+# Database Configuration (SQLite default for local development and testing)
+# In Sprint 2, SQLite database file will be created dynamically at runtime.
+DATABASE_URL=sqlite:///./marketplace.db
+
+# Security & CORS settings
+# Secret key used for cryptographic signing (minimum 32 characters in production)
+SECRET_KEY=dev-secret-key-do-not-use-in-production-environment
+CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8000","http://127.0.0.1:8000"]
+```
+
+**Configuration Fields Explanation:**
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `APP_NAME` | `"Mini Marketplace"` | Human-readable application title. |
+| `APP_ENV` | `development` | Operating environment (`development`, `testing`, `production`). |
+| `DEBUG` | `true` | Enables FastAPI auto-reload and verbose error reporting. |
+| `APP_HOST` | `127.0.0.1` | Network interface address to bind Uvicorn server. |
+| `APP_PORT` | `8000` | Port number on which the HTTP server listens. |
+| `DATABASE_URL` | `sqlite:///./marketplace.db` | SQLAlchemy connection string. Defaults to a local SQLite database file in the project root. Can be overridden (e.g. `sqlite:///:memory:` for in-memory testing). |
+| `SECRET_KEY` | `dev-secret-key-...` | Secret string for token generation and cryptographic signing (must be overridden in production). |
+| `CORS_ORIGINS` | JSON list of origins | Allowed origin headers for Cross-Origin Resource Sharing. |
+
+**Setup Procedure for Fresh Machines:**
+
+```bash
+# 1. Copy environment template
+cp .env.example .env
+
+# 2. Initialize database and seed sample data
+python -m src.seed
+
+# 3. Start development server
+python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
+```
+
+---
+
 ## 5. Architecture Decision Records
 
 ### ADR-001: Serve the Sprint 2 web UI and REST API from one FastAPI application
@@ -641,3 +816,38 @@ The contract covers every P0 story listed in the Milestone 1 requirements:
 | Evidence | `Product(SQLModel, table=True)` in `src/models/product.py`; `init_db()` in `src/database.py`; the seed adds 45 products and then none (`tests/test_database.py` runs both commands against a temporary SQLite file); CI run [37206917594](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/37206917594) on `8d8e231`: 45 tests passed. SQLite 3.45.1 checks on a test schema that declares the foreign key (an in-memory `users` table and `products.seller_id REFERENCES users(id)`), not on the current `main` table, which has none yet: an orphan `seller_id` was accepted until `PRAGMA foreign_keys = ON` was set and rejected after, and `price = 0` was rejected by a CHECK constraint. A file whose `products` table lacked `seller_id` failed with `no such column: products.seller_id`. A file created by `main` and then opened by the #46 schema code (PR #68) kept its old `products` table and accepted `price = 0` with a NULL `seller_id`. |
 | Reconsider when | Tests or demos show write contention errors or miss a non-functional requirement; the system needs more than one application server or a shared central database; a schema change must keep existing data, which needs a migration tool such as Alembic; or a new transaction or deployment requirement cannot be met with a single file. |
 | If we change | Changing `DATABASE_URL` alone is not enough: add the database driver, a migration and data transfer step, and retest transactions, the schema, the seed and the test suite. |
+
+---
+
+## 6. What Changed Since Milestone 1
+
+Between the delivery of Milestone 1 and the completion of Sprint 2 (Milestone 2), the team incorporated feedback from the Milestone 1 evaluation, the Sprint 1 Review, and discoveries made during initial implementation. The key architectural and process changes are documented below.
+
+### 6.1 Synchronizing Traceability Matrix Directly with Pull Request Lifecycle
+
+- **Context & Feedback:** During the Sprint 1 Review and Retrospective (`docs/sprint-log.md`), the team identified a recurring divergence: user story specifications, route implementations, and verification evidence in `docs/traceability.md` were lagging behind merged code, leaving the status of routes ambiguous.
+- **Change Made:**
+  - Established `docs/traceability.md` as the single source of truth for requirements traceability.
+  - Instituted an explicit team workflow rule: any Pull Request that introduces, modifies, or completes an API route, web screen, or business rule must update `docs/traceability.md` synchronously before review approval and merge.
+  - Added explicit verification evidence blocks in `docs/traceability.md` capturing test runs, CLI reproduction steps, and UI screenshots for every completed milestone task (e.g. Task 3 database API and Task 4 `/products` frontend evidence).
+- **Impact:** Eliminates stale documentation, ensures continuous alignment between the project backlog and codebase, and provides traceable audit evidence for milestones.
+
+### 6.2 Transition from In-Memory/Static Mocks to Database-Backed SQLModel Pipeline
+
+- **Context & Feedback:** Milestone 1 defined user stories and initial prototypes with conceptual data representations, but lacked persistent data access, query semantics, or automated database lifecycle controls. Milestone 1 feedback emphasized establishing a functional walking skeleton with real database persistence.
+- **Change Made:**
+  - Built a centralized database session and engine lifecycle in `src/database.py` utilizing SQLModel and SQLAlchemy with SQLite (`sqlite:///./marketplace.db`).
+  - Added automatic table schema generation (`init_db()`) and an idempotent seeding CLI (`src/seed.py`) with 45 structured sample products and a default seller user.
+  - Replaced prototype static responses in `GET /api/v1/products` with real SQL queries executing `SELECT COUNT(*)` and paged `SELECT ... LIMIT :limit OFFSET :offset`.
+  - Enforced catalog visibility rules at query time (`WHERE is_active = TRUE`) and implemented strict error boundary isolation, ensuring database exceptions return `500 Internal Server Error` and are never misreported as empty catalog results (`200 OK` with `data: []`).
+- **Impact:** Delivers a fully working, reproducible walking skeleton that runs identically on local machines, CI environments, and fresh setups without requiring external database servers.
+
+### 6.3 Relational Schema Evolution and Multi-Seller Order Decomposition
+
+- **Context & Feedback:** In early Milestone 1 analysis, orders were conceptualized as simple buyer transactions. During detailed Sprint 2 system design (#44, #46), this model proved inadequate for a multi-vendor marketplace where a single buyer cart may contain products from different sellers, each needing independent fulfillment tracking and isolated order views.
+- **Change Made:**
+  - Redesigned the relational schema from simple flat orders into a normalized 6-table domain model: `users`, `products`, `cart_items`, `orders`, `seller_orders`, and `order_items`.
+  - Introduced the `seller_orders` intermediate entity (`orders` 1 → N `seller_orders` 1 → N `order_items`), establishing a composite relationship where each seller manages only their sub-order partition (`UNIQUE(order_id, seller_id)`).
+  - Enforced purchase-time price immutability: `order_items.unit_price` preserves the price at the moment of checkout, guaranteeing that seller revenue calculations (BR7) and best-selling metrics (BR10) remain historically accurate regardless of subsequent product price modifications.
+  - Implemented optimistic concurrency control via `products.version` and relational integrity via SQLite foreign key pragma (`PRAGMA foreign_keys = ON`) and column CHECK constraints (`price > 0`, `stock_quantity >= 0`).
+- **Impact:** Ensures clean architectural separation of concerns between buyers and sellers, satisfies marketplace business rules (BR5, BR6, BR7, BR9, BR10), and prevents race conditions and overselling during checkout transactions.
