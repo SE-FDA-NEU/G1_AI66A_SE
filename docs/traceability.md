@@ -58,6 +58,42 @@ Retry action, and the empty-state message `No products available at the moment.`
 | Display an empty state | `loadProducts()` shows the empty state when `data` is empty and `meta.total` is 0 | An empty `products` table shows the empty-state message |
 | Handle loading and API failures | `loadProducts()` shows a loading skeleton; HTTP errors, network failures, a 10 s timeout and malformed payloads show an error with a Retry button | An API `500` shows the error state; Retry reloads the products |
 
+### Evidence for issue #49
+
+Captured on 2026-10-04 against commit `883e9a4` (PR #61), using a new SQLite
+database file seeded with `python -m src.seed` (45 active products).
+Environment: Ubuntu 24.04 on WSL2, Python 3.12.3, FastAPI 0.142.2,
+SQLModel 0.0.22, SQLAlchemy 2.0.54, Uvicorn 0.54.0, headless Chromium 149
+driven by Playwright.
+
+| Check | Result |
+|---|---|
+| Clean seeded database | `GET /api/v1/products?page=1&limit=20` returns `meta.total` 45 and 20 items; the page shows the same 20 names and prices, formatted in VND (`180.000 ₫`) |
+| Name and price changed in the test database, page reloaded | The first card shows the new name and price |
+| Empty test database (`DELETE FROM products`) | API `200` with `data: []` and `total: 0`; the page shows the empty state without errors |
+| API error (`products` table renamed in the test database) | API `500`; the page shows the error message and Retry; after the table is restored, Retry shows the 20 products again |
+| Layout at 1280 / 800 / 390 px | 4 / 3 / 2 columns, no horizontal scrolling |
+
+![Catalog page showing 20 of the 45 seeded products](images/issue49-catalog.png)
+
+![Empty state for an empty products table](images/issue49-empty-state.png)
+
+![Error state with Retry while the API returns 500](images/issue49-error-retry.png)
+
+To reproduce:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env    # keep only DATABASE_URL=sqlite:///./marketplace.db
+python -m src.seed      # creates the products table and 45 products; a rerun adds none
+python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
+```
+
+Open http://127.0.0.1:8000/products. Run the edit, empty and error checks on a
+disposable copy of the database.
+
 ## Business rules
 
 Numbered, so issues and tests can cite them.
