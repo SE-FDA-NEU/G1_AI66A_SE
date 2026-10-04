@@ -7,6 +7,9 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
+import src.database as database
 from src.database import check_db_connection, get_db
 from src.seed import build_products
 
@@ -58,3 +61,14 @@ def test_init_and_seed_commands_on_sqlite_file(tmp_path: Path) -> None:
     assert f"Added: {expected} products" in run_python(["-m", "src.seed"], db_path)
     assert "Added: 0 products" in run_python(["-m", "src.seed"], db_path)
     assert run_python(["-c", API_TOTAL_SCRIPT], db_path).strip() == str(expected)
+
+def test_check_db_connection_handles_database_error(monkeypatch) -> None:
+    """Database connection failures should be handled without crashing."""
+
+    class BrokenEngine:
+        def connect(self):
+            raise SQLAlchemyError("simulated database connection failure")
+
+    monkeypatch.setattr(database, "engine", BrokenEngine())
+
+    assert database.check_db_connection() is False
