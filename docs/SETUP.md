@@ -227,10 +227,11 @@ and then 0, `pytest` reported 45 passed, and every check in section 5 matched.
 | **Runtime** | Python | `>= 3.12` (Target: `3.12.x`) | Core execution runtime |
 | **Web Framework** | FastAPI | `>= 0.115.0` | High-performance async REST API with automatic OpenAPI documentation |
 | **ASGI Server** | Uvicorn | `>= 0.30.0` | Lightning-fast ASGI web server |
-| **Validation & Settings** | Pydantic / Pydantic-Settings | `>= 2.8.0` | Type-safe request validation and environment configuration |
-| **Database ORM** | SQLAlchemy | `>= 2.0.30` | Declarative model mapping & database connection pool |
+| **Validation & Settings** | Pydantic / Pydantic-Settings | `>= 2.8.0` / `>= 2.4.0` | Type-safe request validation and environment configuration |
+| **Database ORM** | SQLModel on SQLAlchemy | `>= 0.0.22, < 0.0.23` / `>= 2.0.30` | Table models, sessions and queries |
 | **Database Engine** | SQLite | Built-in | Zero-configuration file database (dynamic runtime generation) |
-| **Testing** | pytest, pytest-cov, Starlette/HTTPX | `>= 8.0.0` | Automated unit, integration, and smoke testing with coverage |
+| **Web UI** | HTML / CSS / JavaScript | - | `/products` page served by FastAPI; no build step |
+| **Testing** | pytest, pytest-cov, HTTPX | `>= 8.0.0` / `>= 5.0.0` / `>= 0.27.0` | Automated unit, integration, and smoke testing with coverage |
 | **Code Quality** | Ruff | `>= 0.5.0` | High-speed linting and code formatting |
 
 ---
@@ -246,30 +247,37 @@ and then 0, `pytest` reported 45 passed, and every check in section 5 matched.
 ├── docs/
 │   ├── SETUP.md                   # This setup and run guide
 │   ├── requirements.md           # Product requirements & user stories (US01-US10)
-│   ├── traceability.md           # Traceability matrix
+│   ├── traceability.md           # Traceability matrix and implementation evidence
+│   ├── sprint-log.md             # Sprint log
+│   ├── images/                    # Screenshots used as evidence
 │   └── ...
 ├── src/
 │   ├── __init__.py                # Package version metadata
 │   ├── config.py                  # Pydantic environment configuration loader
-│   ├── database.py                # Database engine, session, & runtime schema creation
+│   ├── database.py                # Database engine and sessions; `python -m src.database` creates tables
+│   ├── seed.py                    # Sample products; `python -m src.seed` loads them
 │   ├── main.py                    # Application entrypoint & ASGI app factory
 │   ├── models/
 │   │   ├── __init__.py            # Model registry
-│   │   └── base.py                # SQLAlchemy DeclarativeBase and common mixins
-│   └── api/
-│       ├── __init__.py
-│       ├── router.py              # Main API router (/api/v1)
-│       ├── health.py              # Health check endpoint (/health & /api/v1/health)
-│       └── products.py            # Initial product catalog skeleton (US01)
+│   │   ├── base.py                # SQLAlchemy DeclarativeBase and common mixins
+│   │   └── product.py             # Product table (SQLModel)
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── router.py              # Main API router (/api/v1)
+│   │   ├── health.py              # Health check endpoint (/health & /api/v1/health)
+│   │   └── products.py            # Product catalog API backed by the database (US01)
+│   └── web/
+│       ├── router.py              # Serves the /products page
+│       ├── pages/products.html    # Page markup
+│       └── static/                # products.js, products.css, placeholder image (/static)
 ├── tests/
-│   ├── __init__.py
-│   ├── conftest.py                # Pytest fixtures and test client configuration
-│   └── test_smoke.py              # Smoke tests covering startup, health, routes, OpenAPI
+│   ├── conftest.py                # Pytest fixtures and test client configuration (in-memory SQLite)
+│   └── test_*.py                  # Config, database, health, products API, products page, issue #45 scenarios
 ├── .env.example                   # Committed environment variable template (no secrets)
 ├── .gitignore                     # Excludes .env, *.db, *.sqlite*, caches, virtual environments
 ├── pyproject.toml                 # Modern Python build metadata, pytest, and ruff settings
-├── requirements.txt               # Manifest of required dependencies
-├── requirements.lock              # Pinned lockfile for deterministic builds
+├── requirements.txt               # Dependencies installed by this guide and by CI
+├── requirements.lock              # Pinned versions; not used by this guide or by CI
 └── README.md                      # Project overview and quick start guide
 ```
 
