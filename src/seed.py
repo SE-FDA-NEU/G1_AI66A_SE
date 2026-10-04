@@ -2,6 +2,9 @@ from sqlmodel import Session, select
 
 from src.database import engine, init_db
 from src.models.product import Product
+from src.models.user import User
+
+DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
 
 
 def make_product(
@@ -11,27 +14,25 @@ def make_product(
     price: int,
     stock_quantity: int,
     reserved_stock: int = 0,
+    seller_id: int = 1,
 ) -> Product:
-    data = {
-        "code": code,
-        "name": name,
-        "description": description,
-        "price": price,
-        "stock_quantity": stock_quantity,
-        "reserved_stock": reserved_stock,
-        "image_url": f"/images/{code.lower()}.jpg",
-        "is_active": True,
-        "version": 1,
-    }
-
-    # Nếu model Product hiện có seller_id
-    if "seller_id" in Product.model_fields:
-        data["seller_id"] = 1
-
-    return Product(**data)
+    """Create one product linked to an existing seller."""
+    return Product(
+        code=code,
+        seller_id=seller_id,
+        name=name,
+        description=description,
+        price=price,
+        stock_quantity=stock_quantity,
+        reserved_stock=reserved_stock,
+        image_url=f"/images/{code.lower()}.jpg",
+        is_active=True,
+        version=1,
+    )
 
 
-def build_products() -> list[Product]:
+def build_products(seller_id: int = 1) -> list[Product]:
+    """Build the sample product catalog."""
     products_data = [
         ("Wireless Mouse", "Wireless mouse for study and office work", 180000),
         ("Mechanical Keyboard", "Mechanical keyboard with tactile switches", 650000),
@@ -61,7 +62,11 @@ def build_products() -> list[Product]:
         ("Ethernet Adapter", "USB-C to Ethernet network adapter", 280000),
         ("USB-C to HDMI Adapter", "USB-C video output adapter", 310000),
         ("Wireless Presenter", "Wireless presentation clicker", 270000),
-        ("Noise Cancelling Headphones", "Over-ear Bluetooth headphones", 890000),
+        (
+            "Noise Cancelling Headphones",
+            "Over-ear Bluetooth headphones",
+            890000,
+        ),
         ("Mini Bluetooth Keyboard", "Portable Bluetooth keyboard", 350000),
         ("Smartphone Tripod", "Compact tripod for smartphones", 230000),
         ("Webcam Cover", "Sliding privacy cover for webcams", 50000),
@@ -71,16 +76,32 @@ def build_products() -> list[Product]:
         ("Laptop Privacy Filter", "Privacy screen filter for laptops", 370000),
         ("Wireless Charging Pad", "Qi wireless charging pad", 290000),
         ("USB Desk Fan", "Compact USB-powered desk fan", 170000),
-        ("Portable Bluetooth Receiver", "Bluetooth audio receiver", 220000),
-        ("Computer Cleaning Brush", "Soft brush for keyboards and devices", 65000),
+        (
+            "Portable Bluetooth Receiver",
+            "Bluetooth audio receiver",
+            220000,
+        ),
+        (
+            "Computer Cleaning Brush",
+            "Soft brush for keyboards and devices",
+            65000,
+        ),
         ("USB Numeric Keypad", "External USB numeric keypad", 190000),
         ("USB Sound Card", "External USB audio adapter", 180000),
         ("Laptop Webcam Light", "USB light for video calls", 250000),
-        ("Portable Monitor Stand", "Foldable stand for portable monitors", 240000),
-        ("USB-C Multiport Adapter", "USB-C adapter with HDMI and USB ports", 490000),
+        (
+            "Portable Monitor Stand",
+            "Foldable stand for portable monitors",
+            240000,
+        ),
+        (
+            "USB-C Multiport Adapter",
+            "USB-C adapter with HDMI and USB ports",
+            490000,
+        ),
     ]
 
-    products = []
+    products: list[Product] = []
 
     for index, (name, description, price) in enumerate(products_data):
         code_number = 100 + index
@@ -88,6 +109,7 @@ def build_products() -> list[Product]:
         products.append(
             make_product(
                 code=f"P-{code_number}",
+                seller_id=seller_id,
                 name=name,
                 description=description,
                 price=price,
@@ -99,15 +121,40 @@ def build_products() -> list[Product]:
     return products
 
 
-def seed_products():
-    # Fresh machine: tạo bảng nếu database chưa tồn tại
+def get_or_create_demo_seller(session: Session) -> User:
+    """Return the demo seller, creating it when it does not exist."""
+    seller = session.exec(
+        select(User).where(User.email == DEMO_SELLER_EMAIL)
+    ).first()
+
+    if seller is None:
+        seller = User(
+            name="Demo Seller",
+            email=DEMO_SELLER_EMAIL,
+            role="seller",
+        )
+        session.add(seller)
+        session.flush()
+
+    return seller
+
+
+def seed_products() -> None:
+    """Create missing tables and seed the sample catalog."""
     init_db()
 
-    products = build_products()
-
     with Session(engine) as session:
+        seller = get_or_create_demo_seller(session)
+
+        if seller.id is None:
+            raise RuntimeError("Demo seller could not be created.")
+
+        products = build_products(seller_id=seller.id)
+
         existing_products = session.exec(select(Product)).all()
-        existing_codes = {product.code for product in existing_products}
+        existing_codes = {
+            product.code for product in existing_products
+        }
 
         new_products = [
             product
@@ -117,7 +164,8 @@ def seed_products():
 
         if new_products:
             session.add_all(new_products)
-            session.commit()
+
+        session.commit()
 
         all_products = session.exec(select(Product)).all()
 

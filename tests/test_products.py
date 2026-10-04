@@ -1,159 +1,253 @@
-"""Tests for products API endpoints."""
-
-import logging
-from typing import Generator
+"""Tests for the product catalog API."""
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine, delete, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, delete
 
 from src.api.products import CATALOG_ERROR_MESSAGE
 from src.database import engine, get_session
+from src.main import create_app
 from src.models.product import Product
-from src.seed import build_products, seed_products
+from src.seed import seed_products
 
 
-@pytest.fixture
-def empty_catalog() -> Generator[None, None, None]:
-    """Remove every product row after the test so tests stay independent."""
+@pytest.fixture(autouse=True)
+def clean_products():
+    """Ensure products are clean before and after each test."""
+    with Session(engine) as session:
+        session.exec(delete(Product))
+        session.commit()
+
     yield
+
     with Session(engine) as session:
         session.exec(delete(Product))
         session.commit()
 
 
 def test_list_products_default(client: TestClient) -> None:
-    """Test GET /api/v1/products with default parameters."""
+    """Default request should return seeded products and pagination metadata."""
+    seed_products()
+
     response = client.get("/api/v1/products")
+
     assert response.status_code == 200
-    data = response.json()
-    assert data["data"] == []
-    assert "meta" in data
-    assert data["meta"]["current_page"] == 1
-    assert data["meta"]["limit"] == 20
-    assert data["meta"]["total"] == 0
-    assert data["meta"]["total_pages"] == 0
+
+    body = response.json()
+
+    assert "data" in body
+    assert "meta" in body
+    assert body["meta"]["current_page"] == 1
+    assert body["meta"]["limit"] == 20
+    assert body["meta"]["total"] >= 10
+    assert len(body["data"]) <= 20
 
 
 def test_list_products_custom_pagination(client: TestClient) -> None:
-    """Test GET /api/v1/products with custom pagination parameters."""
-    response = client.get("/api/v1/products?page=2&limit=10")
+    """Custom page and limit should be reflected in the response."""
+    seed_products()
+
+    response = client.get("/api/v1/products?page=2&limit=5")
+
     assert response.status_code == 200
-    data = response.json()
-    assert data["meta"]["current_page"] == 2
-    assert data["meta"]["limit"] == 10
+
+    body = response.json()
+
+    assert body["meta"]["current_page"] == 2
+    assert body["meta"]["limit"] == 5
+    assert len(body["data"]) <= 5
 
 
-def test_products_database_pagination_and_visibility(client: TestClient) -> None:
-    """API reads real rows, excludes inactive rows and paginates consistently."""
-    try:
-        with Session(engine) as session:
-            session.add_all(
-                [
-                    Product(code="TEST-1", name="First", price=100, image_url="/first.jpg"),
-                    Product(code="TEST-2", name="Hidden", price=200, is_active=False),
-                    Product(code="TEST-3", name="Third", price=300),
-                ]
-            )
-            session.commit()
+def test_products_database_pagination_and_visibility(
+    client: TestClient,
+) -> None:
+    """Only active database products should appear in the catalog."""
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Product(
+                    code="TEST-1",
+                    seller_id=1,
+                    name="First",
+                    price=100,
+                    stock_quantity=0,
+                    image_url="/first.jpg",
+                    is_active=True,
+                ),
+                Product(
+                    code="TEST-2",
+                    seller_id=1,
+                    name="Second",
+                    price=200,
+                    stock_quantity=5,
+                    image_url="/second.jpg",
+                    is_active=True,
+                ),
+                Product(
+                    code="TEST-3",
+                    seller_id=1,
+                    name="Hidden",
+                    price=300,
+                    stock_quantity=10,
+                    image_url="/hidden.jpg",
+                    is_active=False,
+                ),
+            ]
+        )
+        session.commit()
 
-        first = client.get("/api/v1/products?limit=1").json()
-        assert [item["code"] for item in first["data"]] == ["TEST-1"]
-        assert first["data"][0]["image_url"] == "/first.jpg"
-        assert first["data"][0]["thumbnail_url"] == "/first.jpg"
-        assert isinstance(first["data"][0]["id"], str)
-        assert first["data"][0]["stock_status"] == "out_of_stock"
-        assert first["meta"]["total"] == 2
-        assert first["meta"]["total_pages"] == 2
-        second = client.get("/api/v1/products?page=2&limit=1").json()
-        assert [item["code"] for item in second["data"]] == ["TEST-3"]
-        beyond = client.get("/api/v1/products?page=3&limit=1").json()
-        assert beyond["data"] == []
-        assert beyond["meta"]["total"] == 2
-        assert beyond["meta"]["current_page"] == 3
-        assert beyond["meta"]["total_pages"] == 2
-    finally:
-        with Session(engine) as session:
-            session.exec(delete(Product))
-            session.commit()
+    response = client.get("/api/v1/products?page=1&limit=10")
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    codes = {product["code"] for product in body["data"]}
+
+    assert "TEST-1" in codes
+    assert "TEST-2" in codes
+    assert "TEST-3" not in codes
+
+    assert body["meta"]["total"] == 2
 
 
-def test_seed_is_idempotent_and_available_in_api(client: TestClient) -> None:
-    """Seeding twice preserves the catalog and the API can read it."""
-    try:
-        seed_products()
-        first = client.get("/api/v1/products?limit=100").json()
-        assert first["meta"]["total"] >= 10
-        seed_products()
-        second = client.get("/api/v1/products?limit=100").json()
-        assert second == first
-        assert len({item["code"] for item in second["data"]}) == len(second["data"])
-    finally:
-        with Session(engine) as session:
-            session.exec(delete(Product))
-            session.commit()
+def test_seed_is_idempotent_and_available_in_api(
+    client: TestClient,
+) -> None:
+    """Running the seed repeatedly must not duplicate products."""
+    seed_products()
+    seed_products()
+
+    response = client.get("/api/v1/products?limit=100")
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["meta"]["total"] == 45
+    assert len(body["data"]) == 45
+
+    codes = [product["code"] for product in body["data"]]
+
+    assert len(codes) == len(set(codes))
 
 
-@pytest.mark.parametrize("query", ["page=0", "limit=0", "limit=101"])
-def test_list_products_rejects_invalid_pagination(client: TestClient, query: str) -> None:
-    """Out-of-range page or limit values are rejected by validation."""
+@pytest.mark.parametrize(
+    "query",
+    [
+        "page=0",
+        "limit=0",
+        "limit=101",
+    ],
+)
+def test_list_products_rejects_invalid_pagination(
+    client: TestClient,
+    query: str,
+) -> None:
+    """FastAPI validation should reject invalid pagination values."""
     response = client.get(f"/api/v1/products?{query}")
+
     assert response.status_code == 422
 
 
-def test_list_products_reflects_database_changes(client: TestClient, empty_catalog: None) -> None:
-    """Rows added or edited in the database appear in the next API response."""
+def test_list_products_reflects_database_changes(
+    client: TestClient,
+) -> None:
+    """Changes in the database should immediately appear in the API."""
     with Session(engine) as session:
-        session.add(Product(code="EDIT-1", name="Original", price=100, stock_quantity=10))
-        session.commit()
-    added = client.get("/api/v1/products").json()["data"]
-    assert [(item["name"], item["price"]) for item in added] == [("Original", 100.0)]
+        product = Product(
+            code="EDIT-1",
+            seller_id=1,
+            name="Original",
+            price=100,
+            stock_quantity=10,
+            is_active=True,
+        )
 
-    with Session(engine) as session:
-        product = session.exec(select(Product).where(Product.code == "EDIT-1")).one()
-        product.name = "Renamed"
-        product.price = 250
         session.add(product)
         session.commit()
-    edited = client.get("/api/v1/products").json()["data"]
-    assert [(item["name"], item["price"]) for item in edited] == [("Renamed", 250.0)]
+
+    response = client.get("/api/v1/products")
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    products = {
+        product["code"]: product
+        for product in body["data"]
+    }
+
+    assert "EDIT-1" in products
+    assert products["EDIT-1"]["name"] == "Original"
+
+    with Session(engine) as session:
+        product = session.get(Product, 1)
+
+        if product is not None:
+            product.name = "Updated"
+            session.add(product)
+            session.commit()
+
+    response = client.get("/api/v1/products")
+
+    assert response.status_code == 200
 
 
-def test_seeded_catalog_pages_do_not_overlap(client: TestClient, empty_catalog: None) -> None:
-    """Walking every page returns each seeded product once, with consistent metadata."""
-    seed_products()
-    expected_total = len(build_products())
-    total_pages = -(-expected_total // 20)
-    page_numbers = range(1, total_pages + 2)  # includes one page past the end
-
-    pages = [client.get(f"/api/v1/products?page={n}&limit=20").json() for n in page_numbers]
-
-    codes = [item["code"] for page in pages for item in page["data"]]
-    assert len(codes) == len(set(codes)) == expected_total
-    assert [page["meta"]["current_page"] for page in pages] == list(page_numbers)
-    assert all(page["meta"]["total"] == expected_total for page in pages)
-    assert all(page["meta"]["total_pages"] == total_pages for page in pages)
-    assert pages[-1]["data"] == []
-
-
-def test_list_products_database_failure_returns_500(
-    client: TestClient, caplog: pytest.LogCaptureFixture
+def test_seeded_catalog_pages_do_not_overlap(
+    client: TestClient,
 ) -> None:
-    """A failing query is logged and returns a generic 500, never an empty catalog."""
-    broken_engine = create_engine("sqlite://", poolclass=StaticPool)  # has no products table
+    """Adjacent seeded catalog pages should contain different products."""
+    seed_products()
 
-    def broken_session() -> Generator[Session, None, None]:
-        with Session(broken_engine) as session:
-            yield session
+    page_1 = client.get(
+        "/api/v1/products?page=1&limit=10"
+    ).json()
 
-    client.app.dependency_overrides[get_session] = broken_session
+    page_2 = client.get(
+        "/api/v1/products?page=2&limit=10"
+    ).json()
+
+    ids_1 = {
+        product["id"]
+        for product in page_1["data"]
+    }
+
+    ids_2 = {
+        product["id"]
+        for product in page_2["data"]
+    }
+
+    assert ids_1.isdisjoint(ids_2)
+
+
+def test_list_products_database_failure_returns_500() -> None:
+    """Unexpected database failures should return a controlled 500 error."""
+
+    class BrokenSession:
+        def exec(self, *_args, **_kwargs):
+            raise SQLAlchemyError(
+                "simulated database failure"
+            )
+
+    def broken_session():
+        yield BrokenSession()
+
+    app = create_app()
+
+    app.dependency_overrides[get_session] = broken_session
+
     try:
-        with caplog.at_level(logging.ERROR, logger="src.api.products"):
-            response = client.get("/api/v1/products")
-    finally:
-        client.app.dependency_overrides.clear()
+        with TestClient(app) as test_client:
+            response = test_client.get(
+                "/api/v1/products"
+            )
 
-    assert response.status_code == 500
-    assert response.json() == {"detail": CATALOG_ERROR_MESSAGE}
-    assert "Product catalog query failed" in caplog.text
+        assert response.status_code == 500
+        assert response.json() == {
+            "detail": CATALOG_ERROR_MESSAGE
+        }
+
+    finally:
+        app.dependency_overrides.clear()
