@@ -47,27 +47,36 @@
 ## 3. Technical Implementation Details
 
 ### Backend & API
-- **Endpoint:** `GET /api/v1/products?page={page}&limit={limit}`
-- **Database Query:**
-  - `SELECT id, name, price, thumbnail_url, stock_quantity FROM products WHERE is_published = true AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 20 OFFSET {offset}`
+- **Endpoint:** `GET /api/v1/products?page={page}&limit={limit}` (`page >= 1`, `1 <= limit <= 100`, default `limit` 20)
+- **Database Query** (SQLModel in `src/api/products.py`; equivalent SQL):
+  - `SELECT COUNT(*) FROM products WHERE is_active = TRUE`
+  - `SELECT * FROM products WHERE is_active = TRUE ORDER BY id LIMIT {limit} OFFSET {offset}`
+- **Identifiers:** the internal primary key is an integer, returned as a string in `id`; `code` is the readable product code (for example `P-100`).
 - **Response Payload Example (Success):**
   ```json
   {
     "data": [
       {
-        "id": "uuid-123",
-        "name": "Wireless Keyboard",
-        "price": 45.00,
-        "thumbnail_url": "https://img.url/thumb1.jpg",
+        "id": "1",
+        "code": "P-100",
+        "name": "Wireless Mouse",
+        "description": "Wireless mouse for study and office work",
+        "price": 180000.0,
+        "thumbnail_url": "/images/p-100.jpg",
+        "image_url": "/images/p-100.jpg",
+        "stock_quantity": 12,
         "stock_status": "in_stock"
       }
     ],
     "meta": {
       "current_page": 1,
-      "total_pages": 5
+      "limit": 20,
+      "total": 45,
+      "total_pages": 3
     }
   }
   ```
+- **Errors:** an invalid `page` or `limit` returns `422`; a failed database query returns `500` with `{"detail": "Unable to load products right now. Please try again later."}`.
 
 ### Frontend UI/UX
 - **State Management:** Implement tracking for `isLoading`, `isError`, and `products[]`.
