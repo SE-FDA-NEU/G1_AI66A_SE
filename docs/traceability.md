@@ -27,19 +27,37 @@ update this file should not be approved.
 
 ## Task 3: Database-backed product API
 
-Task 3 is implemented for the `/products` catalog backend. The
-`GET /api/v1/products` endpoint now uses the injected SQLAlchemy database
-session to query the `products` table instead of returning a hard-coded
-response. The query filters published, non-deleted products, orders by
-creation time, and supports paginated results through `page` and `limit`.
-Each response includes product fields, stock status, and pagination metadata.
+`GET /api/v1/products?page={page}&limit={limit}` is implemented by
+`src/api/products.py:list_products()`. It queries the `products` table
+(`src/models/product.py`) through the SQLModel session injected as `SessionDep`
+(`src/database.py`), returns only active products, and orders them by `id` so
+pages are stable. `python -m src.database` creates the table and
+`python -m src.seed` loads 45 sample products; running the seed again adds none.
+
+Equivalent SQL for one request:
+
+```sql
+SELECT COUNT(*) FROM products WHERE is_active = TRUE;
+
+SELECT * FROM products
+WHERE is_active = TRUE
+ORDER BY id
+LIMIT :limit OFFSET :offset;   -- offset = (page - 1) * limit
+```
+
+The internal primary key `id` is an integer; the API returns it as a string,
+together with the product `code` (for example `P-100`). `thumbnail_url` and
+`image_url` both come from the `image_url` column, and `stock_status` is derived
+from `stock_quantity`: `out_of_stock` at 0, `low_stock` up to 5, otherwise
+`in_stock`.
 
 | Task 3 requirement | Implementation | Status |
 |---|---|---|
-| Fetch products from the real database | `src/api/products.py:list_products()` uses `get_db()` and SQL queries | Done |
-| Do not hard-code the product list | Product rows are selected from `products` with bound query parameters | Done |
-| Support the defined product-list API contract | `GET /api/v1/products?page={page}&limit={limit}` returns `data` and `meta` | Done |
-| Apply catalog visibility rules | Query includes `is_published = true` and `deleted_at IS NULL` | Done |
+| Fetch products from the real database | `list_products()` runs SQLModel `select` queries through `SessionDep` | Done |
+| Do not hard-code the product list | Every item in `data` is built from a selected `Product` row | Done |
+| Support the defined product-list API contract | Returns `data` and `meta` (`current_page`, `limit`, `total`, `total_pages`); `page < 1`, `limit < 1` or `limit > 100` return `422` | Done |
+| Apply catalog visibility rules | Both queries filter on `is_active = TRUE` | Done |
+| Keep query failures apart from an empty catalog | A database error is logged on the server and returns `500` with a generic message; an empty table returns `200` with `data: []` and `total: 0` | Done |
 
 ## Business rules
 
