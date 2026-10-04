@@ -4,6 +4,8 @@ A mini marketplace where sellers can list products, buyers can add products to c
 
 **Setup Guide:** [docs/SETUP.md](docs/SETUP.md)
 
+**System Design:** [docs/design.md](docs/design.md)
+
 ## Team & Roles
 
 - **Product Owner (PO):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
