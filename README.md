@@ -83,7 +83,7 @@ cp .env.example .env
 python -m src.seed
 ```
 
-The seed creates the SQLite database and its table, then loads the sample data. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
+The seed creates the SQLite database and its tables, then loads a demo seller and the sample products. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
 
 ### 3. Run the Tests
 
