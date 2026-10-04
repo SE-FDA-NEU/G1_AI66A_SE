@@ -64,3 +64,8 @@ def get_db() -> Generator[Session, None, None]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+if __name__ == "__main__":
+    init_db()
+    print("Database initialization completed successfully.")
