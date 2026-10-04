@@ -129,6 +129,7 @@ A marketplace order may contain products from multiple sellers. Therefore, selle
 | `seller_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
 | `status` | VARCHAR(30) | NOT NULL |
 | `created_at` | DATETIME | NOT NULL |
+| `completed_at` | DATETIME | NULL; set when status becomes `COMPLETED` |
 
 Additional constraint:
 
@@ -139,6 +140,16 @@ UNIQUE(order_id, seller_id)
 This ensures that one seller has only one seller-specific order inside a given marketplace order.
 
 The `status` field allows each seller to manage their own fulfillment process independently from other sellers participating in the same buyer order.
+
+The `completed_at` field records when the seller-specific order reaches the `COMPLETED` state. It remains `NULL` while the seller order has not been completed.
+
+For seller analytics, `seller_orders.status` is the canonical fulfillment status. Revenue and best-selling calculations include only seller orders where:
+
+```text
+seller_orders.status = COMPLETED
+```
+
+The selected analytics period is evaluated using `seller_orders.completed_at`, not the original marketplace order creation timestamp.
 
 ---
 
@@ -246,6 +257,8 @@ Important relational constraints are mapped to the Milestone 1 business rules be
 | `UNIQUE(order_id, seller_id)` | BR6 | Creates one seller-specific order per seller inside a marketplace order |
 | `order_items.unit_price` | BR7 | Preserves purchase-time prices for historical revenue calculations |
 | `order_items.quantity > 0` | BR7 / BR10 | Ensures purchased quantities used in revenue and analytics are valid |
+| `seller_orders.status = COMPLETED` | BR7 / BR10 | Ensures revenue and best-selling analytics include only completed seller sales |
+| `seller_orders.completed_at` | BR7 / BR10 | Provides the completion timestamp used to filter analytics by selected period |
 
 Some Milestone 1 business rules require application-level or transaction-level validation in addition to database constraints.
 
@@ -273,7 +286,37 @@ The checkout operation should perform the following steps inside one database tr
 
 If any step fails, the transaction must roll back so that no partial order or inconsistent stock update remains.
 
-This design prevents a situation where two buyers successfully purchase the same remaining stock at the same time.
+A database transaction alone is not sufficient to prevent overselling when multiple checkout requests update the same product concurrently.
+
+The design uses optimistic concurrency control through `products.version`.
+
+For each product during checkout:
+
+```text
+1. Read the latest stock_quantity and version.
+2. Verify that the requested quantity is available.
+3. Update the product only if its version is still unchanged.
+4. Decrease stock and increment version atomically.
+5. If no row is updated, another transaction changed the product first;
+   reject the checkout and revalidate instead of creating the order.
+```
+
+Conceptually:
+
+```sql
+UPDATE products
+SET stock_quantity = stock_quantity - :quantity,
+    version = version + 1
+WHERE id = :product_id
+  AND version = :expected_version
+  AND stock_quantity >= :quantity;
+```
+
+If the update affects zero rows, checkout must fail or revalidate.
+
+The inventory update and creation of `orders`, `seller_orders`, and `order_items` remain inside the same transaction. If any step fails, the complete transaction is rolled back.
+
+This strategy supports BR8 by ensuring that the latest inventory is revalidated and updated atomically before order creation.
 
 ---
 
@@ -316,6 +359,20 @@ The current implementation filters the public product catalog using:
 
 ```text
 is_active = true
+```
+
+#### Product visibility terminology
+
+`is_active` is the canonical persistence field used by the current Product model and by this relational design.
+
+Milestone 1 BR1 also describes purchasable products as active.
+
+If earlier API documentation uses `is_published`, it refers to the same catalog-visibility concept. The project should standardize on `is_active` rather than storing both `is_active` and `is_published`.
+
+Therefore, the relational schema contains only:
+
+```text
+is_active
 ```
 
 The ERD and table definitions in this document therefore retain the existing `is_active` field.
@@ -361,4 +418,4 @@ Store purchased items
 Seller manages own order
 ```
 
-The ERD in `docs/images/erd.png` must remain consistent with all table definitions, primary keys, foreign keys, and cardinalities documented in this section.
+The ERD in `docs/images/design_erd.png` must remain consistent with all table definitions, primary keys, foreign keys, and cardinalities documented in this section.
