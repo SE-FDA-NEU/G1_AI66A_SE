@@ -204,16 +204,22 @@ follows it on their own machine (issue #52). Record that run here.
 
 | Field | Value |
 |---|---|
-| Tested by | _Pending (#52)_ |
-| Non-author machine | _Pending: OS and version, machine type, new clone folder_ |
-| Versions | _Pending: `git --version`, `python --version`, `python -m pip --version`, browser_ |
-| Guide commit | _Pending: SHA of the guide that was followed_ |
-| Test date | _Pending: date and time zone_ |
-| Test duration | _Pending: start and end time of the whole setup, not the pytest time_ |
-| Steps completed | _Pending: installation, `.env`, database creation and seed (`python -m src.seed`), start, success URL_ |
-| Result | _Pending: Pass / Fail / Retest required_ |
-| Problems and fixes | _Pending_ |
-| Evidence | _Pending: screenshot or log links_ |
+| Tested by | @leducminh290506-eng (#52) |
+| Non-author machine | Windows 11 Home or Pro (x64), personal computer, new clone in `D:\G1_AI66A_SE` |
+| Versions | Git 2.51.1.windows.1, Python 3.12.7, pip 26.2.1, Microsoft Edge (Chrome is also named in the record) |
+| Guide commit | `1c5982d`, the guide before the review changes (see the note below) |
+| Test date | 2026-10-04, GMT+7 |
+| Test duration | 23:10 to 23:28, about 18 minutes |
+| Steps completed | Clone; create and activate `.venv`; install `requirements.txt`; create `.env`; `python -m src.database`; `python -m src.seed` (45 products); `python -m src.main`; check the endpoints and `/products`; `python -m pytest -v` (45 passed) |
+| Result | Pass |
+| Problems and fixes | `pip check` outside the virtual environment reported conflicts; after activating `.venv` (`.\.venv\Scripts\Activate`) and installing `requirements.txt` it printed `No broken requirements found`. The server log shows `404` for `/images/p-*.jpg`; the page falls back to the placeholder image as designed. |
+| Evidence | [Record on #52](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/52#issuecomment-5982133134) with a catalog screenshot and a server log screenshot; [confirmed and closed by @teddywristh](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/52#issuecomment-5982150358) |
+
+The independent run used the guide at `1c5982d`. Since then the guide makes
+`python -m src.seed` the only database command, and #46 added the six-table
+schema and the demo seller. The author checked those changes on Linux (below),
+but no non-author has run the current guide yet: gap G5 in the
+[Sprint 2 evidence](evidence/sprint2.md#6-gap-ledger).
 
 Author check, not the independent verification: on 2026-10-04 the author ran
 the macOS/Linux commands of sections 2 to 5 on a clean clone of `main` at

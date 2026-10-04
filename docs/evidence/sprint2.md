@@ -77,3 +77,15 @@ No test covers the CHECK and foreign key constraints added in #46 (gap G7).
 | [Windows server log](https://github.com/user-attachments/assets/94e4feb3-a95a-4c48-a055-5baca00315ce) | The catalog `SELECT ... WHERE products.is_active IS 1 ORDER BY products.id LIMIT ? OFFSET ?`, `GET /api/v1/products?page=1&limit=20` `200`, and `404` for `/images/p-*.jpg` before the placeholder loads | Guide at `1c5982d`, 2026-10-04 | #52 record |
 | [C4 container diagram](../images/mini-marketplace-c4.svg) | Containers of the system | PR #69 | Design |
 | [ERD](../images/design_erd.png) | The six tables and their relationships | PR #66 | Design |
+
+## 5. Setup verification (#51, #52)
+
+| Run | Guide commit | Who and where | Result |
+|---|---|---|---|
+| Independent (#52) | `1c5982d` | @leducminh290506-eng; Windows 11 (x64), Git 2.51.1, Python 3.12.7; 2026-10-04 23:10 to 23:28 GMT+7 | Pass: install, `.env`, `python -m src.database`, `python -m src.seed` (45 products), start, `/products` and endpoints, 45 tests passed. [Record](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/52#issuecomment-5982133134), [confirmation](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/52#issuecomment-5982150358) |
+| Author check | `main` at `85c98fe` | @MinhQuangQu; Ubuntu 24.04 on WSL2, Python 3.13.12; 2026-10-04 | Pass: `python -m src.seed` alone created six tables, 1 user and 45 products; 46 tests passed; every check in SETUP section 5 matched |
+
+Both runs are recorded in [SETUP section 7](../SETUP.md#7-verification). The
+independent run checked the guide before it moved to the single seed command
+and the six-table schema, so the current guide has been run only by its author
+(gap G5).
