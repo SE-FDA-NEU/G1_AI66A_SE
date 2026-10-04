@@ -177,7 +177,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env    # keep only DATABASE_URL=sqlite:///./marketplace.db
-python -m src.seed      # creates the products table and 45 products; a rerun adds none
+python -m src.seed      # creates the tables, a demo seller and 45 products; a rerun adds none
 python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -201,15 +201,15 @@ product, cart, checkout, seller product, and seller order workflows.
 
 Numbered, so issues and tests can cite them.
 
-| # | Rule | Enforced where | Tested by |
+| # | Rule | Enforced where (on `main` at `37e80c3`) | Tested by |
 |---|------|----------------|-----------|
-| BR1 | Only available products can be displayed in the product catalog. | Product catalog | TBD |
-| BR2 | Buyers may add or update cart items only when the requested quantity is a positive integer and does not exceed current available stock. Adding an item to the cart does not reserve stock. | Cart | TBD |
-| BR3 | A buyer must be authenticated before placing an order. | Checkout | TBD |
-| BR4 | A buyer can view only their own orders. | Orders | TBD |
-| BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | Seller product management | TBD |
-| BR6 | Sellers can view and manage incoming orders related to their products. | Seller order management | TBD |
-| BR7 | Seller revenue is calculated only from the authenticated seller's order items in COMPLETED orders, using the item price recorded at purchase time. | Seller analytics | TBD |
-| BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | Checkout/order creation | TBD |
-| BR9 | Product updates (price, stock quantity, and product information) must validate that price is strictly positive (> 0) and stock quantity is a non-negative integer (>= 0). If an update fails validation, the database transaction is aborted, and all previous valid data remains unchanged. | Seller product management | TBD |
-| BR10 | Seller best-selling product analytics must rank only the authenticated seller's own products using quantities from completed order items in the selected reporting period. | Seller analytics | TBD |
+| BR1 | Only available products can be displayed in the product catalog. | `list_products()` in `src/api/products.py` returns only rows with `is_active = TRUE`. Stock is not checked: an out-of-stock product is listed with `stock_status: out_of_stock` (gap G2). | `test_products_database_pagination_and_visibility` in `tests/test_products.py` (an inactive product is left out); the scenarios in `tests/test_issue45_scenarios.py` |
+| BR2 | Buyers may add or update cart items only when the requested quantity is a positive integer and does not exceed current available stock. Adding an item to the cart does not reserve stock. | Schema only: `cart_items` has CHECK `quantity > 0` and `UNIQUE(buyer_id, product_id)` (#46). The stock check needs the cart endpoints, which are not built. | None yet |
+| BR3 | A buyer must be authenticated before placing an order. | Design only: Bearer token on checkout ([API design](design.md#32-authentication-and-common-response-rules)). No authentication exists. | None yet |
+| BR4 | A buyer can view only their own orders. | Design only: order endpoints and authentication are not built. | None yet |
+| BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | Schema only: `products.seller_id` is a foreign key to `users.id` (#46). Taking the seller from the token needs authentication, which does not exist. | None yet (gap G7) |
+| BR6 | Sellers can view and manage incoming orders related to their products. | Schema only: `seller_orders.seller_id` and `UNIQUE(order_id, seller_id)` (#46). No seller order endpoint exists. | None yet |
+| BR7 | Seller revenue is calculated only from the authenticated seller's order items in COMPLETED orders, using the item price recorded at purchase time. | Design only: `order_items.unit_price`, `seller_orders.status` and `seller_orders.completed_at` ([data model](design.md#25-business-rule-mapping)). Analytics (P1) is not built. | None yet |
+| BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | Design only: one checkout transaction with an optimistic check on `products.version` ([transaction rules](design.md#26-transaction-level-rules)). Checkout is not built. | None yet |
+| BR9 | Product updates (price, stock quantity, and product information) must validate that price is strictly positive (> 0) and stock quantity is a non-negative integer (>= 0). If an update fails validation, the database transaction is aborted, and all previous valid data remains unchanged. | Schema only: CHECK `price > 0`, `stock_quantity >= 0`, `reserved_stock >= 0` and `reserved_stock <= stock_quantity` on `products` (#46). The update flow (US07, P1) is not built. | None yet; no test writes an invalid value (gap G7) |
+| BR10 | Seller best-selling product analytics must rank only the authenticated seller's own products using quantities from completed order items in the selected reporting period. | Design only: completed `seller_orders` and `order_items` quantities ([data model](design.md#25-business-rule-mapping)). Analytics (P2) is not built. | None yet |
