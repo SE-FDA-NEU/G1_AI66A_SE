@@ -17,7 +17,7 @@ The current implementation already contains the `products` table through the `Pr
 
 ### 2.1 Entity Relationship Diagram
 
-![Mini Marketplace ERD](images/erd.png)
+![Mini Marketplace ERD](images/design_erd.png)
 
 ---
 
