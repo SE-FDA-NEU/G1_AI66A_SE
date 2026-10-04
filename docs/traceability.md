@@ -157,6 +157,19 @@ python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
 Open http://127.0.0.1:8000/products. Run the edit, empty and error checks on a
 disposable copy of the database.
 
+## REST API design
+
+The complete API contract is documented in
+[`docs/design.md`](./design.md). It defines the method, path, access
+requirement, inputs, success response, and error responses for the P0
+product, cart, checkout, seller product, and seller order workflows.
+
+| Design deliverable | Coverage | Status |
+|---|---|---|
+| REST endpoint contract | 10 documented endpoints under `/api/v1` | Done |
+| Error handling contract | Documents `400`, `401`, `403`, `404`, `409`, `422`, and `500` conditions | Done |
+| P0 story coverage | US01, US02, US03, US04, US06, and US08 mapped to endpoints | Done |
+
 ## Business rules
 
 Numbered, so issues and tests can cite them.
