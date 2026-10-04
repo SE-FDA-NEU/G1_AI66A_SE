@@ -89,3 +89,24 @@ Both runs are recorded in [SETUP section 7](../SETUP.md#7-verification). The
 independent run checked the guide before it moved to the single seed command
 and the six-table schema, so the current guide has been run only by its author
 (gap G5).
+
+## 6. Gap ledger
+
+Differences between the requirements, the design and the running code found
+while building this index. Owners are proposed; each owner confirms or hands a
+gap on.
+
+| ID | Gap | Evidence | Impact | Proposed owner | Status |
+|---|---|---|---|---|---|
+| G1 | The catalog API differs from the API contract in three details: `id` is a string, not an integer; invalid `page` or `limit` returns `422`, not `400`; errors use FastAPI's `{"detail": ...}`, not `{"error": {"code", "message"}}` | [Design 1.5](../design.md#15-running-catalog-api-compared-with-the-api-contract); `src/api/products.py`; `test_list_products_rejects_invalid_pagination` expects `422` | A client written from the contract handles ids and errors wrongly | @teddywristh (#47) | Open |
+| G2 | BR1 and US01 criterion 2 exclude products with no stock, but the catalog filters only on `is_active`, so out-of-stock products are listed with `stock_status: out_of_stock` | `list_products()` in `src/api/products.py`; [US01](../us01-browse-product-catalog.md); design 2.7 replaces `is_published` with `is_active` | Buyers see products they cannot buy, and the empty state never appears for an all-out-of-stock catalog | @leducminh290506-eng (PO) decides the rule | Open; decision needed |
+| G3 | US01 criterion 1 expects page controls, but the page always loads `page=1&limit=20`, has no page controls or filters, and its cards do not link to a detail page | `PRODUCTS_URL` in `src/web/static/products.js` | Products after the first 20 cannot be reached from the page | US01 implementation task, scheduled by the PO | Open |
+| G4 | US02 names its screen `/products/:productId`, while the endpoint is `GET /api/v1/products/{productCode}` and design 3.1 says public URLs use the product code | [Design 3.1](../design.md#31-product-identifiers); [traceability route table](../traceability.md) | The detail screen and its API could be built against different identifiers | @teddywristh (#47) with the PO | Open |
+| G5 | The independent setup run used the guide at `1c5982d`. The current guide (single seed command, six tables, demo seller) has only been run by its author, on Linux | Section 5; [SETUP section 7](../SETUP.md#7-verification) | Windows steps of the current guide are unverified | @MinhQuangQu (#51) with a non-author tester | Open |
+| G6 | PR #60 was merged by its author without an approving review | Section 1; PR #60 has no reviews | Breaks the rule that a self-merged PR does not count | @minhnm162 (Sprint 2 SM, #54) | Recorded for the retrospective |
+| G7 | No automated test exercises the CHECK constraints or foreign keys added in #46 | Section 2; `tests/` | A model change could drop a constraint without a failing test | @minhnm162 (#46) | Open |
+| G8 | `/seller/products` is listed as a P0 route with no story, and it is not in the Milestone 1 requirements | [Traceability route table](../traceability.md); `docs/requirements.md` lists only `/seller/products/new` and `/seller/products/:productId/edit` | Unclear scope for seller product management | @leducminh290506-eng (PO) | Open |
+| G9 | `GET /api/v1/cart` returns `404` "when no active cart exists", but the data model has no cart entity: a cart is the buyer's `cart_items` rows | [Design 3.3](../design.md#33-p0-endpoint-contract) and [2.2](../design.md#22-table-definitions) | It is unclear whether an empty cart is `200` with no lines or `404` | @teddywristh (#47) | Open |
+| G10 | The seed stores image URLs `/images/p-*.jpg` that the app does not serve, so every catalog load logs `404`s before the placeholder appears | Windows server log screenshot in section 4; `make_product()` in `src/seed.py` | Noisy logs; no real product images | @minhnm162 (#46) | Open; low impact |
+| G11 | Design sections 1.2 and 1.4 and the C4 diagram still described #46 as in progress | `docs/design.md` before this PR | The design understated what runs | @MinhQuangQu (#43) | Fixed in this PR |
+| G12 | The traceability route table had a placeholder `#<PR_NUMBER>` for US03 and pointed US06 and US07 at PRs #28 and #30, which were closed without merging | `docs/traceability.md` before this PR | Wrong spec links | @MinhQuangQu (#53) | Fixed in this PR: #31, #32 and #34 |
