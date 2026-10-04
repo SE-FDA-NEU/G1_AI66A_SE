@@ -81,9 +81,9 @@ def create_app() -> FastAPI:
 
     # Include versioned API router
     app.include_router(api_router)
-    app.include_router(web_router)
 
     # Browser UI pages; static assets stay under /static so they never shadow the API
+    app.include_router(web_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     return app
