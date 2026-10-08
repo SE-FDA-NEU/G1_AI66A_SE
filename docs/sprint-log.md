@@ -240,3 +240,179 @@ Keep `docs/design.md`, `docs/SETUP.md`, and `docs/traceability.md` synchronized 
 | @QuangMinhQu | Yes | Yes | Yes |
 | @teddywristh | Yes | Yes | Yes |
 | @minhnm162 | Yes | Yes | Yes |
+
+---
+
+## Sprint 3 - 2026-10-05 to 2026-10-18
+
+### Sprint goal
+
+Implement and verify all core P0 marketplace user stories (US01 Product Catalog, US02 Product Detail, US03 Shopping Cart, US04 Checkout, US06 Seller Product Creation, US08 Seller Order Management), complete authentication and shared API error envelopes, finalize UI wireframes and usability validation, and deliver Milestone 3.
+
+### Roles
+
+- Product Owner: `@leducminh290506-eng`
+- Scrum Master: `@teddywristh`
+
+Sprint 3 Scrum Master (`@teddywristh`) rotates from Sprint 2 Scrum Master (`@minhnm162`), adhering to team policy.
+
+### Two mandatory chore issues
+
+| Issue | Assignee | Status |
+|---|---|---|
+| [#74 [Chore] Refine backlog for Sprint 3](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/74) | @leducminh290506-eng (PO) | Done |
+| [#86 [Chore] Sprint 3 wrap-up and handoff](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/86) | @teddywristh (SM) | To Do |
+
+### Committed
+
+| Issue | Task / Story | Type | Points / Est | Owner | Reviewer | Dependencies |
+|---|---|---|---:|---|---|---|
+| [#74](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/74) | Refine backlog for Sprint 3 | Chore | — | @leducminh290506-eng | @teddywristh | None |
+| [#75](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/75) | Implement authentication, navigation and shared API errors | Task | 3h | @leducminh290506-eng | @minhnm162 | #74 |
+| [#76](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/76) | Create P0 wireframes and initial UI documentation | Task | 2h | @teddywristh | @leducminh290506-eng | #74 |
+| [#77](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/77) | US01 Complete usable product catalog | Story | 3 | @teddywristh | @leducminh290506-eng | #75, #76 |
+| [#78](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/78) | US02 Implement product detail and cart entry | Story | 3 | @teddywristh | @MinhQuangQu | #75, #77 |
+| [#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79) | US03 Implement database-backed shopping cart | Story | 8 | @MinhQuangQu | @teddywristh | #75, #78 |
+| [#80](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/80) | US04 Implement atomic checkout and order confirmation | Story | 8 | @minhnm162 | @MinhQuangQu | #75, #79 |
+| [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81) | US06 Implement seller product creation with field errors | Story | 5 | @MinhQuangQu | @minhnm162 | #75, #76 |
+| [#82](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/82) | US08 Implement seller-scoped order management | Story | 8 | @leducminh290506-eng | @MinhQuangQu | #75, #80 |
+| [#83](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/83) | Verify P0 flows and usability with real users | Task | 2h | @minhnm162 | @leducminh290506-eng | #77, #78, #79, #80, #81, #82 |
+| [#84](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/84) | Update seed, SETUP and fresh-machine verification | Task | 2h | @minhnm162 | @teddywristh | #75, #80, #82 |
+| [#85](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/85) | Finalize UI docs and Milestone 3 evidence | Task | 2h | @MinhQuangQu | @minhnm162 | #76, #83, #84 |
+| [#86](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/86) | Sprint 3 wrap-up and handoff | Chore | — | @teddywristh | @leducminh290506-eng | All preceding issues |
+
+**Total committed story points: 35 points** (6 User Stories P0) + 11 hours (5 supporting technical/doc tasks).
+
+### Result
+
+| Issue | Points / Est | Status | If not done, why |
+|---|---:|---|---|
+| [#74](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/74) | — | Done | Refinement completed |
+| [#75](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/75) | 3h | To Do | |
+| [#76](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/76) | 2h | To Do | |
+| [#77](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/77) | 3 | To Do | |
+| [#78](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/78) | 3 | To Do | |
+| [#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79) | 8 | To Do | |
+| [#80](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/80) | 8 | To Do | |
+| [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81) | 5 | To Do | |
+| [#82](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/82) | 8 | To Do | |
+| [#83](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/83) | 2h | To Do | |
+| [#84](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/84) | 2h | To Do | |
+| [#85](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/85) | 2h | To Do | |
+| [#86](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/86) | — | To Do | |
+
+### Backlog Refinement Decisions (Issue #74)
+
+During Sprint 3 Backlog Refinement, the team finalized the following technical and architectural decisions:
+
+1. **`productCode` Resolution:**
+   - Database internal primary key is `Product.id` (INTEGER, autoincrement).
+   - Public product identifier is `Product.code` (VARCHAR(20), UNIQUE, e.g. `P-100`).
+   - All customer-facing routes (`/products/{productCode}`), API endpoints (`GET /api/v1/products/{productCode}`), and cart operation payloads (`product_code`) resolve entities via `Product.code`. Integer IDs are never exposed in public product URLs.
+
+2. **Stock Rules & Availability:**
+   - Catalog query filters: only active products with available inventory (`is_active = TRUE AND stock_quantity > reserved_stock`) appear in the public catalog `/products`.
+   - Out-of-stock items: items with zero available stock remain navigable via direct link `/products/{productCode}` but show an "Out of stock" badge and have the "Add to Cart" button disabled.
+   - Non-reservation in cart: adding items to `/cart` does not reserve physical stock. Available stock is validated on add/update and revalidated atomically during checkout.
+   - Optimistic concurrency control: checkout verifies and decrements stock atomically using `products.version` (`WHERE id = :id AND version = :expected_version AND stock_quantity >= :qty`).
+   - Cancellation restock: when a `PENDING` seller order is cancelled, stock is incremented back exactly once.
+
+3. **Standard Error Envelope:**
+   - All REST API failure responses adhere strictly to the common error format:
+     ```json
+     {
+       "error": {
+         "code": "ERR_CODE",
+         "message": "Human-readable explanation"
+       }
+     }
+     ```
+   - Standard error codes:
+     - `400 Bad Request`: `ERR_INVALID_QUANTITY`, `ERR_INVALID_TRANSITION`, `ERR_EMPTY_CART`.
+     - `401 Unauthorized`: `ERR_AUTH_REQUIRED`, `ERR_INVALID_TOKEN`, `ERR_EXPIRED_TOKEN`.
+     - `403 Forbidden`: `ERR_SELLER_REQUIRED`, `ERR_RESOURCE_OWNER`.
+     - `404 Not Found`: `ERR_PRODUCT_NOT_FOUND`, `ERR_CART_ITEM_NOT_FOUND`, `ERR_ORDER_NOT_FOUND`.
+     - `409 Conflict`: `ERR_STOCK_EXCEEDED`, `ERR_PRODUCT_UNAVAILABLE`, `ERR_CONCURRENCY_CONFLICT`.
+     - `422 Unprocessable Entity`: `ERR_VALIDATION`.
+     - `500 Internal Server Error`: `ERR_DATABASE_FAILURE`, `ERR_INTERNAL`.
+   - Security rule: raw exceptions, database stack traces, and internal SQL statements are never leaked in API error responses.
+
+4. **Order & Sub-Order State Machine:**
+   - Initial state: `PENDING`.
+   - Seller order fulfillment lifecycle: `PENDING` → `PROCESSING` → `SHIPPED` → `COMPLETED`.
+   - Cancellation lifecycle: `PENDING` → `CANCELLED` (triggers automatic single-pass stock restoration).
+   - Strict transition validation: illegal state transitions (e.g., `SHIPPED` → `PENDING`, `CANCELLED` → `PROCESSING`, `COMPLETED` → `CANCELLED`) are rejected with `400 Bad Request` (`ERR_INVALID_TRANSITION`).
+   - Marketplace parent order status (`orders.status`) is computed from child `seller_orders`:
+     - `COMPLETED` when all seller orders are `COMPLETED`.
+     - `CANCELLED` when all seller orders are `CANCELLED`.
+     - `PROCESSING` when at least one seller order has advanced past `PENDING`.
+
+5. **Database Schema Enhancements:**
+   - `users.password_hash`: added `password_hash VARCHAR(255) NOT NULL` to table `users` to support secure credentials and JWT login (`POST /api/v1/auth/login`).
+   - `orders.request_key`: added `request_key VARCHAR(64) NULL UNIQUE INDEX` to table `orders` to enforce idempotent checkout transactions and prevent duplicate order placement on retry.
+   - `order_history`: added audit table `order_history` (`id`, `seller_order_id`, `from_status`, `to_status`, `changed_by_user_id`, `note`, `created_at`) to record every seller order status transition immutably.
+
+### Dependency Graph & Critical Path
+
+```text
+[#74 Refine Backlog]
+       │
+       ├──> [#75 Auth & Shared Errors] ──────────────┐
+       │                                             │
+       └──> [#76 P0 Wireframes & UI Docs] ──┐        │
+                                            │        │
+             ┌──────────────────────────────┘        │
+             │                                       │
+             ▼                                       ▼
+     [#77 US01 Catalog]                      [#81 US06 Product Creation]
+             │                                       │
+             ▼                                       │
+     [#78 US02 Product Detail]                       │
+             │                                       │
+             ▼                                       │
+     [#79 US03 Shopping Cart]                        │
+             │                                       │
+             ▼                                       │
+     [#80 US04 Checkout]                             │
+             │                                       │
+             ▼                                       ▼
+     [#82 US08 Seller Orders] ───────────────> [#84 Seed & Setup]
+             │                                       │
+             └───────────────────┬───────────────────┘
+                                 │
+                                 ▼
+                     [#83 Usability Testing]
+                                 │
+                                 ▼
+                     [#85 Milestone 3 Docs & Evidence]
+                                 │
+                                 ▼
+                     [#86 Sprint 3 Wrap-up]
+```
+
+### Sprint Planning Evidence
+
+- **Planning Meeting Date:** 2026-10-08
+- **Location:** Online (Team Discord / Google Meet)
+- **Attendance:**
+  - `@leducminh290506-eng` (Product Owner): Present
+  - `@teddywristh` (Scrum Master): Present
+  - `@minhnm162` (Developer): Present
+  - `@QuangMinhQu` (Developer): Present
+- **Velocity & Capacity Assessment:**
+  - Sprint 1 velocity: 39 story points.
+  - Sprint 2 focus: Architecture, system design, and walking skeleton.
+  - Sprint 3 commitment: 35 story points across 4 developers (average ~8.75 points per member), well within historical delivery capacity.
+- **Identified Risks & Mitigations:**
+  - *Risk 1 (Checkout Concurrency):* High concurrency checkout on the same inventory item may cause overselling. *Mitigation:* Enforce optimistic locking via `products.version` in an atomic database transaction.
+  - *Risk 2 (Cross-seller Privacy):* Sellers might query or alter orders of other sellers. *Mitigation:* All seller endpoints extract `seller_id` exclusively from validated JWT claims and verify ownership against `seller_orders.seller_id`.
+  - *Risk 3 (Documentation Drift):* Documentation lagging behind rapid implementation. *Mitigation:* SM (@teddywristh) enforces Definition of Done criterion 8 (traceability update required before PR merge).
+
+### Attendance
+
+| Member | Planning | Review | Retro |
+|---|---|---|---|
+| @leducminh290506-eng | Yes | Pending | Pending |
+| @QuangMinhQu | Yes | Pending | Pending |
+| @teddywristh | Yes | Pending | Pending |
+| @minhnm162 | Yes | Pending | Pending |

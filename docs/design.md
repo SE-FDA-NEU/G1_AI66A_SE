@@ -137,10 +137,11 @@ The current implementation already contains the `products` table through the `Pr
 | `id` | INTEGER | Primary Key |
 | `name` | VARCHAR(100) | NOT NULL |
 | `email` | VARCHAR(255) | NOT NULL, UNIQUE |
+| `password_hash` | VARCHAR(255) | NOT NULL |
 | `role` | VARCHAR(20) | NOT NULL |
 | `created_at` | DATETIME | NOT NULL |
 
-The `role` field identifies whether the user is permitted to perform buyer or seller operations.
+The `role` field identifies whether the user is permitted to perform buyer or seller operations. `password_hash` stores the cryptographic password hash for user authentication and JWT generation (finalized in Sprint 3 Backlog Refinement, Issue #74).
 
 ---
 
@@ -210,6 +211,7 @@ The cart does not permanently reserve stock. Product availability must be checke
 |---|---|---|
 | `id` | INTEGER | Primary Key |
 | `buyer_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `request_key` | VARCHAR(64) | NULL, UNIQUE, index (idempotency key) |
 | `total_amount` | INTEGER | NOT NULL, CHECK `total_amount >= 0` |
 | `status` | VARCHAR(30) | NOT NULL |
 | `recipient_name` | VARCHAR(100) | NOT NULL |
@@ -217,7 +219,7 @@ The cart does not permanently reserve stock. Product availability must be checke
 | `phone_number` | VARCHAR(20) | NOT NULL |
 | `created_at` | DATETIME | NOT NULL |
 
-Each order belongs to one buyer.
+Each order belongs to one buyer. `request_key` is the optional idempotency key provided by the client to prevent duplicate orders upon network retries (finalized in Sprint 3 Backlog Refinement, Issue #74).
 
 A marketplace order may contain products from multiple sellers. Therefore, seller-specific fulfillment is represented separately through the `seller_orders` table.
 
@@ -286,6 +288,24 @@ Historical orders and seller revenue therefore remain correct even when current 
 
 ---
 
+#### order_history
+
+**Purpose:** Stores immutable status change events for seller orders, tracking the transition history, the user who triggered the update, and any cancellation notes.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | INTEGER | Primary Key |
+| `seller_order_id` | INTEGER | NOT NULL, Foreign Key → `seller_orders.id` |
+| `from_status` | VARCHAR(30) | NOT NULL |
+| `to_status` | VARCHAR(30) | NOT NULL |
+| `changed_by_user_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `note` | TEXT | Optional |
+| `created_at` | DATETIME | NOT NULL |
+
+This table satisfies the Sprint 3 audit requirement for US08 (Issue #74 / Issue #82): when an order status advances or when a `PENDING` seller order is cancelled and inventory is restocked, an immutable history record is appended.
+
+---
+
 ### 2.3 Relationships and Cardinality
 
 | Relationship | Cardinality | Description |
@@ -298,6 +318,8 @@ Historical orders and seller revenue therefore remain correct even when current 
 | `users` → `seller_orders` | 1 to 0..* | One seller may receive zero or many seller orders |
 | `seller_orders` → `order_items` | 1 to 1..* | One seller order contains one or more purchased items |
 | `products` → `order_items` | 1 to 0..* | One product may appear in zero or many historical order items |
+| `seller_orders` → `order_history` | 1 to 0..* | One seller order has zero or many historical state transition records |
+| `users` → `order_history` | 1 to 0..* | One user may trigger zero or many order transition events |
 
 ---
 
@@ -494,16 +516,17 @@ The implementation should be updated later to reflect this relationship when the
 
 ### 2.8 Data Model Summary
 
-The relational model contains six tables:
+The relational model contains six core transactional tables and one audit log table (finalized for Sprint 3):
 
 | Table | Main Responsibility |
 |---|---|
-| `users` | Stores buyer and seller accounts |
+| `users` | Stores buyer and seller accounts and password hashes |
 | `products` | Stores seller-owned marketplace products and inventory |
 | `cart_items` | Stores products currently selected by buyers |
-| `orders` | Stores buyer marketplace orders |
+| `orders` | Stores buyer marketplace orders and request idempotency keys |
 | `seller_orders` | Separates each marketplace order by seller |
 | `order_items` | Stores purchased products, quantities, and purchase-time prices |
+| `order_history` | Stores immutable seller order status transitions and audit notes |
 
 Together, these tables support the core P0 workflows required by the Mini Marketplace:
 
@@ -611,6 +634,52 @@ The contract covers every P0 story listed in the Milestone 1 requirements:
 | US04 Checkout and order placement | `POST /api/v1/orders` |
 | US06 Create product listing | `POST /api/v1/seller/products` |
 | US08 Seller order management | `GET /api/v1/seller/orders` and `PATCH /api/v1/seller/orders/{subOrderId}/status` |
+
+### 3.6 Order State Machine & Transition Rules
+
+To support US04 (Checkout) and US08 (Seller Order Management), the order lifecycle is governed by a strict state machine:
+
+#### Seller Order Transitions (`seller_orders.status`)
+
+```text
+       ┌───────────┐
+       │  PENDING  │ ──(cancel)──> [ CANCELLED ] (restores stock once)
+       └─────┬─────┘
+             │ (seller packages order)
+             ▼
+      ┌──────────────┐
+      │  PROCESSING  │
+      └──────┬───────┘
+             │ (seller hands to carrier)
+             ▼
+       ┌───────────┐
+       │  SHIPPED  │
+       └─────┬─────┘
+             │ (buyer receives order)
+             ▼
+      ┌─────────────┐
+      │  COMPLETED  │ (triggers revenue recognition)
+      └─────────────┘
+```
+
+1. **Initial State:** Upon checkout completion (`POST /api/v1/orders`), every generated `seller_orders` record is created with `status = 'PENDING'`.
+2. **Valid Forward Transitions:**
+   - `PENDING` → `PROCESSING`
+   - `PROCESSING` → `SHIPPED`
+   - `SHIPPED` → `COMPLETED` (sets `completed_at = CURRENT_TIMESTAMP`)
+3. **Cancellation Rule:**
+   - A `PENDING` seller order may transition to `CANCELLED`.
+   - When transitioning to `CANCELLED`, all purchased quantities in the sub-order's `order_items` are atomically added back to `products.stock_quantity`.
+   - A sub-order that is already `PROCESSING`, `SHIPPED`, or `COMPLETED` cannot be cancelled directly without dispute escalation.
+4. **Transition Enforcement:**
+   - Attempting an illegal or backwards transition (e.g., `SHIPPED` → `PENDING` or `COMPLETED` → `CANCELLED`) returns `400 Bad Request` with `error.code = 'ERR_INVALID_TRANSITION'`.
+   - Every status transition creates an immutable record in `order_history`.
+5. **Marketplace Parent Order Aggregation (`orders.status`):**
+   - The overall buyer order status reflects the collective state of all child `seller_orders`:
+     - `COMPLETED`: When all associated seller orders have reached `COMPLETED`.
+     - `CANCELLED`: When all associated seller orders have reached `CANCELLED`.
+     - `PROCESSING`: When at least one seller order has progressed past `PENDING` while not all are finished.
+     - `PENDING`: When all seller orders remain in `PENDING`.
 
 ---
 
