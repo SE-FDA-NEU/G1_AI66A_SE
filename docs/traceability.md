@@ -197,6 +197,26 @@ product, cart, checkout, seller product, and seller order workflows.
 | Error handling contract | Documents `400`, `401`, `403`, `404`, `409`, `422`, and `500` conditions | Done |
 | P0 story coverage | US01, US02, US03, US04, US06, and US08 mapped to endpoints | Done |
 
+## P0 UI wireframes and documentation
+
+The initial UI contract is documented in [`docs/ui.md`](./ui.md). It provides
+wireframes and implementation-facing traceability for all six P0 screens,
+plus login and order confirmation.
+
+| UI requirement | Evidence in `docs/ui.md` | Traceability |
+|---|---|---|
+| Wireframe for the product catalog | Section 2.1, `/products` | US01 / issue #13 and issue #45 |
+| Wireframe for product details | Section 2.2, `/products/:productCode` | US02 / issue #14 |
+| Wireframe for cart management | Section 2.3, `/cart` | US03 / issue #15 |
+| All four cart states | Section 2.3, “Required cart states” | US03 / loading, data, empty, and error |
+| Wireframe for checkout | Section 2.4, `/checkout` | US04 / issue #16 |
+| Wireframe for seller product creation | Section 2.5, `/seller/products/new` | US06 / issue #18 |
+| Wireframe for seller order management | Section 2.6, `/seller/orders` | US08 / issue #20 |
+| Login and confirmation screens | Sections 2.7 and 2.8 | Shared authentication and checkout completion |
+| Purpose, endpoint, access, CTA, next step, and UI states | Sections 1 and 2 | Applies to every documented screen |
+| Buyer and seller flows | Section 1, “Navigation flows” | US01 → US04 and US06 → US08 |
+| Review before implementation | Section 4, “Wireframe review checklist” | Pending product, buyer, seller, accessibility, and engineering review |
+
 ## Business rules
 
 Numbered, so issues and tests can cite them.
