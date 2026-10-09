@@ -1,0 +1,57 @@
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "useMaxWidth": false}, "fontFamily": "Arial, Helvetica, sans-serif", "themeCSS": ".edgeLabel rect, .labelBkg { fill: #ffffff !important; opacity: 1 !important; }"}}%%
+%% C4 container diagram for the Mini Marketplace (Sprint 2), see docs/design.md section 1.
+%% Rendered to mini-marketplace-c4.svg; edit this file, then render it again.
+flowchart TB
+  visitor(["`**Guest / Buyer / Seller**
+  [Person]
+  Browses the product catalog`"])
+  operator(["`**Developer / Setup tester**
+  [Person]
+  Creates and seeds a local copy`"])
+
+  subgraph boundary["Mini Marketplace system"]
+    webui["`**Web UI**
+    [Container: HTML, CSS, JavaScript in the browser]
+    Product catalog with loading,
+    empty and error/Retry states`"]
+    app["`**Web/API application**
+    [Container: Python, FastAPI, Uvicorn]
+    Serves the page and /static files,
+    REST API under /api/v1,
+    validates requests, queries the database`"]
+    cli["`**Database init and seed CLI**
+    [Container: Python console app, SQLModel]
+    python -m src.seed creates missing tables
+    and loads the sample products;
+    python -m src.database creates tables only`"]
+    db[("`**Marketplace database**
+    [Container: SQLite file marketplace.db]
+    six tables of section 2;
+    the seed fills users and products`")]
+  end
+
+  visitor -->|"`Views and clicks
+  (web browser)`"| webui
+  webui -->|"`HTTP request/response, same origin:
+  GET /products, /static/* → HTML, CSS, JS
+  GET /api/v1/products → JSON {data, meta}`"| app
+  app -->|"`SQL via SQLModel/SQLAlchemy, local file:
+  COUNT and paged SELECT on products`"| db
+  operator -->|"`Runs commands
+  (terminal)`"| cli
+  cli -->|"`SQL via SQLModel/SQLAlchemy, local file:
+  CREATE TABLE, INSERT, SELECT`"| db
+
+  subgraph legend["Legend"]
+    direction LR
+    lperson(["Person"])
+    lcontainer["Application container"]
+    ldb[("Data store container")]
+  end
+
+  classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+  classDef container fill:#1168bd,stroke:#0b4884,color:#ffffff
+  class visitor,operator,lperson person
+  class webui,app,cli,db,lcontainer,ldb container
+  style boundary fill:#ffffff,stroke:#444444,stroke-width:2px,stroke-dasharray:6 4,color:#222222
+  style legend fill:#f6f6f6,stroke:#999999,color:#222222

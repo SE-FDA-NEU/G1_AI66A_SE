@@ -4,6 +4,8 @@ A mini marketplace where sellers can list products, buyers can add products to c
 
 **Setup Guide:** [docs/SETUP.md](docs/SETUP.md)
 
+**System Design:** [docs/design.md](docs/design.md)
+
 ## Team & Roles
 
 - **Product Owner (PO):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
@@ -34,15 +36,18 @@ A mini marketplace where sellers can list products, buyers can add products to c
 - **Web Framework:** FastAPI `>= 0.115.0`
 - **ASGI Server:** Uvicorn `>= 0.30.0`
 - **Configuration & Validation:** Pydantic & Pydantic-Settings
-- **Database:** SQLite (SQLAlchemy ORM, generated at runtime)
+- **Database:** SQLite (SQLModel on SQLAlchemy)
+- **Web UI:** HTML/CSS/JavaScript served by FastAPI (no Node.js or npm step)
 - **Testing:** pytest, pytest-cov, Starlette/HTTPX
 - **Linter & Formatter:** Ruff
 
-For detailed architecture, configuration flags, and testing instructions, see [docs/SETUP.md](docs/SETUP.md).
+The full fresh-machine guide, with configuration, troubleshooting and verification, is [docs/SETUP.md](docs/SETUP.md).
 
 ---
 
 ## Quickstart
+
+Run every command from the repository root.
 
 ### 1. Clone & Setup Environment
 
@@ -55,7 +60,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
@@ -67,18 +72,26 @@ cd G1_AI66A_SE
 python3 -m venv .venv
 source .venv/bin/activate
 
-python3 -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2. Run Smoke Tests
+### 2. Create and Seed the Database
 
 ```bash
-pytest -v
+python -m src.seed
 ```
 
-### 3. Start Application Server
+The seed creates the SQLite database and its tables, then loads a demo seller and the sample products. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
+
+### 3. Run the Tests
+
+```bash
+python -m pytest -v
+```
+
+### 4. Start Application Server
 
 ```bash
 python -m src.main
@@ -87,6 +100,8 @@ Or with auto-reload:
 ```bash
 uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+Open [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products): the page shows 20 product cards, starting with "Wireless Mouse" at 180.000 ₫.
 
 The application will be accessible at:
 - **Root Status:** [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
