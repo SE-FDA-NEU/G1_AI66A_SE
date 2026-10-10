@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 
 from src.database import SessionDep
+from src.errors import error_detail
 from src.models.product import Product
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,10 @@ def list_products(
         ).all()
     except SQLAlchemyError as exc:
         logger.exception("Product catalog query failed")
-        raise HTTPException(status_code=500, detail=CATALOG_ERROR_MESSAGE) from exc
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail("ERR_DATABASE_FAILURE", CATALOG_ERROR_MESSAGE),
+        ) from exc
     return ProductListResponse(
         data=[
             ProductResponse(

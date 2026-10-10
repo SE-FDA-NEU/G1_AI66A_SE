@@ -13,6 +13,14 @@ def test_products_page_serves_html(client: TestClient) -> None:
     assert 'src="/static/products.js"' in response.text
 
 
+def test_login_page_serves_html(client: TestClient) -> None:
+    """The login page is available and points to the shared stylesheet."""
+    response = client.get("/login")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'src="/static/login.js"' in response.text
+
+
 @pytest.mark.parametrize(
     ("path", "content_type"),
     [
