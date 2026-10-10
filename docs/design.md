@@ -84,7 +84,7 @@ error handling.
 | `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and covered by automated tests in `tests/` |
 | Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implemented in #46 (PR #68) with models in `src/models/` and foreign key enforcement enabled in `src/database.py` |
 | Product detail, cart, checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
-| Buyer and seller authentication | Design only; nothing is implemented, and `SECRET_KEY` is not read by any code yet |
+| Buyer and seller authentication | Implemented in `src/auth.py` and `src/api/auth.py`: signed HS256 JWTs, password hashing, `/auth/login`, `/auth/me`, and seller-role dependency |
 | Deployment | One local process (`python -m src.main`) and one SQLite file; the page is served by the same process, so there is no separate frontend deployment |
 
 ### 1.5 Running catalog API compared with the API contract
@@ -168,6 +168,12 @@ Additional inventory constraint:
 ```text
 reserved_stock <= stock_quantity
 ```
+
+The implemented authentication endpoints are `POST /api/v1/auth/login` and
+`GET /api/v1/auth/me`. Login accepts an email and password and returns a bearer
+token plus the public user profile. The token contains `sub`, `role`, `iat`,
+and `exp`; every authenticated request validates its signature, expiry, user
+record, and role. Password hashes are never included in responses.
 
 Each product belongs to one seller through `seller_id`.
 
@@ -840,6 +846,7 @@ CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000","http://localhost:
 | `APP_PORT` | `8000` | Port number on which the HTTP server listens. |
 | `DATABASE_URL` | `sqlite:///./marketplace.db` | SQLAlchemy connection string. Defaults to a local SQLite database file in the project root. Can be overridden (e.g. `sqlite:///:memory:` for in-memory testing). |
 | `SECRET_KEY` | `dev-secret-key-...` | Secret string for token generation and cryptographic signing (must be overridden in production). |
+| `JWT_EXPIRATION_MINUTES` | `60` | Lifetime of issued bearer access tokens. |
 | `CORS_ORIGINS` | JSON list of origins | Allowed origin headers for Cross-Origin Resource Sharing. |
 
 **Setup Procedure for Fresh Machines:**

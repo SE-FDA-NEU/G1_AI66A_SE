@@ -13,7 +13,20 @@ const elements = {
   empty: document.getElementById("products-empty"),
   error: document.getElementById("products-error"),
   retry: document.getElementById("products-retry"),
+  loginLink: document.getElementById("login-link"),
+  logoutButton: document.getElementById("logout-button"),
 };
+
+function configureNavigation() {
+  const hasToken = Boolean(localStorage.getItem("access_token"));
+  elements.loginLink.hidden = hasToken;
+  elements.logoutButton.hidden = !hasToken;
+}
+
+elements.logoutButton.addEventListener("click", () => {
+  localStorage.removeItem("access_token");
+  configureNavigation();
+});
 
 /** Show exactly one of the loading / success / empty / error regions. */
 function showState(state, message) {
@@ -102,7 +115,8 @@ async function fetchProducts() {
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw new Error(`Products request failed with HTTP ${response.status}`);
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error?.message || "Unable to load products.");
     }
     const payload = await response.json();
     if (!isValidPayload(payload)) {
@@ -126,7 +140,6 @@ async function loadProducts() {
       showState("success", `Showing ${data.length} of ${meta.total} products.`);
     }
   } catch (error) {
-    console.error(error);
     showState("error", "Something went wrong. Please try again later.");
   } finally {
     elements.retry.disabled = false;
@@ -135,3 +148,4 @@ async function loadProducts() {
 
 elements.retry.addEventListener("click", loadProducts);
 loadProducts();
+configureNavigation();

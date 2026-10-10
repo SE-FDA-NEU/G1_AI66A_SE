@@ -288,7 +288,7 @@ Sprint 3 Scrum Master (`@teddywristh`) rotates from Sprint 2 Scrum Master (`@min
 | Issue | Points / Est | Status | If not done, why |
 |---|---:|---|---|
 | [#74](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/74) | — | Done | Refinement completed |
-| [#75](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/75) | 3h | To Do | |
+| [#75](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/75) | 3h | Done | JWT auth, role dependency, shared API errors, login/logout navigation, and 52 passing tests implemented |
 | [#76](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/76) | 2h | To Do | |
 | [#77](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/77) | 3 | To Do | |
 | [#78](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/78) | 3 | To Do | |

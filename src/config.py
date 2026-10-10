@@ -39,6 +39,7 @@ try:
             default="dev-secret-key-do-not-use-in-production-environment",
             description="Application secret key",
         )
+        JWT_EXPIRATION_MINUTES: int = Field(default=60, ge=1)
         CORS_ORIGINS: Union[List[str], str] = Field(
             default=["*"],
             description="Allowed CORS origins list or string",
@@ -102,6 +103,10 @@ except ImportError:
                 "SECRET_KEY", "dev-secret-key-do-not-use-in-production-environment"
             ),
             description="Secret key",
+        )
+        JWT_EXPIRATION_MINUTES: int = Field(
+            default_factory=lambda: int(os.getenv("JWT_EXPIRATION_MINUTES", "60")),
+            ge=1,
         )
         CORS_ORIGINS: Union[List[str], str] = Field(
             default_factory=lambda: os.getenv("CORS_ORIGINS", "*"),
