@@ -45,7 +45,7 @@ def test_cart_page_starts_in_the_loading_state(client: TestClient) -> None:
     assert elements["cart-status"][1]["role"] == "status"
 
 
-def test_cart_page_offers_empty_and_error_actions(client: TestClient) -> None:
+def test_cart_page_offers_empty_error_and_checkout_actions(client: TestClient) -> None:
     html = client.get("/cart").text
     elements = parse_cart_page(client)
 
@@ -53,6 +53,21 @@ def test_cart_page_offers_empty_and_error_actions(client: TestClient) -> None:
     assert '<a class="button" href="/products">Continue shopping</a>' in html
     assert elements["cart-empty-total"][0] == "strong"
     assert elements["cart-retry"][0] == "button"
+    assert elements["checkout-button"][0] == "button"
+    assert elements["logout-button"][0] == "button"
+
+
+def test_cart_script_sends_the_token_and_returns_to_the_cart_after_login(
+    client: TestClient,
+) -> None:
+    script = client.get("/static/cart.js").text
+
+    assert "Authorization: `Bearer ${token}`" in script
+    assert 'encodeURIComponent("/cart")' in script
+
+
+def test_catalog_navigation_links_to_the_cart(client: TestClient) -> None:
+    assert '<a href="/cart">Cart</a>' in client.get("/products").text
 
 
 @pytest.mark.parametrize(

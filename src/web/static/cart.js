@@ -2,11 +2,14 @@
 
 const CART_URL = "/api/v1/cart";
 const CART_ITEMS_URL = "/api/v1/cart/items";
+const CHECKOUT_URL = "/checkout";
+const LOGIN_URL = `/login?return_to=${encodeURIComponent("/cart")}`;
+const ACCESS_TOKEN_KEY = "access_token";
 const REQUEST_TIMEOUT_MS = 10000;
 const PLACEHOLDER_IMAGE = "/static/product-placeholder.svg";
 const THUMBNAIL_SIZE_PX = 96;
 
-const LOAD_ERROR_MESSAGE = "We could not load your cart. Please try again.";
+const LOAD_ERROR_MESSAGE = "Unable to load your cart. Please try again.";
 const CHANGE_ERROR_MESSAGE = "We could not update your cart. Please try again.";
 const INVALID_QUANTITY_MESSAGE = "Enter a whole number of at least 1.";
 
@@ -18,14 +21,23 @@ const elements = {
   content: document.getElementById("cart-content"),
   lines: document.getElementById("cart-lines"),
   total: document.getElementById("cart-total"),
+  checkout: document.getElementById("checkout-button"),
+  checkoutBlocked: document.getElementById("checkout-blocked"),
   empty: document.getElementById("cart-empty"),
   emptyTotal: document.getElementById("cart-empty-total"),
   error: document.getElementById("cart-error"),
+  errorMessage: document.getElementById("cart-error-message"),
   retry: document.getElementById("cart-retry"),
+  logout: document.getElementById("logout-button"),
 };
 
-/** An error whose message comes from the API and is written for the buyer. */
-class ApiError extends Error {}
+/** An error answered by the API; its message is written for the buyer. */
+class ApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
 
 /** Show exactly one of the loading / data / empty / error regions. */
 function showState(state, message) {
@@ -34,6 +46,14 @@ function showState(state, message) {
   elements.empty.hidden = state !== "empty";
   elements.error.hidden = state !== "error";
   elements.status.textContent = message;
+}
+
+/** The cart needs a buyer: drop a missing or rejected token and come back here after login. */
+function redirectToLogin() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.location.replace(LOGIN_URL);
+  // Never settles, so no error state flashes while the browser leaves the page.
+  return new Promise(() => {});
 }
 
 function isValidCart(cart) {
@@ -47,12 +67,16 @@ function isValidCart(cart) {
 
 /** Send one cart request; every cart endpoint answers with `{ data: cart }`. */
 async function requestCart(url, method = "GET", body = undefined) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const headers = { Accept: "application/json" };
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (!token) {
+    return redirectToLogin();
+  }
+  const headers = { Accept: "application/json", Authorization: `Bearer ${token}` };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(url, {
       method,
@@ -60,10 +84,15 @@ async function requestCart(url, method = "GET", body = undefined) {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
+    if (response.status === 401) {
+      return redirectToLogin();
+    }
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       const message = payload?.error?.message;
-      throw message ? new ApiError(message) : new Error(`Cart request failed: ${response.status}`);
+      throw message
+        ? new ApiError(response.status, message)
+        : new Error(`Cart request failed: ${response.status}`);
     }
     if (!isValidCart(payload?.data)) {
       throw new Error("Cart response does not match the expected contract");
@@ -94,14 +123,20 @@ function availabilityWarning(item) {
   if (item.availability === "insufficient_stock") {
     return item.available_stock === 0
       ? "This product is out of stock."
-      : `Only ${item.available_stock} left in stock.`;
+      : `Cannot add more than ${item.available_stock} items (available stock limit)`;
   }
   return "";
 }
 
+function createElement(tag, className, text = "") {
+  const element = document.createElement(tag);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
 function createLineImage(item) {
-  const image = document.createElement("img");
-  image.className = "cart-line__image";
+  const image = createElement("img", "cart-line__image");
   image.alt = "";
   image.width = THUMBNAIL_SIZE_PX;
   image.height = THUMBNAIL_SIZE_PX;
@@ -112,90 +147,93 @@ function createLineImage(item) {
 }
 
 function createLineInfo(item) {
-  const info = document.createElement("div");
-  info.className = "cart-line__info";
-
-  const name = document.createElement("h2");
-  name.className = "cart-line__name";
-  name.textContent = item.name;
-
-  const price = document.createElement("p");
-  price.className = "cart-line__price";
-  price.textContent = `${formatPrice(item.unit_price)} each`;
-  info.append(name, price);
+  const info = createElement("div", "cart-line__info");
+  info.append(
+    createElement("h2", "cart-line__name", item.name),
+    createElement("p", "cart-line__price", `${formatPrice(item.unit_price)} each`),
+    createElement(
+      "p",
+      "cart-line__meta",
+      `${item.product_code} · Available: ${item.available_stock}`,
+    ),
+  );
 
   const warning = availabilityWarning(item);
   if (warning) {
-    const badge = document.createElement("p");
-    badge.className = "cart-line__warning";
-    badge.textContent = warning;
-    info.append(badge);
+    info.append(createElement("p", "cart-line__warning", warning));
   }
 
-  const error = document.createElement("p");
-  error.className = "cart-line__error";
+  const error = createElement("p", "cart-line__error");
   error.setAttribute("role", "alert");
   error.hidden = true;
   info.append(error);
   return info;
 }
 
-function createQuantityForm(item) {
-  const form = document.createElement("form");
-  form.className = "cart-line__quantity";
-  form.noValidate = true;
+function createStepButton(label, ariaLabel) {
+  const button = createElement("button", "cart-line__step", label);
+  button.type = "button";
+  button.setAttribute("aria-label", ariaLabel);
+  return button;
+}
+
+/** `[-] quantity [+]`; typing a number and leaving the field (or pressing Enter) also saves it. */
+function createQuantityControl(line, item) {
+  const control = createElement("div", "cart-line__quantity");
 
   const inputId = `quantity-${item.product_code}`;
-  const label = document.createElement("label");
-  label.className = "visually-hidden";
+  const label = createElement("label", "visually-hidden", `Quantity for ${item.name}`);
   label.htmlFor = inputId;
-  label.textContent = `Quantity for ${item.name}`;
 
   const input = document.createElement("input");
   input.id = inputId;
-  input.name = "quantity";
   input.type = "number";
   input.min = "1";
   input.step = "1";
   input.inputMode = "numeric";
   input.value = String(item.quantity);
 
-  const submit = document.createElement("button");
-  submit.className = "button";
-  submit.type = "submit";
-  submit.textContent = "Update";
+  const decrease = createStepButton("−", `Decrease quantity of ${item.name}`);
+  const increase = createStepButton("+", `Increase quantity of ${item.name}`);
+  decrease.dataset.minimum = String(item.quantity <= 1);
 
-  form.append(label, input, submit);
-  return form;
+  decrease.addEventListener("click", () => updateQuantity(line, item, input, item.quantity - 1));
+  increase.addEventListener("click", () => updateQuantity(line, item, input, item.quantity + 1));
+  input.addEventListener("change", () => updateQuantity(line, item, input, Number(input.value)));
+
+  control.append(label, decrease, input, increase);
+  return control;
 }
 
-function createRemoveButton(item) {
-  const button = document.createElement("button");
-  button.className = "cart-line__remove";
+function createRemoveButton(line, item) {
+  const button = createElement("button", "cart-line__remove", "Remove");
   button.type = "button";
-  button.textContent = "Remove";
   button.setAttribute("aria-label", `Remove ${item.name} from cart`);
+  button.addEventListener("click", () => removeLine(line, item));
   return button;
 }
 
 function createCartLine(item) {
-  const line = document.createElement("li");
-  line.className = "cart-line";
-
-  const lineTotal = document.createElement("p");
-  lineTotal.className = "cart-line__total";
-  lineTotal.textContent = formatPrice(item.line_total);
-
-  const form = createQuantityForm(item);
-  const remove = createRemoveButton(item);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    updateQuantity(line, item, form.elements.quantity);
-  });
-  remove.addEventListener("click", () => removeLine(line, item));
-
-  line.append(createLineImage(item), createLineInfo(item), form, lineTotal, remove);
+  const line = createElement("li", "cart-line");
+  if (item.availability !== "available") {
+    line.classList.add("cart-line--flagged");
+  }
+  line.append(
+    createLineImage(item),
+    createLineInfo(item),
+    createQuantityControl(line, item),
+    createElement("p", "cart-line__total", formatPrice(item.line_total)),
+    createRemoveButton(line, item),
+  );
   return line;
+}
+
+/** Enable every control of the rendered cart, or lock them all while a change is pending. */
+function setControlsEnabled(enabled) {
+  for (const control of elements.lines.querySelectorAll("input, button")) {
+    control.disabled = !enabled || control.dataset.minimum === "true";
+  }
+  elements.checkout.disabled = !enabled || !elements.checkoutBlocked.hidden;
 }
 
 function renderCart(cart) {
@@ -207,18 +245,12 @@ function renderCart(cart) {
   }
   elements.lines.replaceChildren(...cart.items.map(createCartLine));
   elements.total.textContent = formatPrice(cart.cart_total);
+  elements.checkoutBlocked.hidden = cart.items.every((item) => item.availability === "available");
+  setControlsEnabled(true);
   showState(
     "data",
     `${itemCountLabel(cart.items.length)} in your cart. Total ${formatPrice(cart.cart_total)}.`,
   );
-}
-
-/** Lock every line while one change is pending, so changes never overlap. */
-function setLinesBusy(busyLine, busy) {
-  for (const control of elements.lines.querySelectorAll("input, button")) {
-    control.disabled = busy;
-  }
-  busyLine.setAttribute("aria-busy", String(busy));
 }
 
 function showLineError(line, message) {
@@ -233,27 +265,29 @@ function showLineError(line, message) {
  */
 async function changeLine(line, sendChange) {
   showLineError(line, "");
-  setLinesBusy(line, true);
+  setControlsEnabled(false);
+  line.setAttribute("aria-busy", "true");
   try {
     renderCart(await sendChange());
     return true;
   } catch (error) {
     showLineError(line, error instanceof ApiError ? error.message : CHANGE_ERROR_MESSAGE);
-    setLinesBusy(line, false);
+    line.removeAttribute("aria-busy");
+    setControlsEnabled(true);
     return false;
   }
 }
 
-async function updateQuantity(line, item, input) {
-  const quantity = Number(input.value);
+async function updateQuantity(line, item, input, quantity) {
   if (!Number.isInteger(quantity) || quantity < 1) {
     showLineError(line, INVALID_QUANTITY_MESSAGE);
+    input.value = String(item.quantity);
     return;
   }
   if (quantity === item.quantity) {
-    showLineError(line, "");
     return;
   }
+  input.value = String(quantity);
   const updated = await changeLine(line, () =>
     requestCart(cartItemUrl(item.product_code), "PATCH", { quantity }),
   );
@@ -266,17 +300,30 @@ function removeLine(line, item) {
   changeLine(line, () => requestCart(cartItemUrl(item.product_code), "DELETE"));
 }
 
+function showLoadError(error) {
+  // A seller is signed in correctly but has no cart, so retrying cannot help.
+  const forbidden = error instanceof ApiError && error.status === 403;
+  elements.errorMessage.textContent = forbidden ? error.message : LOAD_ERROR_MESSAGE;
+  elements.retry.hidden = forbidden;
+  showState("error", elements.errorMessage.textContent);
+}
+
 async function loadCart() {
   elements.retry.disabled = true;
   showState("loading", "Loading your cart…");
   try {
     renderCart(await requestCart(CART_URL));
-  } catch {
-    showState("error", LOAD_ERROR_MESSAGE);
+  } catch (error) {
+    showLoadError(error);
   } finally {
     elements.retry.disabled = false;
   }
 }
 
 elements.retry.addEventListener("click", loadCart);
+elements.checkout.addEventListener("click", () => window.location.assign(CHECKOUT_URL));
+elements.logout.addEventListener("click", () => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.location.assign("/products");
+});
 loadCart();
