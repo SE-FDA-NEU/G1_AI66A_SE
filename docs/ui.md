@@ -10,11 +10,11 @@ visual styling and component implementation may evolve after review.
 
 | Screen | Route | Purpose | Endpoint(s) | Access | Primary CTA | Next step |
 |---|---|---|---|---|---|---|
-| Product catalog | `/products` | Discover active marketplace products | `GET /api/v1/products?page=1&limit=20` | Guest | View details / Add to cart | Product detail or cart |
-| Product detail | `/products/:productCode` | Review one product before buying | `GET /api/v1/products/{productCode}` | Guest | Add to cart | Cart |
+| Product catalog | `/products` | Discover active marketplace products | `GET /api/v1/products?page=1&limit=20` | Guest | View details | Product detail |
+| Product detail | `/products/:productCode` | Review one product before buying | `GET /api/v1/products/{productCode}` | Guest | Add to cart | Cart, or login then return to detail |
 | Cart | `/cart` | Review items and adjust quantities | `GET /api/v1/cart`, `POST/PATCH/DELETE /api/v1/cart/items` | Authenticated buyer | Proceed to checkout | Checkout |
 | Checkout | `/checkout` | Enter delivery information and place order | `POST /api/v1/orders` | Authenticated buyer | Confirm order | Confirmation |
-| Seller product creation | `/seller/products/new` | Create a product listing | `POST /api/v1/seller/products` | Authenticated seller | Create listing | Seller orders or seller products |
+| Seller product creation | `/seller/products/new` | Create a product listing | `POST /api/v1/seller/products` | Authenticated seller | Create listing | Created product |
 | Seller order management | `/seller/orders` | Process seller-owned order items | `GET/PATCH /api/v1/seller/orders` | Authenticated seller | Update status | Next order or dashboard |
 | Login | `/login` | Authenticate a buyer or seller | `POST /api/v1/auth/login` | Guest | Sign in | Return to intended screen |
 | Order confirmation | `/orders/:orderId/confirmation` | Confirm successful order creation | `GET /api/v1/orders/{orderId}` | Authenticated buyer | Continue shopping / View order | Catalog or order history |
@@ -36,7 +36,10 @@ visual styling and component implementation may evolve after review.
 **Seller flow**
 
 ```text
-/login --> /seller/products/new --> /seller/orders
+/login --> /seller/products/new --> created product
+                                      |
+                                      v
+                              /seller/orders
                                       |
                                       v
                               update sub-order status
@@ -70,7 +73,7 @@ visual styling and component implementation may evolve after review.
 - **Access:** Guest.
 - **Primary CTA:** Select a product card or its **View details** action.
 - **Next step:** Navigate to `/products/:productCode`; the cart icon goes to
-  `/cart`.
+  `/cart`. The catalog itself does not add items directly.
 - **Data state:** Product grid with 20 items per page and pagination.
 - **Loading state:** Show product-card skeletons while the request is pending.
 - **Empty state:** Hide the grid and show exactly
@@ -99,8 +102,12 @@ visual styling and component implementation may evolve after review.
 - **Endpoint:** `GET /api/v1/products/{productCode}`.
 - **Access:** Guest.
 - **Primary CTA:** **Add to cart**.
-- **Next step:** Go to `/cart`; preserve the product code and selected
-  quantity.
+- **Next step:** For an authenticated buyer, add the item and go to `/cart`;
+  preserve the product code and selected quantity. For a guest, redirect to
+  `/login` with the requested product detail route and selected quantity as
+  the intended destination. After successful login, return to
+  `/products/:productCode`, restore the selected quantity, and require the
+  buyer to confirm **Add to cart** again before navigating to `/cart`.
 - **Data state:** Show full name, formatted price, description, image, and
   stock status.
 - **Loading state:** Show image and text skeletons.
@@ -110,6 +117,9 @@ visual styling and component implementation may evolve after review.
   code.
 - **Out-of-stock state:** Show `Out of Stock (0 remaining)` and disable
   **Add to cart**.
+- **Authentication state:** Guests may view the detail page, but selecting
+  **Add to cart** redirects to `/login`; the login flow must preserve the
+  product detail route and selected quantity as the return context.
 
 ### 2.3 Cart — `/cart`
 
@@ -199,7 +209,10 @@ visual styling and component implementation may evolve after review.
 - **Endpoint:** `POST /api/v1/seller/products`.
 - **Access:** Authenticated seller only.
 - **Primary CTA:** **Create listing**.
-- **Next step:** Show the created listing and link to `/seller/orders`.
+- **Next step:** Show the newly created product using its returned
+  `productCode` and link to `/products/:productCode`. A seller product-list
+  route is not part of this UI contract; `/seller/orders` remains a separate
+  navigation destination for managing incoming orders.
 - **Data state:** Form fields for name, description, price, stock, image, and
   active status.
 - **Loading state:** Disable submission and show `Creating listing...`.
@@ -325,4 +338,3 @@ frontend tasks should turn each screen section into components and tests,
 while preserving the documented endpoints, access rules, CTA labels, and
 loading/empty/error/data behavior. This document should be updated if the
 review changes the user flow or acceptance criteria.
-
