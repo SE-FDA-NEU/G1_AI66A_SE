@@ -83,7 +83,7 @@ error handling.
 |---|---|
 | `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and covered by automated tests in `tests/` |
 | Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implemented in #46 (PR #68) with models in `src/models/` and foreign key enforcement enabled in `src/database.py` |
-| Cart (#79) | `CartService`, the cart schemas and the `/cart` page are implemented and tested; the `/api/v1/cart` endpoints wait for authentication (#75, PR #89), so until then the page shows its error state |
+| Cart (#79) | `/cart` page and the four `/api/v1/cart` endpoints for authenticated buyers, backed by `CartService` and the `cart_items` table; covered by `tests/test_cart_service.py`, `tests/test_cart_api.py` and `tests/test_cart_page.py`. The Add to Cart button on the product detail page comes with #78 |
 | Product detail, checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
 | Buyer and seller authentication | Implemented in `src/auth.py` and `src/api/auth.py`: signed HS256 JWTs, password hashing, `/auth/login`, `/auth/me`, and seller-role dependency |
 | Deployment | One local process (`python -m src.main`) and one SQLite file; the page is served by the same process, so there is no separate frontend deployment |
@@ -680,6 +680,9 @@ token itself:
   `cart_total`.
 - A refused change leaves the cart exactly as it was. Each mutation commits or
   rolls back inside the service; the router does not commit again.
+- Only buyers have a cart. A seller token gets `403 ERR_BUYER_REQUIRED` from
+  every cart endpoint. The `/cart` page sends a guest, or a buyer whose token
+  is rejected with `401`, to `/login?return_to=%2Fcart`.
 
 ### 3.4 Error handling
 
@@ -689,7 +692,7 @@ The API uses these HTTP status codes consistently:
 |---|---|---|
 | `400 Bad Request` | `ERR_INVALID_QUANTITY`, `ERR_INVALID_TRANSITION` | The request is syntactically valid but violates a business rule, such as quantity `0` or reverting a shipped sub-order to pending. |
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED`, `ERR_INVALID_TOKEN` | An authenticated endpoint is called without a valid bearer token. |
-| `403 Forbidden` | `ERR_SELLER_REQUIRED`, `ERR_RESOURCE_OWNER` | The identity is authenticated but lacks the required seller role or does not own the requested seller resource. |
+| `403 Forbidden` | `ERR_SELLER_REQUIRED`, `ERR_BUYER_REQUIRED`, `ERR_RESOURCE_OWNER` | The identity is authenticated but lacks the required seller or buyer role, or does not own the requested seller resource. |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND`, `ERR_CART_ITEM_NOT_FOUND` | The requested product, cart line, or seller sub-order does not exist or is not visible to the caller. |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED`, `ERR_PRODUCT_UNAVAILABLE`, `ERR_CONCURRENCY_CONFLICT` | The request conflicts with current inventory or availability, including a checkout race with another purchase or two requests creating the same cart line at once. |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, such as an invalid product code, phone number, price, or stock quantity. |
