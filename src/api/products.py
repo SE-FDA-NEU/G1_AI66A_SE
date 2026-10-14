@@ -54,16 +54,26 @@ def list_products(
     session: SessionDep,
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Page limit"),
+    search: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Case-insensitive product-name search",
+    ),
 ) -> ProductListResponse:
-    """Return active products from the database with stable pagination."""
+    """Return available products from the database with stable pagination."""
     # A failed query must surface as an error, never as an empty catalog.
     try:
-        total = session.exec(
-            select(func.count()).select_from(Product).where(Product.is_active.is_(True))
-        ).one()
+        filters = [
+            Product.is_active.is_(True),
+            Product.stock_quantity > Product.reserved_stock,
+        ]
+        if search and search.strip():
+            filters.append(Product.name.ilike(f"%{search.strip()}%"))
+
+        total = session.exec(select(func.count()).select_from(Product).where(*filters)).one()
         products = session.exec(
             select(Product)
-            .where(Product.is_active.is_(True))
+            .where(*filters)
             .order_by(Product.id)
             .offset((page - 1) * limit)
             .limit(limit)
