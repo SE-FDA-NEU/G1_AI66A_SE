@@ -246,7 +246,10 @@ def test_list_products_database_failure_returns_500() -> None:
 
         assert response.status_code == 500
         assert response.json() == {
-            "detail": CATALOG_ERROR_MESSAGE
+            "error": {
+                "code": "ERR_DATABASE_FAILURE",
+                "message": CATALOG_ERROR_MESSAGE,
+            }
         }
 
     finally:

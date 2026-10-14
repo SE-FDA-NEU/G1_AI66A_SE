@@ -16,3 +16,9 @@ router = APIRouter(tags=["Web"])
 def products_page() -> FileResponse:
     """Serve the product catalog page (US01); its script loads data from the API."""
     return FileResponse(PAGES_DIR / "products.html")
+
+
+@router.get("/login", response_class=FileResponse, include_in_schema=False)
+def login_page() -> FileResponse:
+    """Serve the login page."""
+    return FileResponse(PAGES_DIR / "login.html")

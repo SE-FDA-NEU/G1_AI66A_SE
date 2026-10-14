@@ -46,11 +46,30 @@ if database_url.get_backend_name() == "sqlite":
         cursor.close()
 
 
+def migrate_db() -> None:
+    """Apply lightweight schema migrations for existing databases."""
+    from sqlalchemy import inspect
+
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        tables = set(inspector.get_table_names())
+        if "users" in tables:
+            columns = {c["name"] for c in inspector.get_columns("users")}
+            if "password_hash" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"
+                    )
+                )
+
+
 def init_db() -> None:
-    """Register application models and create missing tables."""
+    """Register application models, create missing tables, and run migrations."""
     import src.models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
+    migrate_db()
 
 
 def check_db_connection() -> bool:
