@@ -78,12 +78,22 @@ cp .env.example .env
 ```
 
 ### 2. Create and Seed the Database
-
+ 
 ```bash
 python -m src.seed
 ```
 
-The seed creates the SQLite database and its tables, then loads a demo seller and the sample products. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
+The seed creates the SQLite database, runs automatic migrations, and loads development accounts (seller and buyer) with hashed passwords alongside the 45 sample products. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
+
+#### Seeded Development Credentials
+| Role | Email | Password |
+|---|---|---|
+| Seller | `demo.seller@marketplace.local` (or `seller@example.com`) | `password` |
+| Buyer | `user@example.com` (or `demo.buyer@marketplace.local`) | `password` |
+
+To reset and recreate the database from scratch:
+- Windows PowerShell: `Remove-Item marketplace.db -ErrorAction SilentlyContinue; python -m src.seed`
+- macOS / Linux: `rm -f marketplace.db && python -m src.seed`
 
 ### 3. Run the Tests
 

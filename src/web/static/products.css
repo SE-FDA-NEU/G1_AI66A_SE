@@ -204,3 +204,25 @@ body {
   white-space: nowrap;
   border: 0;
 }
+.site-nav {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.site-nav a {
+  color: inherit;
+}
+
+.login-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 24rem;
+  margin: 0 auto;
+}
+
+.login-form label {
+  display: grid;
+  gap: 0.35rem;
+}
