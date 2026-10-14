@@ -192,7 +192,7 @@ def test_update_above_available_stock_keeps_the_previous_quantity(engine: Engine
         cart.update_item(BUYER_ID, "P-100", 5)
 
     assert error.value.code is CartErrorCode.STOCK_EXCEEDED
-    assert error.value.message == "Only 4 left in stock."
+    assert error.value.message == "Cannot add more than 4 items (available stock limit)"
     with open_cart(engine) as cart:
         snapshot = cart.get_cart(BUYER_ID)
     assert line_summary(snapshot.items) == [("P-100", 2, 200_000)]
@@ -208,7 +208,7 @@ def test_reserved_stock_is_not_available_to_the_cart(engine: Engine) -> None:
             cart.update_item(BUYER_ID, "P-100", 8)
 
     assert error.value.code is CartErrorCode.STOCK_EXCEEDED
-    assert error.value.message == "Only 7 left in stock."
+    assert error.value.message == "Cannot add more than 7 items (available stock limit)"
     assert stored_lines(engine, BUYER_ID) == [("P-100", 7)]
 
 
@@ -442,6 +442,6 @@ def test_concurrent_insert_of_the_same_line_is_a_controlled_conflict(
             cart.add_item(BUYER_ID, "P-100", 1)
         after_rollback = cart.get_cart(BUYER_ID)
 
-    assert error.value.code is CartErrorCode.CART_CONFLICT
+    assert error.value.code is CartErrorCode.CONCURRENCY_CONFLICT
     assert line_summary(after_rollback.items) == [("P-100", 2, 200_000)]
     assert stored_lines(engine, BUYER_ID) == [("P-100", 2)]

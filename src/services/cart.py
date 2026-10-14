@@ -22,7 +22,9 @@ PRODUCT_NOT_FOUND_MESSAGE = "This product does not exist."
 PRODUCT_UNAVAILABLE_MESSAGE = "This product is no longer available."
 OUT_OF_STOCK_MESSAGE = "This product is out of stock."
 CART_ITEM_NOT_FOUND_MESSAGE = "This product is not in your cart."
-CART_CONFLICT_MESSAGE = "Your cart was changed by another request. Please reload and try again."
+CONCURRENCY_CONFLICT_MESSAGE = (
+    "Your cart was changed by another request. Please reload and try again."
+)
 
 
 class CartErrorCode(StrEnum):
@@ -33,7 +35,7 @@ class CartErrorCode(StrEnum):
     PRODUCT_UNAVAILABLE = "ERR_PRODUCT_UNAVAILABLE"
     STOCK_EXCEEDED = "ERR_STOCK_EXCEEDED"
     CART_ITEM_NOT_FOUND = "ERR_CART_ITEM_NOT_FOUND"
-    CART_CONFLICT = "ERR_CART_CONFLICT"
+    CONCURRENCY_CONFLICT = "ERR_CONCURRENCY_CONFLICT"
 
 
 class CartError(Exception):
@@ -83,7 +85,7 @@ def validate_purchasable_quantity(product: Product, quantity: int) -> None:
         message = (
             OUT_OF_STOCK_MESSAGE
             if available_stock == 0
-            else f"Only {available_stock} left in stock."
+            else f"Cannot add more than {available_stock} items (available stock limit)"
         )
         raise CartError(CartErrorCode.STOCK_EXCEEDED, message)
 
@@ -208,14 +210,16 @@ class CartService:
         """Commit everything done in the block, or roll all of it back.
 
         Two requests that both insert the same line trip UNIQUE(buyer_id, product_id); the
-        loser gets ERR_CART_CONFLICT instead of a 500, and nothing is retried.
+        loser gets ERR_CONCURRENCY_CONFLICT instead of a 500, and nothing is retried.
         """
         try:
             yield
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
-            raise CartError(CartErrorCode.CART_CONFLICT, CART_CONFLICT_MESSAGE) from exc
+            raise CartError(
+                CartErrorCode.CONCURRENCY_CONFLICT, CONCURRENCY_CONFLICT_MESSAGE
+            ) from exc
         except Exception:
             self.session.rollback()
             raise
