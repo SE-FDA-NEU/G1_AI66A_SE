@@ -123,7 +123,7 @@ def test_products_database_pagination_and_visibility(
 
 
 def test_list_products_searches_available_product_names(client: TestClient) -> None:
-    """Search should match product names without exposing unavailable products."""
+    """Search should match names case-insensitively without exposing unavailable products."""
     with Session(engine) as session:
         session.add_all(
             [
@@ -155,13 +155,53 @@ def test_list_products_searches_available_product_names(client: TestClient) -> N
         )
         session.commit()
 
-    response = client.get("/api/v1/products?search=blue&page=1&limit=20")
+    response = client.get("/api/v1/products?search=BLUE&page=1&limit=20")
 
     assert response.status_code == 200
     body = response.json()
     assert [product["code"] for product in body["data"]] == ["SEARCH-1"]
     assert body["meta"]["current_page"] == 1
     assert body["meta"]["total"] == 1
+
+
+def test_list_products_whitespace_search_matches_all_available_products(
+    client: TestClient,
+) -> None:
+    """Whitespace-only search should behave like an unfiltered catalog request."""
+    seed_products()
+
+    response = client.get("/api/v1/products?search=%20%20&page=1&limit=100")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["total"] == 45
+    assert len(body["data"]) == 45
+
+
+def test_list_products_clamps_page_beyond_last_result_page(client: TestClient) -> None:
+    """A stale page request should return the final available page, not an empty catalog."""
+    seed_products()
+
+    response = client.get("/api/v1/products?page=4&limit=20")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["current_page"] == 3
+    assert body["meta"]["total_pages"] == 3
+    assert len(body["data"]) == 5
+
+
+def test_list_products_seeded_page_boundaries(client: TestClient) -> None:
+    """The seeded catalog has the expected 20/20/5 page distribution."""
+    seed_products()
+
+    pages = [
+        client.get(f"/api/v1/products?page={page}&limit=20").json()
+        for page in (1, 2, 3)
+    ]
+
+    assert [len(page["data"]) for page in pages] == [20, 20, 5]
+    assert pages[0]["meta"]["total_pages"] == 3
 
 
 def test_seed_is_idempotent_and_available_in_api(
