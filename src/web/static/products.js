@@ -158,6 +158,7 @@ async function fetchProducts(page, search) {
 }
 
 function updatePagination(meta) {
+  currentPage = meta.current_page;
   elements.pagination.hidden = meta.total_pages <= 1;
   elements.previous.disabled = meta.current_page <= 1;
   elements.next.disabled = meta.current_page >= meta.total_pages;
