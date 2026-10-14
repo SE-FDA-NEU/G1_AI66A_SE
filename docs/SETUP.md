@@ -118,8 +118,10 @@ python -m src.seed
 
 The seed first creates the database file and any missing table of the data
 model (`users`, `products`, `cart_items`, `orders`, `seller_orders`,
-`order_items`), then adds a demo seller and the sample products. Expected output
-on a new database:
+`order_items`), applies lightweight schema migrations (such as adding
+`password_hash` if upgrading an existing SQLite database), and provisions
+standard development buyer and seller accounts with usable hashed passwords
+alongside the 45 sample products. Expected output on a new database:
 
 ```text
 Added: 45 products
@@ -131,13 +133,25 @@ With `DEBUG=true` (the template value), SQLAlchemy also prints every SQL
 statement as `INFO sqlalchemy.engine.Engine ...` lines, including one
 `CREATE TABLE` per table on a new database, so the lines above appear among them.
 
-- **Expected rows after seeding: 1 user and 45 products.** The user is the demo seller (`demo.seller@marketplace.local`, role `seller`) that owns every product. The products have codes `P-100` to `P-144` and are all active. The other four tables stay empty.
-- Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 45) and reuses the demo seller. Products whose code already exists are skipped, and edited rows are not reset.
+- **Development Accounts & Usable Credentials:**
+  | Account | Email | Password | Role | Purpose |
+  |---|---|---|---|---|
+  | Primary Seller | `demo.seller@marketplace.local` | `password` | `seller` | Owns all 45 seeded catalog products |
+  | Alternate Seller | `seller@example.com` | `password` | `seller` | Convenient standard email for seller testing |
+  | Primary Buyer | `user@example.com` | `password` | `buyer` | Standard buyer account for checkout and auth testing |
+  | Alternate Buyer | `demo.buyer@marketplace.local` | `password` | `buyer` | Local domain buyer account |
+
+- **Automatic Migration & Recreate Process:**
+  - `python -m src.seed` and `python -m src.database` automatically run `migrate_db()` to add missing columns (such as `password_hash`) to legacy SQLite databases without crashing or requiring manual SQL.
+  - To perform a 100% clean recreate-and-seed from scratch:
+    - **PowerShell:** `Remove-Item marketplace.db -ErrorAction SilentlyContinue; python -m src.seed`
+    - **Command Prompt:** `if exist marketplace.db del marketplace.db & python -m src.seed`
+    - **macOS / Linux:** `rm -f marketplace.db && python -m src.seed`
+- Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 45) and ensures password hashes on existing seed users are populated.
 - A database that already holds other products reports a different total. Use a new database file for a fresh-machine check.
-- Optional: `python -m src.database` creates the missing tables without sample data and prints `Database initialization completed successfully.` The fresh-machine setup does not need it.
-- Both commands only create missing tables; neither changes a table that already exists. **If your `marketplace.db` was created before you pulled a schema change, delete it and seed again** (see section 6). An old table keeps working without the new rules and nothing reports it: a database created before #46 (2026-10-04) keeps a `products` table without its foreign key and CHECK constraints.
+- Optional: `python -m src.database` creates the missing tables and runs migrations without sample data and prints `Database initialization completed successfully.`
 - The database file `marketplace.db` is created in the repository root and is ignored by Git. Never commit it.
-- The app also creates missing tables when it starts, but it never loads sample data.
+- The app also creates missing tables and runs migrations when it starts, but it never loads sample data.
 
 ---
 

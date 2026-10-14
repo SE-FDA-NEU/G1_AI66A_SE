@@ -174,6 +174,21 @@ The implemented authentication endpoints are `POST /api/v1/auth/login` and
 token plus the public user profile. The token contains `sub`, `role`, `iat`,
 and `exp`; every authenticated request validates its signature, expiry, user
 record, and role. Password hashes are never included in responses.
+Malformed bearer tokens (including corrupted base64 payloads and `binascii.Error`)
+consistently resolve to `401 Unauthorized` (`ERR_INVALID_TOKEN`).
+
+**Navigation Contract:**
+Authentication preserves the originally requested protected route:
+- The UI checks for `return_to`, `redirect`, or `next` query parameters upon login.
+- Valid destinations must be relative paths beginning with a single `/` (rejecting protocol-relative `//` or scheme-based open redirects).
+- When no valid return route is provided, navigation defaults to `/products`.
+
+**Seeding & Migrations:**
+Development environments are provisioned via `python -m src.seed`, creating both
+seller (`demo.seller@marketplace.local`, `seller@example.com`) and buyer
+(`user@example.com`, `demo.buyer@marketplace.local`) accounts hashed with scrypt
+(default password `password`). Automatic migration (`migrate_db()`) adds `password_hash`
+to legacy SQLite databases seamlessly.
 
 Each product belongs to one seller through `seller_id`.
 

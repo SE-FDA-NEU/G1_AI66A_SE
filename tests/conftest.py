@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
+from src.auth import hash_password
 from src.database import engine, init_db
 from src.main import create_app
 from src.models.user import User
@@ -32,6 +33,7 @@ def setup_test_db():
                     name="Test Seller",
                     email="test.seller@marketplace.local",
                     role="seller",
+                    password_hash=hash_password("password"),
                 )
             )
             session.commit()

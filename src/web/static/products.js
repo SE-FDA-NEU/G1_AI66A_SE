@@ -21,6 +21,12 @@ function configureNavigation() {
   const hasToken = Boolean(localStorage.getItem("access_token"));
   elements.loginLink.hidden = hasToken;
   elements.logoutButton.hidden = !hasToken;
+  if (!hasToken) {
+    const currentPath = window.location.pathname + window.location.search;
+    if (currentPath && currentPath !== "/login") {
+      elements.loginLink.href = `/login?return_to=${encodeURIComponent(currentPath)}`;
+    }
+  }
 }
 
 elements.logoutButton.addEventListener("click", () => {

@@ -72,3 +72,48 @@ def test_check_db_connection_handles_database_error(monkeypatch) -> None:
     monkeypatch.setattr(database, "engine", BrokenEngine())
 
     assert database.check_db_connection() is False
+
+
+def test_legacy_database_migration_adds_password_hash(tmp_path: Path) -> None:
+    """Databases created before password_hash was added are safely migrated on init/seed."""
+    db_path = tmp_path / "legacy.db"
+
+    # Simulate an existing database created before the PR (missing password_hash column)
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                role VARCHAR(20) NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO users (name, email, role, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            ("Legacy Seller", "demo.seller@marketplace.local", "seller", "2026-10-01 00:00:00"),
+        )
+        connection.commit()
+
+        col_names = [col[1] for col in connection.execute("PRAGMA table_info(users)").fetchall()]
+        assert "password_hash" not in col_names
+
+    output = run_python(["-m", "src.seed"], db_path)
+    assert "Added: 45 products" in output
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        col_names = [col[1] for col in connection.execute("PRAGMA table_info(users)").fetchall()]
+        assert "password_hash" in col_names
+        seller = connection.execute(
+            "SELECT email, password_hash, role FROM users "
+            "WHERE email = 'demo.seller@marketplace.local'"
+        ).fetchone()
+        assert seller is not None
+        assert seller[0] == "demo.seller@marketplace.local"
+        assert seller[1].startswith("scrypt$")
+        assert seller[2] == "seller"

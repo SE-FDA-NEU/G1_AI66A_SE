@@ -1,6 +1,7 @@
 """Password hashing, JWT handling, and authenticated-user dependencies."""
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -42,7 +43,7 @@ def verify_password(password: str, encoded: str) -> bool:
         expected = _b64decode(digest_value)
         actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
         return hmac.compare_digest(actual, expected)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, binascii.Error):
         return False
 
 
@@ -86,7 +87,7 @@ def decode_access_token(token: str) -> dict[str, object]:
         if not payload.get("sub") or not payload.get("role"):
             raise ValueError("missing claims")
         return payload
-    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
+    except (ValueError, TypeError, binascii.Error, json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error_detail("ERR_INVALID_TOKEN", "The access token is invalid or expired."),
@@ -145,4 +146,7 @@ def _b64encode(value: bytes) -> str:
 
 
 def _b64decode(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    try:
+        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Invalid base64 encoding") from exc

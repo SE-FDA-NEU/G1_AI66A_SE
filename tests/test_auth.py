@@ -1,13 +1,18 @@
-"""Tests for authentication and role authorization."""
-
-from fastapi import APIRouter
+import pytest
+from fastapi import APIRouter, HTTPException
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from src.auth import SellerUser, create_access_token, hash_password
+from src.auth import SellerUser, create_access_token, decode_access_token, hash_password
 from src.database import engine
 from src.main import create_app
 from src.models.user import User
+from src.seed import (
+    DEFAULT_DEV_PASSWORD,
+    DEMO_BUYER_EMAIL,
+    DEMO_SELLER_EMAIL,
+    seed_users,
+)
 
 
 def add_user(user_id: int, role: str, password: str = "correct-password") -> User:
@@ -119,3 +124,89 @@ def test_buyer_cannot_use_seller_dependency(client: TestClient) -> None:
         )
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "ERR_SELLER_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "malformed_token",
+    [
+        "not-a-token",
+        "header.payload",
+        "header.payload.signature.extra",
+        "invalid!@#.invalid!@#.invalid!@#",
+        "!!!.@@@.###",
+        "...",
+        "==.==.==",
+        "bad_base64.bad_payload.bad_signature",
+    ],
+)
+def test_malformed_bearer_tokens_return_401_not_500(
+    client: TestClient,
+    malformed_token: str,
+) -> None:
+    """A completely malformed JWT must consistently return 401 ERR_INVALID_TOKEN, never 500."""
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {malformed_token}"},
+    )
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "ERR_INVALID_TOKEN",
+            "message": "The access token is invalid or expired.",
+        }
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        decode_access_token(malformed_token)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["error"]["code"] == "ERR_INVALID_TOKEN"
+
+
+def test_seeded_credentials_login_flow(client: TestClient) -> None:
+    """Verify reproducible fresh-machine login flow using standard seeded credentials."""
+    with Session(engine) as session:
+        seed_users(session)
+        session.commit()
+
+    # Verify seller login
+    seller_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": DEMO_SELLER_EMAIL, "password": DEFAULT_DEV_PASSWORD},
+    )
+    assert seller_response.status_code == 200
+    seller_body = seller_response.json()
+    assert seller_body["user"]["role"] == "seller"
+    assert seller_body["user"]["email"] == DEMO_SELLER_EMAIL
+    assert "password" not in seller_body["user"]
+
+    seller_me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {seller_body['access_token']}"},
+    )
+    assert seller_me.status_code == 200
+    assert seller_me.json()["role"] == "seller"
+
+    # Verify buyer login with PR test credentials (user@example.com / password)
+    buyer_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": DEMO_BUYER_EMAIL, "password": DEFAULT_DEV_PASSWORD},
+    )
+    assert buyer_response.status_code == 200
+    buyer_body = buyer_response.json()
+    assert buyer_body["user"]["role"] == "buyer"
+    assert buyer_body["user"]["email"] == DEMO_BUYER_EMAIL
+
+    buyer_me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {buyer_body['access_token']}"},
+    )
+    assert buyer_me.status_code == 200
+    assert buyer_me.json()["role"] == "buyer"
+
+    # Verify invalid password on seeded user
+    invalid_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": DEMO_BUYER_EMAIL, "password": "wrong-password"},
+    )
+    assert invalid_login.status_code == 401
+    assert invalid_login.json()["error"]["code"] == "ERR_INVALID_CREDENTIALS"
