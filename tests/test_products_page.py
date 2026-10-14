@@ -49,3 +49,18 @@ def test_products_script_configures_navigation_return_destination(client: TestCl
     response = client.get("/static/products.js")
     assert response.status_code == 200
     assert "return_to" in response.text
+
+
+def test_products_page_includes_search_pagination_and_product_links(
+    client: TestClient,
+) -> None:
+    """The catalog page exposes the controls required by US01."""
+    html = client.get("/products").text
+    script = client.get("/static/products.js").text
+
+    assert 'id="products-search"' in html
+    assert 'id="product-search-input"' in html
+    assert 'id="products-pagination"' in html
+    assert 'product.code' in script
+    assert 'params.set("search", search)' in script
+    assert "currentPage = 1" in script
