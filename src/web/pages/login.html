@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/products.css">
+  <script src="/static/login.js" defer></script>
+</head>
+<body>
+  <main class="catalog">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/products">Products</a>
+    </nav>
+    <h1 class="catalog__title">Log in</h1>
+    <form id="login-form" class="login-form">
+      <label>Email <input id="email" name="email" type="email" required autocomplete="email"></label>
+      <label>Password <input id="password" name="password" type="password" required autocomplete="current-password"></label>
+      <button class="button" type="submit">Log in</button>
+      <p id="login-error" class="state__message" role="alert" hidden></p>
+    </form>
+  </main>
+</body>
+</html>

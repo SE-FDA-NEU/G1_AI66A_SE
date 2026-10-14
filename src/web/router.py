@@ -22,3 +22,9 @@ def products_page() -> FileResponse:
 def cart_page() -> FileResponse:
     """Serve the shopping cart page (US03); its script loads the cart from the API."""
     return FileResponse(PAGES_DIR / "cart.html")
+
+
+@router.get("/login", response_class=FileResponse, include_in_schema=False)
+def login_page() -> FileResponse:
+    """Serve the login page."""
+    return FileResponse(PAGES_DIR / "login.html")

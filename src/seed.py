@@ -1,10 +1,40 @@
 from sqlmodel import Session, select
 
+from src.auth import hash_password
 from src.database import engine, init_db
 from src.models.product import Product
 from src.models.user import User
 
 DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
+DEMO_BUYER_EMAIL = "user@example.com"
+DEFAULT_DEV_PASSWORD = "password"
+
+SEED_USERS: list[dict[str, str]] = [
+    {
+        "name": "Demo Seller",
+        "email": DEMO_SELLER_EMAIL,
+        "role": "seller",
+        "password": DEFAULT_DEV_PASSWORD,
+    },
+    {
+        "name": "Demo Seller (Example)",
+        "email": "seller@example.com",
+        "role": "seller",
+        "password": DEFAULT_DEV_PASSWORD,
+    },
+    {
+        "name": "Demo Buyer",
+        "email": DEMO_BUYER_EMAIL,
+        "role": "buyer",
+        "password": DEFAULT_DEV_PASSWORD,
+    },
+    {
+        "name": "Demo Buyer (Local)",
+        "email": "demo.buyer@marketplace.local",
+        "role": "buyer",
+        "password": DEFAULT_DEV_PASSWORD,
+    },
+]
 
 
 def make_product(
@@ -121,22 +151,32 @@ def build_products(seller_id: int = 1) -> list[Product]:
     return products
 
 
+def seed_users(session: Session) -> dict[str, User]:
+    """Ensure standard development accounts exist with usable hashed passwords."""
+    users: dict[str, User] = {}
+    for entry in SEED_USERS:
+        user = session.exec(select(User).where(User.email == entry["email"])).first()
+        if user is None:
+            user = User(
+                name=entry["name"],
+                email=entry["email"],
+                role=entry["role"],
+                password_hash=hash_password(entry["password"]),
+            )
+            session.add(user)
+            session.flush()
+        elif not user.password_hash:
+            user.password_hash = hash_password(entry["password"])
+            session.add(user)
+            session.flush()
+        users[entry["email"]] = user
+    return users
+
+
 def get_or_create_demo_seller(session: Session) -> User:
-    """Return the demo seller, creating it when it does not exist."""
-    seller = session.exec(
-        select(User).where(User.email == DEMO_SELLER_EMAIL)
-    ).first()
-
-    if seller is None:
-        seller = User(
-            name="Demo Seller",
-            email=DEMO_SELLER_EMAIL,
-            role="seller",
-        )
-        session.add(seller)
-        session.flush()
-
-    return seller
+    """Return the primary demo seller, ensuring hashed password exists."""
+    users = seed_users(session)
+    return users[DEMO_SELLER_EMAIL]
 
 
 def seed_products() -> None:
