@@ -71,11 +71,13 @@ def list_products(
             filters.append(Product.name.ilike(f"%{search.strip()}%"))
 
         total = session.exec(select(func.count()).select_from(Product).where(*filters)).one()
+        total_pages = (total + limit - 1) // limit
+        effective_page = min(page, total_pages) if total_pages else 1
         products = session.exec(
             select(Product)
             .where(*filters)
             .order_by(Product.id)
-            .offset((page - 1) * limit)
+            .offset((effective_page - 1) * limit)
             .limit(limit)
         ).all()
     except SQLAlchemyError as exc:
@@ -106,9 +108,9 @@ def list_products(
             for product in products
         ],
         meta=ProductMeta(
-            current_page=page,
+            current_page=effective_page,
             limit=limit,
             total=total,
-            total_pages=(total + limit - 1) // limit,
+            total_pages=total_pages,
         ),
     )
