@@ -93,6 +93,16 @@ def test_products_database_pagination_and_visibility(
                     image_url="/hidden.jpg",
                     is_active=False,
                 ),
+                Product(
+                    code="TEST-4",
+                    seller_id=1,
+                    name="Reserved",
+                    price=400,
+                    stock_quantity=2,
+                    reserved_stock=2,
+                    image_url="/reserved.jpg",
+                    is_active=True,
+                ),
             ]
         )
         session.commit()
@@ -105,11 +115,53 @@ def test_products_database_pagination_and_visibility(
 
     codes = {product["code"] for product in body["data"]}
 
-    assert "TEST-1" in codes
     assert "TEST-2" in codes
     assert "TEST-3" not in codes
+    assert "TEST-4" not in codes
 
-    assert body["meta"]["total"] == 2
+    assert body["meta"]["total"] == 1
+
+
+def test_list_products_searches_available_product_names(client: TestClient) -> None:
+    """Search should match product names without exposing unavailable products."""
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Product(
+                    code="SEARCH-1",
+                    seller_id=1,
+                    name="Blue Jacket",
+                    price=100,
+                    stock_quantity=4,
+                    is_active=True,
+                ),
+                Product(
+                    code="SEARCH-2",
+                    seller_id=1,
+                    name="Blue Shoes",
+                    price=200,
+                    stock_quantity=0,
+                    is_active=True,
+                ),
+                Product(
+                    code="SEARCH-3",
+                    seller_id=1,
+                    name="Red Hat",
+                    price=300,
+                    stock_quantity=4,
+                    is_active=True,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/v1/products?search=blue&page=1&limit=20")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [product["code"] for product in body["data"]] == ["SEARCH-1"]
+    assert body["meta"]["current_page"] == 1
+    assert body["meta"]["total"] == 1
 
 
 def test_seed_is_idempotent_and_available_in_api(
