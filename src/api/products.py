@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
@@ -49,6 +49,48 @@ class ProductResponse(BaseModel):
     stock_status: str = ""
 
 
+def product_response(product: Product) -> ProductResponse:
+    """Map a product to the public product representation."""
+    available_stock = max(product.stock_quantity - product.reserved_stock, 0)
+    return ProductResponse(
+        id=str(product.id),
+        code=product.code,
+        name=product.name,
+        description=product.description,
+        price=float(product.price),
+        thumbnail_url=product.image_url,
+        image_url=product.image_url,
+        stock_quantity=available_stock,
+        stock_status=(
+            "out_of_stock"
+            if available_stock == 0
+            else "low_stock"
+            if available_stock <= 5
+            else "in_stock"
+        ),
+    )
+
+
+@router.get("/{product_code}", response_model=ProductResponse)
+def get_product(
+    session: SessionDep,
+    product_code: str = Path(min_length=1, max_length=20),
+) -> ProductResponse:
+    """Return an active product by its public code, including out-of-stock products."""
+    product = session.exec(
+        select(Product).where(
+            Product.code == product_code,
+            Product.is_active.is_(True),
+        )
+    ).first()
+    if product is None:
+        raise HTTPException(
+            status_code=404,
+            detail=error_detail("ERR_PRODUCT_NOT_FOUND", "Product not found."),
+        )
+    return product_response(product)
+
+
 @router.get("", response_model=ProductListResponse)
 def list_products(
     session: SessionDep,
@@ -88,23 +130,7 @@ def list_products(
         ) from exc
     return ProductListResponse(
         data=[
-            ProductResponse(
-                id=str(product.id),
-                code=product.code,
-                name=product.name,
-                description=product.description,
-                price=float(product.price),
-                thumbnail_url=product.image_url,
-                image_url=product.image_url,
-                stock_quantity=product.stock_quantity,
-                stock_status=(
-                    "out_of_stock"
-                    if product.stock_quantity == 0
-                    else "low_stock"
-                    if product.stock_quantity <= 5
-                    else "in_stock"
-                ),
-            )
+            product_response(product)
             for product in products
         ],
         meta=ProductMeta(
