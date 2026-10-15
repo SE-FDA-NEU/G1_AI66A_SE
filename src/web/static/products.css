@@ -37,6 +37,31 @@ body {
   font-size: 1.75rem;
 }
 
+.catalog-search {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.catalog-search__controls {
+  display: flex;
+  gap: 8px;
+}
+
+.catalog-search input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.catalog-search input:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* US01: mobile 2, tablet 3, desktop 4 cards per row. */
 .product-grid {
   display: grid;
@@ -68,6 +93,19 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
+}
+
+.product-card__link {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+
+.product-card__link:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: -3px;
 }
 
 .product-card__image {
@@ -191,6 +229,18 @@ body {
 .button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.pagination .button {
+  margin-top: 0;
 }
 
 .visually-hidden {

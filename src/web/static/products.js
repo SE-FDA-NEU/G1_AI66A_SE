@@ -1,6 +1,7 @@
 "use strict";
 
-const PRODUCTS_URL = "/api/v1/products?page=1&limit=20";
+const PRODUCTS_URL = "/api/v1/products";
+const PAGE_LIMIT = 20;
 const REQUEST_TIMEOUT_MS = 10000;
 const PLACEHOLDER_IMAGE = "/static/product-placeholder.svg";
 
@@ -13,9 +14,18 @@ const elements = {
   empty: document.getElementById("products-empty"),
   error: document.getElementById("products-error"),
   retry: document.getElementById("products-retry"),
+  search: document.getElementById("products-search"),
+  searchInput: document.getElementById("product-search-input"),
+  pagination: document.getElementById("products-pagination"),
+  previous: document.getElementById("products-previous"),
+  next: document.getElementById("products-next"),
+  page: document.getElementById("products-page"),
   loginLink: document.getElementById("login-link"),
   logoutButton: document.getElementById("logout-button"),
 };
+
+let currentPage = 1;
+let currentSearch = "";
 
 function configureNavigation() {
   const hasToken = Boolean(localStorage.getItem("access_token"));
@@ -40,6 +50,7 @@ function showState(state, message) {
   elements.grid.hidden = state !== "success";
   elements.empty.hidden = state !== "empty";
   elements.error.hidden = state !== "error";
+  elements.pagination.hidden = state !== "success";
   elements.status.textContent = message;
 }
 
@@ -76,6 +87,10 @@ function createProductCard(product) {
   const card = document.createElement("li");
   card.className = "product-card";
 
+  const link = document.createElement("a");
+  link.className = "product-card__link";
+  link.href = `/products/${encodeURIComponent(product.code)}`;
+
   const image = document.createElement("img");
   image.className = "product-card__image";
   image.alt = product.name;
@@ -108,15 +123,23 @@ function createProductCard(product) {
     body.append(badge);
   }
 
-  card.append(image, body);
+  link.append(image, body);
+  card.append(link);
   return card;
 }
 
-async function fetchProducts() {
+async function fetchProducts(page, search) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(PAGE_LIMIT),
+  });
+  if (search) {
+    params.set("search", search);
+  }
   try {
-    const response = await fetch(PRODUCTS_URL, {
+    const response = await fetch(`${PRODUCTS_URL}?${params}`, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
@@ -134,16 +157,26 @@ async function fetchProducts() {
   }
 }
 
-async function loadProducts() {
+function updatePagination(meta) {
+  currentPage = meta.current_page;
+  elements.pagination.hidden = meta.total_pages <= 1;
+  elements.previous.disabled = meta.current_page <= 1;
+  elements.next.disabled = meta.current_page >= meta.total_pages;
+  elements.page.textContent = `Page ${meta.current_page} of ${meta.total_pages}`;
+}
+
+async function loadProducts(page = currentPage) {
+  currentPage = page;
   elements.retry.disabled = true;
   showState("loading", "Loading products…");
   try {
-    const { data, meta } = await fetchProducts();
+    const { data, meta } = await fetchProducts(currentPage, currentSearch);
     if (data.length === 0) {
       showState("empty", "No products available at the moment.");
     } else {
       elements.grid.replaceChildren(...data.map(createProductCard));
       showState("success", `Showing ${data.length} of ${meta.total} products.`);
+      updatePagination(meta);
     }
   } catch (error) {
     showState("error", "Something went wrong. Please try again later.");
@@ -153,5 +186,13 @@ async function loadProducts() {
 }
 
 elements.retry.addEventListener("click", loadProducts);
+elements.search.addEventListener("submit", (event) => {
+  event.preventDefault();
+  currentSearch = elements.searchInput.value.trim();
+  currentPage = 1;
+  loadProducts();
+});
+elements.previous.addEventListener("click", () => loadProducts(currentPage - 1));
+elements.next.addEventListener("click", () => loadProducts(currentPage + 1));
 loadProducts();
 configureNavigation();
