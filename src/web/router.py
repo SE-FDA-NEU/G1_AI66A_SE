@@ -18,6 +18,13 @@ def products_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "products.html")
 
 
+@router.get("/products/{product_code}", response_class=FileResponse, include_in_schema=False)
+def product_detail_page(product_code: str) -> FileResponse:
+    """Serve the product detail page; its script loads the requested product."""
+    del product_code
+    return FileResponse(PAGES_DIR / "product-detail.html")
+
+
 @router.get("/login", response_class=FileResponse, include_in_schema=False)
 def login_page() -> FileResponse:
     """Serve the login page."""
