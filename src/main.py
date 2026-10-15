@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 
 from src import __version__
 from src.api.health import router as health_router
@@ -80,6 +81,21 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content=error_detail("ERR_VALIDATION", "The request contains invalid fields."),
+        )
+
+    @app.exception_handler(SQLAlchemyError)
+    async def sqlalchemy_error_handler(
+        request: Request,
+        exc: SQLAlchemyError,
+    ) -> JSONResponse:
+        del request
+        logger.exception("Database error occurred: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content=error_detail(
+                "ERR_DATABASE_FAILURE",
+                "A database error occurred. Please try again later.",
+            ),
         )
 
     # Configure CORS middleware

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your Cart | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/products.css">
+</head>
+<body>
+  <main class="catalog">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/products">Products</a>
+      <a id="cart-link" href="/cart">Cart</a>
+      <a id="login-link" href="/login">Log in</a>
+      <button id="logout-button" class="button" type="button" hidden>Log out</button>
+    </nav>
+    <h1 class="catalog__title">Your Cart</h1>
+    <section id="cart" class="cart">
+      <p id="cart-status" class="state__message" role="status" aria-live="polite">Your cart is empty.</p>
+      <a class="button" href="/products">Continue shopping</a>
+    </section>
+  </main>
+</body>
+</html>

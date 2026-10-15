@@ -31,7 +31,7 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --basetemp=.pytest_temp"
 testpaths = ["tests"]
 pythonpath = ["."]
 

@@ -25,6 +25,12 @@ def product_detail_page(product_code: str) -> FileResponse:
     return FileResponse(PAGES_DIR / "product-detail.html")
 
 
+@router.get("/cart", response_class=FileResponse, include_in_schema=False)
+def cart_page() -> FileResponse:
+    """Serve the shopping cart page (US03)."""
+    return FileResponse(PAGES_DIR / "cart.html")
+
+
 @router.get("/login", response_class=FileResponse, include_in_schema=False)
 def login_page() -> FileResponse:
     """Serve the login page."""

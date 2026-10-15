@@ -17,18 +17,43 @@ const elements = {
   quantity: document.getElementById("product-quantity"),
   add: document.getElementById("add-to-cart"),
   cartStatus: document.getElementById("cart-status"),
+  cartLink: document.getElementById("cart-link"),
   login: document.getElementById("login-link"),
   logout: document.getElementById("logout-button"),
 };
 const priceFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
+
+function getReturnPath(selectedQty) {
+  const qty = selectedQty !== undefined ? selectedQty : (parseInt(elements.quantity?.value, 10) || 1);
+  return `${window.location.pathname}?quantity=${encodeURIComponent(qty)}`;
+}
 
 function configureNavigation() {
   const loggedIn = Boolean(localStorage.getItem("access_token"));
   elements.login.hidden = loggedIn;
   elements.logout.hidden = !loggedIn;
   if (!loggedIn) {
-    elements.login.href = `/login?return_to=${encodeURIComponent(window.location.pathname)}`;
+    elements.login.href = `/login?return_to=${encodeURIComponent(getReturnPath())}`;
   }
+}
+
+function getPreservedQuantity() {
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get("quantity");
+  if (fromQuery && !isNaN(Number(fromQuery))) {
+    const parsed = parseInt(fromQuery, 10);
+    if (parsed > 0) return parsed;
+  }
+  try {
+    const saved = sessionStorage.getItem(`pending_cart_${code}`);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed.quantity === "number" && parsed.quantity > 0) {
+        return parsed.quantity;
+      }
+    }
+  } catch (_) {}
+  return 1;
 }
 
 function showError(message, retry = true) {
@@ -67,18 +92,48 @@ async function loadProduct() {
     elements.stock.className = `product-detail__stock ${available ? "product-detail__stock--available" : "product-detail__stock--unavailable"}`;
     elements.add.disabled = !available;
     elements.quantity.max = String(product.stock_quantity);
+
+    // Restore and revalidate selected quantity against current stock
+    const preservedQty = getPreservedQuantity();
+    if (available) {
+      const validQty = Math.min(Math.max(1, preservedQty), product.stock_quantity);
+      elements.quantity.value = String(validQty);
+      if (preservedQty > product.stock_quantity) {
+        elements.cartStatus.textContent = `Quantity adjusted to maximum available stock (${product.stock_quantity}).`;
+      }
+    } else {
+      elements.quantity.value = "1";
+    }
+    try {
+      sessionStorage.removeItem(`pending_cart_${code}`);
+    } catch (_) {}
+
     elements.detail.hidden = false;
     elements.status.hidden = true;
+    configureNavigation();
   } catch (error) {
     showError("Something went wrong. Please try again later.");
   }
 }
 
+elements.quantity.addEventListener("input", () => {
+  configureNavigation();
+});
+elements.quantity.addEventListener("change", () => {
+  configureNavigation();
+});
+
 elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const token = localStorage.getItem("access_token");
+  const quantityValue = parseInt(elements.quantity.value, 10) || 1;
+
   if (!token) {
-    window.location.assign(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
+    const returnDestination = getReturnPath(quantityValue);
+    try {
+      sessionStorage.setItem(`pending_cart_${code}`, JSON.stringify({ product_code: code, quantity: quantityValue }));
+    } catch (_) {}
+    window.location.assign(`/login?return_to=${encodeURIComponent(returnDestination)}`);
     return;
   }
   elements.add.disabled = true;
@@ -87,16 +142,21 @@ elements.form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/v1/cart/items", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ product_code: code, quantity: Number(elements.quantity.value) }),
+      body: JSON.stringify({ product_code: code, quantity: quantityValue }),
     });
     const payload = await response.json().catch(() => null);
     if (response.status === 401) {
       localStorage.removeItem("access_token");
-      window.location.assign(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
+      const returnDestination = getReturnPath(quantityValue);
+      try {
+        sessionStorage.setItem(`pending_cart_${code}`, JSON.stringify({ product_code: code, quantity: quantityValue }));
+      } catch (_) {}
+      window.location.assign(`/login?return_to=${encodeURIComponent(returnDestination)}`);
       return;
     }
     if (!response.ok) throw new Error(payload?.error?.message || "Unable to add product to cart.");
-    elements.cartStatus.textContent = "Product added to cart.";
+    elements.cartStatus.innerHTML = 'Product added to cart. <a id="view-cart-link" class="button button--link" href="/cart">Proceed to Cart →</a>';
+    window.location.assign("/cart");
   } catch (error) {
     elements.cartStatus.textContent = error instanceof Error ? error.message : "Unable to add product to cart.";
   } finally {

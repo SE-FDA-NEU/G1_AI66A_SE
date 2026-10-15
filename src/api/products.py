@@ -76,13 +76,19 @@ def get_product(
     session: SessionDep,
     product_code: str = Path(min_length=1, max_length=20),
 ) -> ProductResponse:
-    """Return an active product by its public code, including out-of-stock products."""
-    product = session.exec(
-        select(Product).where(
-            Product.code == product_code,
-            Product.is_active.is_(True),
-        )
-    ).first()
+    try:
+        product = session.exec(
+            select(Product).where(
+                Product.code == product_code,
+                Product.is_active.is_(True),
+            )
+        ).first()
+    except SQLAlchemyError as exc:
+        logger.exception("Product query failed for code %s", product_code)
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail("ERR_DATABASE_FAILURE", CATALOG_ERROR_MESSAGE),
+        ) from exc
     if product is None:
         raise HTTPException(
             status_code=404,
