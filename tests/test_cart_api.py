@@ -206,6 +206,37 @@ def test_quantity_at_the_stock_limit_is_accepted_and_one_more_is_refused(
     assert stored_lines(engine, BUYER_ID) == [("P-100", 7)]
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/api/v1/cart/items", {"product_code": "P-100", "quantity": 1}),
+        ("PATCH", "/api/v1/cart/items/P-100", {"quantity": 5}),
+        ("DELETE", "/api/v1/cart/items/P-100", None),
+    ],
+)
+def test_database_failure_after_writing_leaves_the_cart_unchanged(
+    api: TestClient,
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    body: dict | None,
+) -> None:
+    add_product(engine, "P-100")
+    add_item(api, "P-100", 2, BUYER)
+
+    def broken_snapshot(*_args) -> None:
+        raise SQLAlchemyError("simulated failure after the write")
+
+    monkeypatch.setattr(cart_module, "build_cart_snapshot", broken_snapshot)
+
+    response = api.request(method, path, json=body, headers=BUYER)
+
+    assert response.status_code == 500
+    assert error_code(response) == "ERR_DATABASE_FAILURE"
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 2)]
+
+
 @pytest.mark.parametrize("quantity", [0, -1])
 def test_non_positive_quantity_is_a_bad_request(
     api: TestClient, engine: Engine, quantity: int

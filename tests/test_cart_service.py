@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlmodel import Session
 
 import src.services.cart as cart_module
@@ -554,6 +554,45 @@ def test_add_that_keeps_losing_races_ends_in_a_controlled_conflict(
     assert error.value.code is CartErrorCode.CONCURRENCY_CONFLICT
     assert line_summary(after_rollback.items) == [("P-100", 2, 200_000)]
     assert stored_lines(engine, BUYER_ID) == [("P-100", 2)]
+
+
+def fail_next_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the next cart read fail once: it runs after the change was written, before commit."""
+    original = cart_module.build_cart_snapshot
+
+    def fail_once(*_args):
+        monkeypatch.setattr(cart_module, "build_cart_snapshot", original)
+        raise SQLAlchemyError("simulated failure after the write")
+
+    monkeypatch.setattr(cart_module, "build_cart_snapshot", fail_once)
+
+
+FAILED_CHANGES = {
+    "add a new line": lambda cart: cart.add_item(BUYER_ID, "P-101", 1),
+    "increase a line": lambda cart: cart.add_item(BUYER_ID, "P-100", 1),
+    "update a line": lambda cart: cart.update_item(BUYER_ID, "P-100", 5),
+    "remove a line": lambda cart: cart.remove_item(BUYER_ID, "P-100"),
+}
+
+
+@pytest.mark.parametrize("change", FAILED_CHANGES.values(), ids=FAILED_CHANGES.keys())
+def test_a_change_that_fails_after_writing_is_rolled_back(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, change
+) -> None:
+    """The failed write must not reach the database, not even with the session's next commit."""
+    for code in ("P-100", "P-101", "P-102"):
+        add_product(engine, code)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 2)
+    fail_next_snapshot(monkeypatch)
+
+    with open_cart(engine) as cart:
+        with pytest.raises(SQLAlchemyError):
+            change(cart)
+        cart.add_item(BUYER_ID, "P-102", 1)
+
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 2), ("P-102", 1)]
+    assert stored_stock(engine, "P-100") == (10, 0)
 
 
 @pytest.mark.parametrize(
