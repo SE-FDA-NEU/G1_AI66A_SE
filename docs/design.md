@@ -83,8 +83,9 @@ error handling.
 |---|---|
 | `/products` page, `GET /api/v1/products`, `/health`, the `products` table, the seed and init commands | Implemented and covered by automated tests in `tests/` |
 | Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implemented in #46 (PR #68) with models in `src/models/` and foreign key enforcement enabled in `src/database.py` |
-| Cart (#79) | `/cart` page and the four `/api/v1/cart` endpoints for authenticated buyers, backed by `CartService` and the `cart_items` table; covered by `tests/test_cart_service.py`, `tests/test_cart_api.py` and `tests/test_cart_page.py`. The Add to Cart button on the product detail page comes with #78 |
-| Product detail, checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
+| Cart (#79) | `/cart` page and the four `/api/v1/cart` endpoints for authenticated buyers, backed by `CartService` and the `cart_items` table; covered by `tests/test_cart_service.py`, `tests/test_cart_api.py` and `tests/test_cart_page.py`. Buyers add products with Add to Cart on the product detail page (#78, PR #91) |
+| Product detail (#78) | `/products/{productCode}` page and `GET /api/v1/products/{productCode}` (PR #91); its Add to Cart button calls `POST /api/v1/cart/items` |
+| Checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
 | Buyer and seller authentication | Implemented in `src/auth.py` and `src/api/auth.py`: signed HS256 JWTs, password hashing, `/auth/login`, `/auth/me`, and seller-role dependency |
 | Deployment | One local process (`python -m src.main`) and one SQLite file; the page is served by the same process, so there is no separate frontend deployment |
 
@@ -620,7 +621,7 @@ model; this contract does not assume that every identifier is a UUID.
 | `GET /api/v1/products` | G | Query: `page` (positive integer, default `1`), `limit` (1-100, default `20`), optional catalog filters | `200 OK`: paginated product summaries with internal integer `id`, public `code`, `name`, `price`, `image_url`/`thumbnail_url`, `stock_quantity`, and `stock_status` | `400 Bad Request` for invalid pagination/filter values; `500 Internal Server Error` when the catalog cannot be read | US01 Browse product catalog |
 | `GET /api/v1/products/{productCode}` | G | Path: `productCode` public product code, for example `P-100` | `200 OK`: one product with `id` (internal integer), `code`, full description, image, price, and current stock status | `404 Not Found` when the product code does not exist or the product is inactive; `422 Unprocessable Entity` when the code is empty or exceeds 20 characters | US02 View product details |
 | `GET /api/v1/cart` | U (buyer) | No body; cart is identified by the authenticated buyer | `200 OK`: the cart in the shape described under "Cart response and rules" below. A buyer with no cart lines gets `200 OK` with `items: []` and `cart_total: 0`, not `404` | `401 Unauthorized` when the token is missing/invalid | US03 Cart management |
-| `POST /api/v1/cart/items` | U (buyer) | JSON: `{ "product_code": "P-100", "quantity": 1 }` | `201 Created` for a new line, or `200 OK` when an existing line is increased; returns the updated cart in the same shape as `GET` | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer, such as `true`, `1.5` or `"2"`; `401 Unauthorized`; `404 Not Found` (`ERR_PRODUCT_NOT_FOUND`) for an unknown product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`), when the quantity after adding exceeds available stock (`ERR_STOCK_EXCEEDED`), or when a concurrent request created the same line (`ERR_CONCURRENCY_CONFLICT`) | US03 Cart management |
+| `POST /api/v1/cart/items` | U (buyer) | JSON: `{ "product_code": "P-100", "quantity": 1 }` | `201 Created` for a new line, or `200 OK` when an existing line is increased; returns the updated cart in the same shape as `GET` | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer, such as `true`, `1.5` or `"2"`; `401 Unauthorized`; `404 Not Found` (`ERR_PRODUCT_NOT_FOUND`) for an unknown product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`), when the quantity after adding exceeds available stock (`ERR_STOCK_EXCEEDED`), or when concurrent requests on the same line still collide after five attempts (`ERR_CONCURRENCY_CONFLICT`) | US03 Cart management |
 | `PATCH /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; JSON: `{ "quantity": 2 }` | `200 OK`: updated cart with recalculated line and cart totals | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity, because a line is removed with `DELETE`; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer; `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`) or the new quantity exceeds available stock (`ERR_STOCK_EXCEEDED`) | US03 Cart management |
 | `DELETE /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; no body | `200 OK`: updated cart after removing the line | `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code | US03 Cart management |
 | `POST /api/v1/orders` | U (buyer) | JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, item snapshots, quantities, total, status, and delivery information | `400 Bad Request` for missing/invalid delivery data or an empty cart; `401 Unauthorized`; `409 Conflict` when a product is unavailable or stock changed; `500 Internal Server Error` if the transaction cannot be completed | US04 Checkout and order placement |
@@ -680,6 +681,13 @@ token itself:
   `cart_total`.
 - A refused change leaves the cart exactly as it was. Each mutation commits or
   rolls back inside the service; the router does not commit again.
+- Adding to an existing line is one `UPDATE` that sets
+  `quantity = quantity + n` only while the result fits available stock, so two
+  requests adding to the same line at the same time both count. A change that loses a race
+  (the same line inserted twice, the line changed after it was read, or SQLite
+  busy) runs again on fresh data, at most five times; after that the request
+  answers `409 ERR_CONCURRENCY_CONFLICT`. Other database errors are not
+  retried and answer `500 ERR_DATABASE_FAILURE`.
 - Only buyers have a cart. A seller token gets `403 ERR_BUYER_REQUIRED` from
   every cart endpoint. The `/cart` page sends a guest, or a buyer whose token
   is rejected with `401`, to `/login?return_to=%2Fcart`.
@@ -694,7 +702,7 @@ The API uses these HTTP status codes consistently:
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED`, `ERR_INVALID_TOKEN` | An authenticated endpoint is called without a valid bearer token. |
 | `403 Forbidden` | `ERR_SELLER_REQUIRED`, `ERR_BUYER_REQUIRED`, `ERR_RESOURCE_OWNER` | The identity is authenticated but lacks the required seller or buyer role, or does not own the requested seller resource. |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND`, `ERR_CART_ITEM_NOT_FOUND` | The requested product, cart line, or seller sub-order does not exist or is not visible to the caller. |
-| `409 Conflict` | `ERR_STOCK_EXCEEDED`, `ERR_PRODUCT_UNAVAILABLE`, `ERR_CONCURRENCY_CONFLICT` | The request conflicts with current inventory or availability, including a checkout race with another purchase or two requests creating the same cart line at once. |
+| `409 Conflict` | `ERR_STOCK_EXCEEDED`, `ERR_PRODUCT_UNAVAILABLE`, `ERR_CONCURRENCY_CONFLICT` | The request conflicts with current inventory or availability, including a checkout race with another purchase or cart requests that keep colliding on the same line. |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, such as an invalid product code, phone number, price, or stock quantity. |
 | `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | An unexpected database or infrastructure failure prevents the operation from completing. The response must not expose SQL details. |
 

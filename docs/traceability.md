@@ -10,7 +10,7 @@ update this file should not be approved.
 |---|---|---|---|---|---|---|---|---|
 | `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13), [#45](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/45) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | [#57](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/57), [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60), [#61](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/61), [#64](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/64), [#65](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/65), [#68](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/68), [#70](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/70) | Partial |
 | `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | None yet | Not implemented |
-| `/cart` | Manage shopping cart | U | P0 | F2 Cart | [#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15), [#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79) | [#31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/31) | Branch `feat/79-cart` (Sprint 3) | Implemented on `feat/79-cart`; the Add to Cart entry point comes with #78 |
+| `/cart` | Manage shopping cart | U | P0 | F2 Cart | [#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15), [#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79) | [#31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/31) | Branch `feat/79-cart` (Sprint 3) | Implemented on `feat/79-cart`; buyers add products from `/products/:productCode` (#78, [PR #91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)) |
 | `/checkout` | Place an order | U | P0 | F3 Ordering | [#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16) | [#23](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/23) | None yet | Not implemented |
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
 | `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
@@ -44,7 +44,7 @@ the database since PR #68 (#46), but only the catalog reads them.
 |---|---|---|---|---|---|
 | [US01](us01-browse-product-catalog.md) Browse product catalog ([#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13)) | `/products` | `GET /api/v1/products` | `products`; `users` as the owning seller | Partial. The page and the API read the database. The page shows only the first 20 products, with no page controls or filters (G3), and out-of-stock products are still listed (G2). | `tests/test_products.py`, `tests/test_issue45_scenarios.py`, `tests/test_products_page.py`; items E1 to E6 in the [evidence index](evidence/sprint2.md) |
 | [US02](us02-view-product-detail.md) View product details ([#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14)) | `/products/:productId` | `GET /api/v1/products/{productCode}` | `products` | Not implemented | None yet; the screen and the endpoint name the product differently (G4) |
-| [US03](us03-cart.md) Cart management ([#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15)) | `/cart` | `GET /api/v1/cart`; `POST /api/v1/cart/items`; `PATCH` and `DELETE /api/v1/cart/items/{productCode}` | `cart_items`, `products`, `users` | Implemented on `feat/79-cart` ([#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79)) for authenticated buyers. Until the product detail page (#78) adds its button, items are added through `POST /api/v1/cart/items` | `tests/test_cart_service.py`, `tests/test_cart_api.py`, `tests/test_cart_page.py`; [evidence for issue #79](#evidence-for-issue-79) |
+| [US03](us03-cart.md) Cart management ([#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15)) | `/cart` | `GET /api/v1/cart`; `POST /api/v1/cart/items`; `PATCH` and `DELETE /api/v1/cart/items/{productCode}` | `cart_items`, `products`, `users` | Implemented on `feat/79-cart` ([#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79)) for authenticated buyers. Buyers add products with Add to Cart on the product detail page (#78, [PR #91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)) | `tests/test_cart_service.py`, `tests/test_cart_api.py`, `tests/test_cart_page.py`; [evidence for issue #79](#evidence-for-issue-79) |
 | [US04](us04-checkout.md) Checkout and order placement ([#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16)) | `/checkout` | `POST /api/v1/orders` | `orders`, `seller_orders`, `order_items`, `cart_items`, `products`, `users` | Not implemented; the tables exist | None yet |
 | [US06](us06-create-product.md) Create product listing ([#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18)) | `/seller/products/new` | `POST /api/v1/seller/products` | `products`, `users` | Not implemented | None yet |
 | [US08](us08-seller-order-management.md) Seller order management ([#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20)) | `/seller/orders` | `GET /api/v1/seller/orders`; `PATCH /api/v1/seller/orders/{subOrderId}/status` | `seller_orders`, `order_items`, `orders`, `products`, `users` | Not implemented; the tables exist | None yet |
@@ -194,8 +194,8 @@ wireframe in [`docs/ui.md`](ui.md) section 2.3.
 
 | Acceptance criterion (#79) | Implementation | Automated test |
 |---|---|---|
-| An added product is stored in the database with its quantity | `CartService.add_item()` behind `POST /api/v1/cart/items` | `test_first_add_stores_one_line`, `test_add_creates_a_line_then_increases_it` |
-| Adding the same product again increases the existing line | `add_item()` updates the line found by `buyer_id` and `product_id` | `test_adding_the_same_product_again_increases_the_existing_line` |
+| An added product is stored in the database with its quantity | Add to Cart on `/products/:productCode` (#78) calls `POST /api/v1/cart/items`, which runs `CartService.add_item()` | `test_first_add_stores_one_line`, `test_add_creates_a_line_then_increases_it`, `test_buyer_can_add_product_to_database_backed_cart` |
+| Adding the same product again increases the existing line | `add_item()` increases the line found by `buyer_id` and `product_id` in one `UPDATE`, so concurrent additions are all kept | `test_adding_the_same_product_again_increases_the_existing_line`, `test_add_does_not_overwrite_an_increase_made_after_reading_the_line`, `test_concurrent_cart_additions_preserve_all_updates`, `test_concurrent_cart_inserts_handle_conflict_gracefully` |
 | Quantity 2 changed to 3 is still correct after a reload | `PATCH /api/v1/cart/items/{productCode}`; the page reloads from `GET /api/v1/cart` | `test_quantity_change_survives_a_reload_with_recalculated_total`, `test_quantity_change_survives_a_reload` |
 | Removing a line recalculates the total | `DELETE /api/v1/cart/items/{productCode}` returns the remaining cart | `test_removing_a_line_keeps_the_others_and_recalculates_the_total`, `test_delete_removes_the_line_and_recalculates_the_total` |
 | A quantity above available stock is refused and the previous one kept | `validate_purchasable_quantity()`; the page puts the previous quantity back and shows the server's message next to the line | `test_update_above_available_stock_keeps_the_previous_quantity`, `test_quantity_above_stock_is_refused_and_the_previous_one_kept` |
@@ -208,7 +208,7 @@ SQLite database file seeded with `python -m src.seed` and the seeded buyer
 `user@example.com`. Environment: Ubuntu 24.04 on WSL2, Python 3.12.3,
 FastAPI 0.142.2, SQLModel 0.0.22, SQLAlchemy 2.0.54, Uvicorn 0.54.0, headless
 Chromium 149 driven by Playwright. Items were added with
-`POST /api/v1/cart/items`, because the Add to Cart button belongs to #78.
+`POST /api/v1/cart/items`, before the Add to Cart button of #78 was merged.
 
 | Check | Result |
 |---|---|
@@ -231,11 +231,25 @@ Chromium 149 driven by Playwright. Items were added with
 
 ![Empty cart with total 0 and Continue shopping](images/issue79-cart-empty.png)
 
+#### Add to Cart from the product detail page (#78)
+
+Captured on 2026-10-16 against the merge commit `d9f956e`, after #78
+([PR #91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)) reached `main`, on a new seeded database in the same environment.
+
+| Check | Result |
+|---|---|
+| Guest opens `Wireless Mouse` from the catalog, sets quantity 2, selects Add to Cart | Sent to `/login?return_to=/products/P-100?quantity=2`; nothing is added yet |
+| Buyer logs in | Back on `/products/P-100` with quantity 2 kept; Add to Cart opens `/cart` with one `P-100` line of 2, and `cart_items` holds the same |
+| Add `P-100` again with quantity 1 | Still one line, now 3; total `540.000 ₫` |
+| Add 8 more from the detail page (10 available, 3 in the cart) | The detail page shows `Cannot add more than 10 items (available stock limit)` and stays open; the cart keeps 3 |
+| Product with no available stock | `Out of stock` and Add to Cart disabled |
+| Cart link in the detail page navigation | Opens `/cart` |
+
+![Cart after adding Wireless Mouse twice from the product detail page](images/issue79-cart-from-detail.png)
+
 To reproduce, seed a new database as in the `/products` evidence above, start
-the app, open http://127.0.0.1:8000/cart and log in as `user@example.com` with
-password `password`. Add items from the API documentation at `/docs`
-(`POST /api/v1/cart/items`, authorised with the token from
-`POST /api/v1/auth/login`) until #78 provides the Add to Cart button.
+the app, open http://127.0.0.1:8000/products, choose a product, select Add to
+Cart and log in as `user@example.com` with password `password`.
 
 ## REST API design
 
@@ -277,7 +291,7 @@ Numbered, so issues and tests can cite them.
 | # | Rule | Enforced where (on `main` at `37e80c3`) | Tested by |
 |---|------|----------------|-----------|
 | BR1 | Only available products can be displayed in the product catalog. | `list_products()` in `src/api/products.py` returns only rows with `is_active = TRUE`. Stock is not checked: an out-of-stock product is listed with `stock_status: out_of_stock` (gap G2). | `test_products_database_pagination_and_visibility` in `tests/test_products.py` (an inactive product is left out); the scenarios in `tests/test_issue45_scenarios.py` |
-| BR2 | Buyers may add or update cart items only when the requested quantity is a positive integer and does not exceed current available stock. Adding an item to the cart does not reserve stock. | `validate_quantity()` and `validate_purchasable_quantity()` in `src/services/cart.py` (#79): available stock is `stock_quantity - reserved_stock`, and `POST` checks the quantity after adding to an existing line. The cart never writes to `products`. Backed by CHECK `quantity > 0` and `UNIQUE(buyer_id, product_id)` on `cart_items` (#46). | `tests/test_cart_service.py` (`test_reserved_stock_is_not_available_to_the_cart`, `test_add_checks_stock_against_the_quantity_after_adding`, `test_cart_changes_never_touch_product_stock`, invalid quantities); `tests/test_cart_api.py` (`409`, `400` and `422` responses) |
+| BR2 | Buyers may add or update cart items only when the requested quantity is a positive integer and does not exceed current available stock. Adding an item to the cart does not reserve stock. | `validate_quantity()` and `validate_purchasable_quantity()` in `src/services/cart.py` (#79): available stock is `stock_quantity - reserved_stock`, and `POST` checks the quantity after adding to an existing line. The cart never writes to `products`. Backed by CHECK `quantity > 0` and `UNIQUE(buyer_id, product_id)` on `cart_items` (#46). | `tests/test_cart_service.py` (`test_reserved_stock_is_not_available_to_the_cart`, `test_add_checks_stock_against_the_quantity_after_adding`, `test_cart_changes_never_touch_product_stock`, invalid quantities); `tests/test_cart_api.py` (`409`, `400` and `422` responses); `test_add_rechecks_stock_when_the_line_filled_up_after_reading`, and `test_concurrent_additions_respect_stock_limit` in `tests/test_product_detail.py` |
 | BR3 | A buyer must be authenticated before placing an order. | Design only: Bearer token on checkout ([API design](design.md#32-authentication-and-common-response-rules)). No authentication exists. | None yet |
 | BR4 | A buyer can view only their own orders. | Design only: order endpoints and authentication are not built. | None yet |
 | BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | Schema only: `products.seller_id` is a foreign key to `users.id` (#46). Taking the seller from the token needs authentication, which does not exist. | None yet (gap G7) |
