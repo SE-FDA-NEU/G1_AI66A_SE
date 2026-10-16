@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product details | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/products.css">
+  <script src="/static/product-detail.js" defer></script>
+</head>
+<body>
+  <main class="catalog">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/products">Products</a>
+      <a id="cart-link" href="/cart">Cart</a>
+      <a id="login-link" href="/login">Log in</a>
+      <button id="logout-button" class="button" type="button" hidden>Log out</button>
+    </nav>
+    <a class="back-link" href="/products">← Back to products</a>
+    <p id="detail-status" class="state__message" role="status" aria-live="polite">Loading product…</p>
+    <section id="product-detail" class="product-detail" hidden aria-labelledby="product-name">
+      <img id="product-image" class="product-detail__image" alt="">
+      <div class="product-detail__content">
+        <h1 id="product-name" class="catalog__title"></h1>
+        <p id="product-price" class="product-card__price"></p>
+        <p id="product-description"></p>
+        <p id="product-stock" class="product-detail__stock"></p>
+        <form id="add-to-cart-form" class="cart-form">
+          <label for="product-quantity">Quantity</label>
+          <input id="product-quantity" type="number" min="1" value="1" required>
+          <button id="add-to-cart" class="button" type="submit">Add to Cart</button>
+        </form>
+        <p id="cart-status" class="state__message" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+    <section id="detail-error" class="state" hidden>
+      <p id="detail-error-message" class="state__message"></p>
+      <a class="button button--link" href="/products">Back to catalogue</a>
+      <button id="detail-retry" class="button" type="button">Retry</button>
+    </section>
+  </main>
+</body>
+</html>

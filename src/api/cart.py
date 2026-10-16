@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cart", tags=["Cart"])
 
-CART_DATABASE_ERROR_MESSAGE = "Unable to update your cart right now. Please try again later."
+CART_DATABASE_ERROR_MESSAGE = "Unable to update cart right now. Please try again later."
 
 ERROR_STATUS: dict[CartErrorCode, int] = {
     CartErrorCode.INVALID_QUANTITY: status.HTTP_400_BAD_REQUEST,

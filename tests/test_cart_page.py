@@ -67,7 +67,7 @@ def test_cart_script_sends_the_token_and_returns_to_the_cart_after_login(
 
 
 def test_catalog_navigation_links_to_the_cart(client: TestClient) -> None:
-    assert '<a href="/cart">Cart</a>' in client.get("/products").text
+    assert '<a id="cart-link" href="/cart">Cart</a>' in client.get("/products").text
 
 
 @pytest.mark.parametrize(
