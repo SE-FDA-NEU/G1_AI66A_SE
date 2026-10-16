@@ -35,3 +35,15 @@ def cart_page() -> FileResponse:
 def login_page() -> FileResponse:
     """Serve the login page."""
     return FileResponse(PAGES_DIR / "login.html")
+
+
+@router.get("/checkout", response_class=FileResponse, include_in_schema=False)
+def checkout_page() -> FileResponse:
+    return FileResponse(PAGES_DIR / "checkout.html")
+
+
+@router.get(
+    "/checkout/confirmation/{order_id}", response_class=FileResponse, include_in_schema=False
+)
+def confirmation_page(order_id: int) -> FileResponse:
+    return FileResponse(PAGES_DIR / "confirmation.html")
