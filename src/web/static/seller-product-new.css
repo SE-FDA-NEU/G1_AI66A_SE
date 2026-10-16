@@ -151,8 +151,12 @@
   outline-offset: 2px;
 }
 
-#account-retry {
+#account-status {
   margin-bottom: 16px;
+}
+
+#account-retry {
+  margin: 0 0 16px;
 }
 
 @media (max-width: 480px) {

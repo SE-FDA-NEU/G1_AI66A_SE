@@ -296,7 +296,7 @@ assert.equal(page.fieldError("price").textContent, "Price must be greater than 0
 assert.equal(page.fieldError("price").hidden, false);
 assert.equal(page.field("price").getAttribute("aria-invalid"), "true");
 assert.equal(page.fieldError("name").hidden, true);
-assert.deepEqual(page.summaryLines(), ["Price: Price must be greater than 0 ₫.",
+assert.deepEqual(page.summaryLines(), ["Price must be greater than 0 ₫.",
   "seller_id is set by the server and cannot be sent."]);
 assert.equal(focused, page.field("price"));
 assert.deepEqual(page.values(), VALID, "Values are kept after a 422");

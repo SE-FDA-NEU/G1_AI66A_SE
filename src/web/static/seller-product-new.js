@@ -124,7 +124,7 @@ function showErrors(fields, title) {
     node.textContent = messages.join(" ");
     node.hidden = false;
     form.elements[name].setAttribute("aria-invalid", "true");
-    lines.push(`${LABELS[name]}: ${messages.join(" ")}`);
+    lines.push(...messages);
     firstInvalid = firstInvalid || form.elements[name];
   }
   for (const [name, value] of Object.entries(fields)) {
