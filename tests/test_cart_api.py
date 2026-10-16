@@ -265,12 +265,13 @@ def test_buyers_only_see_and_change_their_own_cart(api: TestClient, engine: Engi
     assert stored_lines(engine, OTHER_BUYER_ID) == []
 
 
-def test_concurrent_insert_of_the_same_line_is_a_conflict(
+def test_add_that_keeps_losing_races_is_a_conflict(
     api: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     add_product(engine, "P-100")
     add_item(api, "P-100", 2, BUYER)
     monkeypatch.setattr(cart_module, "find_cart_item_for_product", lambda *_args: None)
+    monkeypatch.setattr(cart_module, "RETRY_BACKOFF_SECONDS", 0)
 
     response = add_item(api, "P-100", 1, BUYER)
 

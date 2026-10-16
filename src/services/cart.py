@@ -5,12 +5,14 @@ tokens or HTTP requests. Each mutation commits or rolls back on its own, so a ro
 commit again.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TypeVar
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
 from src.models.cart_item import CartItem
@@ -25,6 +27,13 @@ CART_ITEM_NOT_FOUND_MESSAGE = "This product is not in your cart."
 CONCURRENCY_CONFLICT_MESSAGE = (
     "Your cart was changed by another request. Please reload and try again."
 )
+
+MAX_MUTATION_ATTEMPTS = 5
+RETRY_BACKOFF_SECONDS = 0.01
+SQLITE_BUSY = 5
+SQLITE_LOCKED = 6
+
+T = TypeVar("T")
 
 
 class CartErrorCode(StrEnum):
@@ -45,6 +54,10 @@ class CartError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class StaleCartLine(Exception):
+    """A line changed between being read and being increased; the change must run again."""
 
 
 @dataclass(frozen=True)
@@ -122,6 +135,36 @@ def find_buyer_cart_item(
     return cart_item, product
 
 
+def increase_line(
+    session: Session, cart_item: CartItem, quantity: int, available_stock: int
+) -> None:
+    """Add to a line in one UPDATE, so requests adding at the same time never overwrite each other.
+
+    The stock limit is part of the WHERE clause: when another request filled the line in
+    between, no row changes and StaleCartLine makes the change run again on fresh data.
+    """
+    result = session.exec(
+        update(CartItem)
+        .where(CartItem.id == cart_item.id, CartItem.quantity + quantity <= available_stock)
+        .values(quantity=CartItem.quantity + quantity)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount == 0:
+        raise StaleCartLine
+    session.expire(cart_item)
+
+
+def is_lost_race(error: Exception) -> bool:
+    """Whether a change failed only because another request changed the same cart first."""
+    if isinstance(error, (IntegrityError, StaleCartLine)):
+        return True
+    if not isinstance(error, OperationalError):
+        return False
+    # SQLite refuses a write with BUSY or LOCKED while, or after, another request writes.
+    code = getattr(error.orig, "sqlite_errorcode", None)
+    return code is not None and code & 0xFF in (SQLITE_BUSY, SQLITE_LOCKED)
+
+
 def to_cart_line(cart_item: CartItem, product: Product) -> CartLine:
     """Price one line from the current product row."""
     return CartLine(
@@ -166,60 +209,70 @@ class CartService:
     def add_item(self, buyer_id: int, product_code: str, quantity: int) -> AddItemResult:
         """Add a new line, or increase the existing one; the resulting quantity must fit stock."""
         validate_quantity(quantity)
-        with self._mutation():
+
+        def change() -> AddItemResult:
             product = find_product(self.session, product_code)
             cart_item = find_cart_item_for_product(self.session, buyer_id, product.id)
-            created = cart_item is None
-            new_quantity = quantity if created else cart_item.quantity + quantity
-            validate_purchasable_quantity(product, new_quantity)
-            if created:
-                cart_item = CartItem(
-                    buyer_id=buyer_id, product_id=product.id, quantity=new_quantity
+            if cart_item is None:
+                validate_purchasable_quantity(product, quantity)
+                self.session.add(
+                    CartItem(buyer_id=buyer_id, product_id=product.id, quantity=quantity)
                 )
-            else:
-                cart_item.quantity = new_quantity
-            self.session.add(cart_item)
-            cart = self._flush_and_snapshot(buyer_id)
-        return AddItemResult(cart=cart, created=created)
+                return AddItemResult(cart=self._flush_and_snapshot(buyer_id), created=True)
+            validate_purchasable_quantity(product, cart_item.quantity + quantity)
+            increase_line(self.session, cart_item, quantity, get_available_stock(product))
+            return AddItemResult(cart=self._flush_and_snapshot(buyer_id), created=False)
+
+        return self._run_mutation(change)
 
     def update_item(self, buyer_id: int, product_code: str, quantity: int) -> Cart:
         """Replace a line's quantity. Zero is refused: the buyer removes the line instead."""
         validate_quantity(quantity)
-        with self._mutation():
+
+        def change() -> Cart:
             cart_item, product = find_buyer_cart_item(self.session, buyer_id, product_code)
             validate_purchasable_quantity(product, quantity)
             cart_item.quantity = quantity
             self.session.add(cart_item)
-            cart = self._flush_and_snapshot(buyer_id)
-        return cart
+            return self._flush_and_snapshot(buyer_id)
+
+        return self._run_mutation(change)
 
     def remove_item(self, buyer_id: int, product_code: str) -> Cart:
         """Delete one line of the buyer's cart, including a line whose product was withdrawn."""
-        with self._mutation():
+
+        def change() -> Cart:
             cart_item, _product = find_buyer_cart_item(self.session, buyer_id, product_code)
             self.session.delete(cart_item)
-            cart = self._flush_and_snapshot(buyer_id)
-        return cart
+            return self._flush_and_snapshot(buyer_id)
+
+        return self._run_mutation(change)
 
     def _flush_and_snapshot(self, buyer_id: int) -> Cart:
         self.session.flush()
         return build_cart_snapshot(self.session, buyer_id)
 
-    @contextmanager
-    def _mutation(self) -> Iterator[None]:
-        """Commit everything done in the block, or roll all of it back.
+    def _run_mutation(self, change: Callable[[], T]) -> T:
+        """Run `change` and commit it, or roll all of it back.
 
-        Two requests that both insert the same line trip UNIQUE(buyer_id, product_id); the
-        loser gets ERR_CONCURRENCY_CONFLICT instead of a 500, and nothing is retried.
+        When another request wins a race on the same cart (both insert the same line, a line
+        changes under an increase, or SQLite is busy), the change runs again on fresh data, at
+        most MAX_MUTATION_ATTEMPTS times. After that the buyer gets ERR_CONCURRENCY_CONFLICT
+        instead of a 500.
         """
-        try:
-            yield
-            self.session.commit()
-        except IntegrityError as exc:
-            self.session.rollback()
-            raise CartError(
-                CartErrorCode.CONCURRENCY_CONFLICT, CONCURRENCY_CONFLICT_MESSAGE
-            ) from exc
-        except Exception:
-            self.session.rollback()
-            raise
+        attempt = 1
+        while True:
+            try:
+                result = change()
+                self.session.commit()
+                return result
+            except Exception as exc:
+                self.session.rollback()
+                if not is_lost_race(exc):
+                    raise
+                if attempt == MAX_MUTATION_ATTEMPTS:
+                    raise CartError(
+                        CartErrorCode.CONCURRENCY_CONFLICT, CONCURRENCY_CONFLICT_MESSAGE
+                    ) from exc
+                time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+                attempt += 1

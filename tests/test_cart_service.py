@@ -6,20 +6,23 @@ Every service call runs in its own session, the way one API request does.
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
 import src.services.cart as cart_module
+from src.models.cart_item import CartItem
 from src.schemas.cart import (
     AddCartItemRequest,
     CartLine,
     CartLineAvailability,
     UpdateCartItemRequest,
 )
-from src.services.cart import CartError, CartErrorCode, CartService
+from src.services.cart import CartError, CartErrorCode, CartService, is_lost_race
 from tests.cart_db import (
     BUYER_ID,
     OTHER_BUYER_ID,
@@ -358,14 +361,86 @@ def test_cart_is_priced_from_the_current_database_price(engine: Engine) -> None:
     assert snapshot.cart_total == 240_000
 
 
-def test_concurrent_insert_of_the_same_line_is_a_controlled_conflict(
+def bump_line_after_reading(
+    monkeypatch: pytest.MonkeyPatch, engine: Engine, quantity: int
+) -> None:
+    """Simulate another request that sets the line to `quantity` right after this one reads it."""
+    original = cart_module.find_cart_item_for_product
+
+    def read_then_bump(session: Session, buyer_id: int, product_id: int):
+        cart_item = original(session, buyer_id, product_id)
+        monkeypatch.setattr(cart_module, "find_cart_item_for_product", original)
+        with Session(engine) as other_request:
+            other_item = other_request.get(CartItem, cart_item.id)
+            other_item.quantity = quantity
+            other_request.add(other_item)
+            other_request.commit()
+        return cart_item
+
+    monkeypatch.setattr(cart_module, "find_cart_item_for_product", read_then_bump)
+
+
+def test_add_does_not_overwrite_an_increase_made_after_reading_the_line(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Another request inserted the line after this one looked for it."""
+    add_product(engine, "P-100", stock=10)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 1)
+    bump_line_after_reading(monkeypatch, engine, 3)
+
+    with open_cart(engine) as cart:
+        result = cart.add_item(BUYER_ID, "P-100", 2)
+
+    assert result.created is False
+    assert line_summary(result.cart.items) == [("P-100", 5, 500_000)]
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 5)]
+
+
+def test_add_rechecks_stock_when_the_line_filled_up_after_reading(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add_product(engine, "P-100", stock=3)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 1)
+    bump_line_after_reading(monkeypatch, engine, 3)
+
+    with open_cart(engine) as cart, pytest.raises(CartError) as error:
+        cart.add_item(BUYER_ID, "P-100", 2)
+
+    assert error.value.code is CartErrorCode.STOCK_EXCEEDED
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 3)]
+
+
+def test_add_that_loses_an_insert_race_increases_the_new_line(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another request inserted the line after this one found none; the retry adds to it."""
+    add_product(engine, "P-100")
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 2)
+    original = cart_module.find_cart_item_for_product
+
+    def missed_once(*args):
+        monkeypatch.setattr(cart_module, "find_cart_item_for_product", original)
+        return None
+
+    monkeypatch.setattr(cart_module, "find_cart_item_for_product", missed_once)
+
+    with open_cart(engine) as cart:
+        result = cart.add_item(BUYER_ID, "P-100", 1)
+
+    assert result.created is False
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 3)]
+
+
+def test_add_that_keeps_losing_races_ends_in_a_controlled_conflict(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
     add_product(engine, "P-100")
     with open_cart(engine) as cart:
         cart.add_item(BUYER_ID, "P-100", 2)
     monkeypatch.setattr(cart_module, "find_cart_item_for_product", lambda *_args: None)
+    monkeypatch.setattr(cart_module, "RETRY_BACKOFF_SECONDS", 0)
 
     with open_cart(engine) as cart:
         with pytest.raises(CartError) as error:
@@ -375,3 +450,17 @@ def test_concurrent_insert_of_the_same_line_is_a_controlled_conflict(
     assert error.value.code is CartErrorCode.CONCURRENCY_CONFLICT
     assert line_summary(after_rollback.items) == [("P-100", 2, 200_000)]
     assert stored_lines(engine, BUYER_ID) == [("P-100", 2)]
+
+
+@pytest.mark.parametrize(
+    ("sqlite_errorcode", "lost_race"),
+    [(5, True), (517, True), (6, True), (1, False), (None, False)],
+)
+def test_only_busy_or_locked_database_errors_count_as_a_lost_race(
+    sqlite_errorcode: int | None, lost_race: bool
+) -> None:
+    """SQLITE_BUSY (5, or 517 for a stale snapshot) and SQLITE_LOCKED (6) are retried."""
+    driver_error = SimpleNamespace(sqlite_errorcode=sqlite_errorcode)
+
+    assert is_lost_race(OperationalError("UPDATE cart_items", {}, driver_error)) is lost_race
+    assert is_lost_race(ValueError("not a database error")) is False
