@@ -141,6 +141,19 @@ def require_seller(user: CurrentUser) -> User:
 SellerUser = Annotated[User, Depends(require_seller)]
 
 
+def require_buyer(user: CurrentUser) -> User:
+    """Require an authenticated buyer for buyer-only endpoints."""
+    if user.role != "buyer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_BUYER_REQUIRED", "A buyer account is required."),
+        )
+    return user
+
+
+BuyerUser = Annotated[User, Depends(require_buyer)]
+
+
 def _b64encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
