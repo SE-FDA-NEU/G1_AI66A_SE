@@ -142,7 +142,7 @@ SellerUser = Annotated[User, Depends(require_seller)]
 
 
 def require_buyer(user: CurrentUser) -> User:
-    """Require an authenticated buyer for buyer-only endpoints."""
+    """Require an authenticated buyer for buyer-only endpoints such as the cart."""
     if user.role != "buyer":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

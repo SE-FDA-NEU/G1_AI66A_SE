@@ -120,3 +120,4 @@ The application will be accessible at:
 - **Interactive API Documentation:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Walking Skeleton Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
 - **Products Page (US01):** [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products)
+- **Cart Page (US03):** [http://127.0.0.1:8000/cart](http://127.0.0.1:8000/cart) (log in as the buyer `user@example.com`)

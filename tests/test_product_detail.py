@@ -120,8 +120,9 @@ def test_buyer_can_add_product_to_database_backed_cart(client: TestClient) -> No
     )
 
     assert response.status_code == 201
-    assert response.json()["data"]["product_code"] == "DETAIL-1"
-    assert response.json()["data"]["quantity"] == 2
+    line = response.json()["data"]["items"][0]
+    assert line["product_code"] == "DETAIL-1"
+    assert line["quantity"] == 2
     with Session(engine) as session:
         item = session.exec(select_cart_item()).one()
         assert item.quantity == 2

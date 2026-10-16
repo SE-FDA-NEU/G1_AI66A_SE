@@ -3,21 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Your Cart | Mini Marketplace</title>
+  <title>Cart | Mini Marketplace</title>
   <link rel="stylesheet" href="/static/products.css">
+  <link rel="stylesheet" href="/static/cart.css">
+  <script src="/static/cart.js" defer></script>
 </head>
 <body>
-  <main class="catalog">
+  <main id="cart" class="catalog cart">
     <nav class="site-nav" aria-label="Main navigation">
       <a href="/products">Products</a>
-      <a id="cart-link" href="/cart">Cart</a>
-      <a id="login-link" href="/login">Log in</a>
-      <button id="logout-button" class="button" type="button" hidden>Log out</button>
+      <a id="cart-link" href="/cart" aria-current="page">Cart</a>
+      <button id="logout-button" class="button" type="button">Log out</button>
     </nav>
-    <h1 class="catalog__title">Your Cart</h1>
-    <section id="cart" class="cart">
-      <p id="cart-status" class="state__message" role="status" aria-live="polite">Your cart is empty.</p>
+    <h1 class="catalog__title">Your cart</h1>
+
+    <p id="cart-status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <ul id="cart-loading" class="cart-lines" aria-hidden="true">
+      <li class="cart-skeleton"></li>
+      <li class="cart-skeleton"></li>
+      <li class="cart-skeleton"></li>
+    </ul>
+
+    <section id="cart-content" aria-label="Cart items" hidden>
+      <ul id="cart-lines" class="cart-lines"></ul>
+      <div class="cart-summary">
+        <div>
+          <p class="cart-total">Total: <strong id="cart-total"></strong></p>
+          <p class="cart-summary__note">Shipping is calculated at checkout.</p>
+          <p id="checkout-blocked" class="cart-summary__note" hidden>
+            Update or remove the highlighted items before checkout.
+          </p>
+        </div>
+        <div class="cart-summary__actions">
+          <a class="cart-summary__link" href="/products">Continue shopping</a>
+          <button id="checkout-button" class="button" type="button">Checkout</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="cart-empty" class="state" hidden>
+      <p class="state__message">Your cart is empty.</p>
+      <p class="cart-total">Total: <strong id="cart-empty-total"></strong></p>
       <a class="button" href="/products">Continue shopping</a>
+    </section>
+
+    <section id="cart-error" class="state" hidden>
+      <p id="cart-error-message" class="state__message">Unable to load your cart. Please try again.</p>
+      <button id="cart-retry" class="button" type="button">Retry</button>
     </section>
   </main>
 </body>

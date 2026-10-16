@@ -27,7 +27,7 @@ def product_detail_page(product_code: str) -> FileResponse:
 
 @router.get("/cart", response_class=FileResponse, include_in_schema=False)
 def cart_page() -> FileResponse:
-    """Serve the shopping cart page (US03)."""
+    """Serve the shopping cart page (US03); its script loads the cart from the API."""
     return FileResponse(PAGES_DIR / "cart.html")
 
 
