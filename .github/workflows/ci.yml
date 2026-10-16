@@ -60,6 +60,17 @@ jobs:
       - name: Test
         run: pytest -v --cov --cov-report=term-missing --junitxml=junit.xml
 
+      # The page scripts are plain browser JavaScript with no npm build, so the Node job
+      # above never runs; these checks execute them against DOM/network test doubles.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Page script checks
+        run: |
+          node tests/checkout_ui.mjs
+          node tests/seller_products_ui.mjs
+
       - name: Publish test summary
         if: always()
         run: |
