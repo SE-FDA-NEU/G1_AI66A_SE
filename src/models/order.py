@@ -21,6 +21,10 @@ class Order(SQLModel, table=True):
         index=True,
     )
 
+    request_key: str | None = Field(default=None, max_length=64, unique=True, index=True)
+
+    request_hash: str | None = Field(default=None, max_length=64)
+
     total_amount: int = Field(ge=0)
 
     status: str = Field(max_length=30)
