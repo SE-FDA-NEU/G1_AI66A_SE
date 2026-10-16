@@ -438,3 +438,59 @@ page.storageEvent("access_token");
 assert.equal(page.form.hidden, true);
 assert.equal(page.get("reload-page").hidden, false);
 console.log("Account-switch checks passed: before submit, during POST, during check, other tab.");
+
+// Task 3: a new listing in the real catalog and detail scripts, with an image URL that fails.
+const PLACEHOLDER = "/static/product-placeholder.svg";
+const BROKEN = "https://images.invalid/missing.jpg";
+const listing = {id: "46", code: "P-6E1059D348A4CB729F", name: htmlName, description: "<b>desc</b>",
+  price: 180000, thumbnail_url: BROKEN, image_url: BROKEN, stock_quantity: 10, stock_status: "in_stock"};
+
+async function runPage(script, pathname, responses) {
+  focused = null;
+  const nodes = new Map();
+  const get = id => {
+    if (!nodes.has(id)) nodes.set(id, new Element(id));
+    return nodes.get(id);
+  };
+  const location = {pathname, search: "", assign() {}, replace() {}};
+  const context = vm.createContext({
+    document: {getElementById: get, createElement: tag => new Element("", tag)},
+    window: {location, addEventListener() {}},
+    location,
+    localStorage: {getItem: () => null, removeItem() {}},
+    sessionStorage: {getItem: () => null, setItem() {}, removeItem() {}},
+    fetch: async url => {
+      const next = responses.shift();
+      assert.ok(next, `Unexpected request: ${url}`);
+      return {status: 200, ok: true, json: async () => next};
+    },
+    AbortController, URLSearchParams, Intl, setTimeout, clearTimeout, console,
+  });
+  vm.runInContext(await read(script), context);
+  await settle();
+  return get;
+}
+
+let get = await runPage("products.js", "/products",
+  [{data: [listing], meta: {current_page: 1, limit: 20, total: 1, total_pages: 1}}]);
+const [card] = get("products-grid").children;
+const [link] = card.children;
+const [image, body] = link.children;
+assert.equal(get("products-grid").hidden, false);
+assert.equal(link.href, "/products/P-6E1059D348A4CB729F");
+assert.equal(body.children[0].textContent, htmlName);
+assert.equal(image.src, BROKEN);
+image.dispatch("error");
+assert.equal(image.src, PLACEHOLDER, "A broken catalog image falls back to the placeholder");
+
+get = await runPage("product-detail.js", "/products/P-6E1059D348A4CB729F",
+  [{...listing, stock_quantity: 0, stock_status: "out_of_stock"}]);
+assert.equal(get("product-detail").hidden, false);
+assert.equal(get("product-name").textContent, htmlName);
+assert.equal(get("product-description").textContent, "<b>desc</b>");
+assert.equal(get("product-stock").textContent, "Out of stock");
+assert.equal(get("add-to-cart").disabled, true);
+assert.equal(get("product-image").src, BROKEN);
+get("product-image").dispatch("error");
+assert.equal(get("product-image").src, PLACEHOLDER, "A broken detail image falls back to the placeholder");
+console.log("Discovery checks passed: catalog card link, detail out of stock, image fallback.");

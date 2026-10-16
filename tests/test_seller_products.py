@@ -19,7 +19,9 @@ import src.services.seller_products as service
 from src.auth import create_access_token
 from src.database import get_session
 from src.main import create_app
+from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.schemas.seller_products import (
     DESCRIPTION_MAX_LENGTH,
@@ -550,6 +552,113 @@ def test_form_page_and_its_assets_are_served_to_anyone(api):
         response = api.get(asset)
         assert response.status_code == 200
         assert content_type in response.headers["content-type"]
+
+
+# Task 3: the created listing in the catalog, detail page, cart and checkout
+
+
+def create_listing(api, engine, seller_id=SELLER_ID, **patch):
+    response = api.post(URL, json={**VALID, **patch}, headers=headers(engine, seller_id))
+    assert response.status_code == 201, response.text
+    return response.json()["data"]
+
+
+def catalog_codes(api, **params):
+    response = api.get("/api/v1/products", params=params)
+    assert response.status_code == 200
+    return [item["code"] for item in response.json()["data"]]
+
+
+def test_a_listing_with_stock_is_discoverable_and_can_be_bought(api, engine):
+    product = create_listing(
+        api, engine, OTHER_SELLER_ID, name="Seller B Desk Lamp", price=250_000, stock_quantity=3
+    )
+    code = product["code"]
+
+    assert catalog_codes(api, search="seller b desk lamp") == [code]
+    detail = api.get(f"/api/v1/products/{code}")
+    assert detail.status_code == 200
+    assert {key: detail.json()[key] for key in ("code", "name", "price", "stock_status")} == {
+        "code": code,
+        "name": "Seller B Desk Lamp",
+        "price": 250_000,
+        "stock_status": "low_stock",
+    }
+    assert detail.json()["image_url"] == detail.json()["thumbnail_url"] == VALID["image_url"]
+    # The success page's "View product" link opens the detail page by public code.
+    assert api.get(f"/products/{code}").status_code == 200
+
+    seller_cart = api.post(
+        "/api/v1/cart/items",
+        json={"product_code": code, "quantity": 1},
+        headers=headers(engine, OTHER_SELLER_ID),
+    )
+    assert seller_cart.status_code == 403
+    buyer = headers(engine, BUYER_ID)
+    added = api.post(
+        "/api/v1/cart/items", json={"product_code": code, "quantity": 2}, headers=buyer
+    )
+    assert added.status_code == 201, added.text
+    order = api.post(
+        "/api/v1/orders",
+        json={
+            "recipient_name": "Buyer",
+            "delivery_address": "123 Main Street",
+            "phone_number": "0912345678",
+        },
+        headers={**buyer, "Idempotency-Key": "us06-purchase"},
+    )
+    assert order.status_code == 201, order.text
+    assert order.json()["data"]["total_amount"] == 500_000
+
+    with Session(engine) as session:
+        seller_order = session.exec(select(SellerOrder)).one()
+        item = session.exec(select(OrderItem)).one()
+        bought = session.exec(select(Product).where(Product.code == code)).one()
+    assert seller_order.seller_id == OTHER_SELLER_ID
+    assert (item.product_id, item.quantity, item.unit_price) == (product["id"], 2, 250_000)
+    assert (bought.stock_quantity, bought.reserved_stock, bought.version) == (1, 0, 2)
+
+
+def test_a_zero_stock_listing_has_a_detail_page_but_stays_out_of_the_catalog(api, engine):
+    product = create_listing(api, engine, name="Restock Soon Kettle", stock_quantity=0)
+    code = product["code"]
+
+    assert product["is_active"] is True
+    detail = api.get(f"/api/v1/products/{code}")
+    assert detail.status_code == 200
+    assert (detail.json()["stock_quantity"], detail.json()["stock_status"]) == (0, "out_of_stock")
+    assert catalog_codes(api, search="Restock Soon") == []
+    assert code not in catalog_codes(api, limit=100)
+    added = api.post(
+        "/api/v1/cart/items",
+        json={"product_code": code, "quantity": 1},
+        headers=headers(engine, BUYER_ID),
+    )
+    assert added.status_code == 409
+    assert added.json()["error"]["code"] == "ERR_STOCK_EXCEEDED"
+
+
+def test_a_new_listing_can_be_after_the_first_catalog_page(api, engine):
+    for index in range(25):
+        add_product(engine, f"P-{index:03d}")
+    code = create_listing(api, engine, name="Late Listing")["code"]
+
+    assert code not in catalog_codes(api)
+    assert code in catalog_codes(api, page=2)
+    assert catalog_codes(api, search="late listing") == [code]
+
+
+def test_markup_in_a_name_is_stored_as_text_and_never_rendered_by_the_server(api, engine):
+    name = '<img src=x onerror="alert(1)"> & Co'
+    code = create_listing(api, engine, name=name)["code"]
+
+    assert api.get(f"/api/v1/products/{code}").json()["name"] == name
+    assert "<img src=x" not in api.get(f"/products/{code}").text
+
+
+def test_the_catalog_links_to_the_seller_form(api):
+    assert 'href="/seller/products/new"' in api.get("/products").text
 
 
 def test_service_error_carries_the_conflict_status():
