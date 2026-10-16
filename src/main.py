@@ -77,10 +77,13 @@ def create_app() -> FastAPI:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        del request, exc
+        message = "The request contains invalid fields."
+        if request.url.path == "/api/v1/orders":
+            fields = sorted({str(error["loc"][-1]) for error in exc.errors() if error["loc"]})
+            message = "Invalid checkout fields: " + ", ".join(fields) + "."
         return JSONResponse(
             status_code=422,
-            content=error_detail("ERR_VALIDATION", "The request contains invalid fields."),
+            content=error_detail("ERR_VALIDATION", message),
         )
 
     @app.exception_handler(SQLAlchemyError)

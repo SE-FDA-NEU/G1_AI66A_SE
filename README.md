@@ -121,3 +121,12 @@ The application will be accessible at:
 - **Walking Skeleton Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
 - **Products Page (US01):** [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products)
 - **Cart Page (US03):** [http://127.0.0.1:8000/cart](http://127.0.0.1:8000/cart) (log in as the buyer `user@example.com`)
+
+
+### Checkout and confirmation (US04 / #80)
+
+From a buyer cart choose Checkout, enter recipient name, address and phone, then
+confirm. Success opens /checkout/confirmation/{orderId}; only its buyer can retrieve
+the data. Checkout is atomic; retrying the same key returns the recorded order.
+No shipping fee is added. Startup/seeding applies a non-destructive orders schema
+upgrade to existing databases. See [US04 verification](docs/evidence/us04.md).
