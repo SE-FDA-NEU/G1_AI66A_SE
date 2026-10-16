@@ -681,6 +681,10 @@ token itself:
   `cart_total`.
 - A refused change leaves the cart exactly as it was. Each mutation commits or
   rolls back inside the service; the router does not commit again.
+- The database allows one line per buyer and product:
+  `UNIQUE(buyer_id, product_id)` on `cart_items` refuses a duplicate even when
+  the service is bypassed. `products.code` is unique, so this is also one line
+  per buyer and product code; `cart_items` does not repeat the code.
 - Adding to an existing line is one `UPDATE` that sets
   `quantity = quantity + n` only while the result fits available stock, so two
   requests adding to the same line at the same time both count. A change that loses a race
