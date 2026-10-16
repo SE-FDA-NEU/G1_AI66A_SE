@@ -197,8 +197,8 @@ visual styling and component implementation may evolve after review.
 │ Description       [                                      ]  │
 │ Price             [                  ] ₫                    │
 │ Stock quantity    [                  ]                      │
-│ Product image     [Upload image]                            │
-│ Active listing    [✓]                                       │
+│ Image URL         [https://...                           ]  │
+│ New listings are created active.                            │
 │                                                             │
 │ [Cancel]                              [Create listing]       │
 └─────────────────────────────────────────────────────────────┘
@@ -213,8 +213,9 @@ visual styling and component implementation may evolve after review.
   `productCode` and link to `/products/:productCode`. A seller product-list
   route is not part of this UI contract; `/seller/orders` remains a separate
   navigation destination for managing incoming orders.
-- **Data state:** Form fields for name, description, price, stock, image, and
-  active status.
+- **Data state:** Form fields for name, description, price, stock and image
+  URL. A new listing is always created active (#81); stock 0 shows it as out of
+  stock instead of hiding it.
 - **Loading state:** Disable submission and show `Creating listing...`.
 - **Empty state:** Not applicable to the form; blank fields show required-field
   guidance before submission.
@@ -355,3 +356,35 @@ key and payload. Reload restores that pending request. Success clears it and ope
 /checkout/confirmation/{orderId}. A definite client error unlocks the form.
 Confirmation Retry only uses GET; it never places a new order. Empty and unavailable
 carts cannot submit. User-facing API text is rendered with textContent.
+
+
+### US06 runtime contract (#81)
+
+The wireframe's image upload became an **Image URL** field: the listing stores an
+absolute http(s) URL and the server never downloads it. A URL that cannot be loaded
+keeps the listing; the catalog card and product page show the existing placeholder.
+The active checkbox became a fixed note: new listings are active, and a listing with
+stock 0 is shown as Out of stock and left out of the catalog.
+
+The page loads as a public shell and checks the account with `GET /api/v1/auth/me`
+using the token it was loaded with. Guests go to
+`/login?return_to=%2Fseller%2Fproducts%2Fnew`; buyers see a forbidden message with
+**Back to products** and **Log in as a seller**. If the stored token changes (another
+tab logs in or out), the page hides the form, sends nothing and asks for a reload.
+
+Each field has a label, a hint where useful, and an error line linked with
+`aria-describedby`. Invalid fields get `aria-invalid="true"`; the summary uses
+`role="alert"`, and focus moves to the first invalid field. Client checks mirror the
+server: required trimmed text, name up to 200 and description up to 3000 characters,
+whole-number price 1 to 1.000.000.000 ₫ and stock 0 to 1.000.000, absolute http(s)
+image URL. The server's `error.fields` are shown beside the matching inputs;
+`_form`, 409, 500 and network errors appear in the summary only. While the request
+is pending, every control is disabled and the status reads `Creating listing...`.
+Entered values are kept after every failure. A timeout or network error is reported
+as unconfirmed and never resent automatically. When the session expires during
+submit, the values are kept in sessionStorage for the same seller and restored after
+login. On success the form is replaced by the product name, its code, **View
+product** (`/products/{code}`), **Continue browsing** and **Create another
+product**. Names and server messages are rendered with `textContent`.
+
+The catalog navigation links to the form as **Create product**.
