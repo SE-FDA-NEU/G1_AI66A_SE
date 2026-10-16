@@ -11,10 +11,11 @@ A mini marketplace where sellers can list products, buyers can add products to c
 - **Product Owner (PO):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
 - **Scrum Master (SM - Sprint 1):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
 - **Scrum Master (SM - Sprint 2):** [@minhnm162](https://github.com/minhnm162)
+- **Scrum Master (SM - Sprint 3):** [@teddywristh](https://github.com/teddywristh)
 
 | Name | GitHub username | Team Role |
 | --- | --- | --- |
-| Nguyen Thuy Quynh | [@teddywristh](https://github.com/teddywristh) | Member |
+| Nguyen Thuy Quynh | [@teddywristh](https://github.com/teddywristh) | SM - Sprint 3 / Member |
 | Nguyen Quang Minh | [@MinhQuangQu](https://github.com/MinhQuangQu) | Member |
 | Nguyen Ho Nhat Minh | [@minhnm162](https://github.com/minhnm162) | SM - Sprint 2 / Member |
 | Le Duc Minh | [@leducminh290506-eng](https://github.com/leducminh290506-eng) | PO / SM - Sprint 1 / Member |
