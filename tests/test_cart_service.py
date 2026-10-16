@@ -10,8 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlmodel import Session
 
 import src.services.cart as cart_module
@@ -607,3 +608,32 @@ def test_only_busy_or_locked_database_errors_count_as_a_lost_race(
 
     assert is_lost_race(OperationalError("UPDATE cart_items", {}, driver_error)) is lost_race
     assert is_lost_race(ValueError("not a database error")) is False
+
+
+def test_database_allows_one_line_per_buyer_and_product(engine: Engine) -> None:
+    """UNIQUE(buyer_id, product_id) refuses a duplicate line even when the service is bypassed."""
+    product_id = add_product(engine, "P-100")
+
+    unique_constraints = inspect(engine).get_unique_constraints("cart_items")
+    assert {
+        "name": "uq_cart_items_buyer_product",
+        "column_names": ["buyer_id", "product_id"],
+    } in unique_constraints
+    with Session(engine) as session:
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=product_id, quantity=1))
+        session.add(CartItem(buyer_id=OTHER_BUYER_ID, product_id=product_id, quantity=1))
+        session.commit()
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=product_id, quantity=1))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 1)]
+    assert stored_lines(engine, OTHER_BUYER_ID) == [("P-100", 1)]
+
+
+def test_product_codes_are_unique_so_each_code_has_one_line_per_buyer(engine: Engine) -> None:
+    """Cart lines point to products.id; one code is one product, so (buyer, code) is unique too."""
+    add_product(engine, "P-100")
+
+    with pytest.raises(IntegrityError):
+        add_product(engine, "P-100")
