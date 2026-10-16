@@ -325,3 +325,43 @@ def test_unrelated_constraint_failure_is_not_retried(engine):
     assert counts(engine) == [0, 0, 0]
     assert stored_stock(engine, "P-100") == (10, 0)
     assert stored_lines(engine, 2) == [("P-100", 1)]
+
+
+@pytest.mark.parametrize(
+    "replacement_buyer, replacement_code", [(3, "P-200"), (3, "P-100"), (2, "P-200")]
+)
+def test_reused_cart_id_cannot_delete_replacement_line(
+    engine, monkeypatch, replacement_buyer, replacement_code
+):
+    from src.services.cart import CartService
+
+    add_product(engine, "P-100")
+    add_product(engine, "P-200")
+    fill(engine)
+    with Session(engine) as session:
+        original_id = session.exec(select(CartItem.id)).one()
+    original_flush = Session.flush
+    replaced = False
+
+    def replace_after_cart_read(session, *args, **kwargs):
+        nonlocal replaced
+        if not replaced and any(isinstance(row, Order) for row in session.new):
+            replaced = True
+            with Session(engine) as other:
+                CartService(other).remove_item(2, "P-100")
+            with Session(engine) as other:
+                CartService(other).add_item(replacement_buyer, replacement_code, 1)
+            with Session(engine) as other:
+                assert other.exec(select(CartItem.id)).one() == original_id
+        return original_flush(session, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "flush", replace_after_cart_read)
+    with pytest.raises(CheckoutError, match="Cart changed"):
+        place(engine)
+    assert replaced
+    assert counts(engine) == [0, 0, 0]
+    assert stored_stock(engine, "P-100") == (10, 0)
+    assert stored_stock(engine, "P-200") == (10, 0)
+    assert stored_lines(engine, replacement_buyer) == [(replacement_code, 1)]
+    if replacement_buyer != 2:
+        assert stored_lines(engine, 2) == []

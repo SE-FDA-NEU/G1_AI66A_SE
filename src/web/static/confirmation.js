@@ -13,8 +13,8 @@ async function load() {
     const order = payload.data;
     document.getElementById("status").textContent = "Order placed successfully.";
     const receipt = document.getElementById("receipt"); receipt.replaceChildren();
-    const rows = [`Order #${order.id} ? ${order.status}`, `Total: ${new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND"}).format(order.total_amount)}`, `${order.recipient_name} ? ${order.delivery_address} ? ${order.phone_number}`,
-      ...order.items.map(i => `Product #${i.product_id} ? ${i.quantity} ? ${i.unit_price} VND each`)];
+    const rows = [`Order #${order.id} \u00b7 ${order.status}`, `Total: ${new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND"}).format(order.total_amount)}`, `${order.recipient_name} \u00b7 ${order.delivery_address} \u00b7 ${order.phone_number}`,
+      ...order.items.map(i => `Product #${i.product_id} \u00d7 ${i.quantity} \u00b7 ${i.unit_price} VND each`)];
     for (const text of rows) { const p = document.createElement("p"); p.textContent = text; receipt.append(p); }
   } catch(e) { document.getElementById("status").textContent = "Confirmation unavailable."; document.getElementById("error").textContent = e.message; retry.hidden = false; }
 }

@@ -119,7 +119,12 @@ def checkout(
                 order.total_amount += product.price * line.quantity
                 removed = session.exec(
                     delete(CartItem)
-                    .where(CartItem.id == line.id, CartItem.quantity == line.quantity)
+                    .where(
+                        CartItem.id == line.id,
+                        CartItem.buyer_id == buyer_id,
+                        CartItem.product_id == line.product_id,
+                        CartItem.quantity == line.quantity,
+                    )
                     .execution_options(synchronize_session=False)
                 )
                 if removed.rowcount != 1:

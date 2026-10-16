@@ -18,11 +18,12 @@ function setup(responses, saved = null, script = checkoutSource) {
   nodes.set("checkout-form",form);
   const storage = new Map(saved ? [["checkout:2",JSON.stringify(saved)]] : []);
   const calls=[], navigations=[];
+  const auth = {token:"token"};
   const context = vm.createContext({
     document:{getElementById(id) {if (!nodes.has(id)) nodes.set(id,element()); return nodes.get(id);}, createElement:element},
-    localStorage:{getItem:()=>"token"},
+    localStorage:{getItem:()=>auth.token},
     sessionStorage:{getItem:key=>storage.get(key)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-    location:{pathname:"/checkout/confirmation/1",replace:url=>navigations.push(url),assign:url=>navigations.push(url),reload(){}},
+    location:{pathname:"/checkout/confirmation/1",replace:url=>navigations.push(url),assign:url=>navigations.push(url),reload(){navigations.push("reload");}},
     crypto:{randomUUID:()=>"stable-request-key"}, AbortSignal:{timeout:()=>null},
     FormData:class { constructor() {return Object.entries(body)[Symbol.iterator]();} },
     fetch:async(url,options)=> {
@@ -34,7 +35,7 @@ function setup(responses, saved = null, script = checkoutSource) {
     }, Intl, console,
   });
   vm.runInContext(script,context);
-  return {context,nodes,storage,calls,navigations};
+  return {context,nodes,storage,calls,navigations,auth};
 }
 const user={payload:{id:2,role:"buyer"}};
 const cart={payload:{data:{items:[{name:"Mouse",quantity:1,line_total:100,availability:"available"}],cart_total:100}}};
@@ -71,3 +72,22 @@ assert.equal(test.calls.length,2);
 assert.ok(test.calls.every(call=>call.url==="/api/v1/orders/1" && !call.options.method));
 assert.equal(test.nodes.get("status").textContent,"Order placed successfully.");
 console.log("Checkout script checks passed: cart states, timeout/replay, validation, receipt retry.");
+
+// An account switch must block both the first POST and a pending-request retry.
+for (const isRetry of [false,true]) {
+  test=setup(isRetry ? [user] : [user,cart],isRetry ? {key:"key",body} : null);
+  await tick();
+  const before=test.calls.length;
+  test.auth.token="buyer-B-token";
+  if (isRetry) await vm.runInContext("submit()",test.context);
+  else test.nodes.get("checkout-form").handlers.submit({preventDefault(){}});
+  await tick();
+  assert.equal(test.calls.length,before,"No POST may use the new account token");
+  assert.equal(test.nodes.get("checkout-form").hidden,true);
+  assert.match(test.nodes.get("status").textContent,/account.*changed/i);
+  if (isRetry) assert.ok(test.storage.has("checkout:2"),"A's pending key must survive");
+  else assert.equal(test.storage.size,0,"Do not save a new request under stale context");
+  test.nodes.get("retry").handlers.click();
+  assert.deepEqual(test.navigations,["reload"]);
+}
+console.log("Account-switch checks passed for initial submit and retry.");

@@ -1040,7 +1040,7 @@ One transaction creates the order, seller orders and purchase-price items, decre
 stock, deletes purchased cart lines and commits. Any failure rolls back everything.
 Stock UPDATE requires active status, matching products.version and
 stock_quantity - reserved_stock >= quantity; it decreases physical stock and
-increments version. Zero updated rows abort checkout. Cart deletion checks line ID
+increments version. Zero updated rows abort checkout. Cart deletion checks line ID, buyer ID, product ID
 and quantity; changed/deleted lines abort. Newly added lines are not deleted.
 Products are processed in product-ID order.
 
@@ -1053,3 +1053,16 @@ cart/race exhaustion: 409 ERR_CONCURRENCY_CONFLICT; invalid fields/missing key:
 The earlier contract's 400 for schema-invalid delivery input is superseded by 422,
 consistent with existing FastAPI validation. Checkout errors list field names only,
 not raw inputs. See docs/evidence/us04.md for verification and manual checks.
+
+
+### Review corrections for #80
+
+The purchased-line DELETE checks buyer_id and product_id in addition to ID and
+quantity, so SQLite ID reuse cannot identify another buyer/product as the original
+line. A zero row count still aborts and rolls back checkout.
+
+Checkout captures the token used to initialize its account context. Every request
+uses that captured token and checks current authentication before sending and after
+reading a response. A changed token blocks initial submit/retry, clears stale UI,
+and offers Reload checkout. The old account's pending request stays under its own
+storage key; a full reload must fetch the current account before confirmation.
