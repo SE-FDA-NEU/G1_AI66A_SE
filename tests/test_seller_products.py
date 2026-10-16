@@ -521,6 +521,37 @@ def test_a_seller_missing_from_the_database_is_not_retried(engine, monkeypatch):
     assert stored(engine) == []
 
 
+# Task 2: the form page
+
+
+def test_form_page_and_its_assets_are_served_to_anyone(api):
+    page = api.get("/seller/products/new")
+
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
+    html = page.text
+    assert 'src="/static/seller-product-new.js"' in html
+    assert 'href="/static/seller-product-new.css"' in html
+    for field, label in [
+        ("name", "Product name"),
+        ("description", "Description"),
+        ("price", "Price (₫)"),
+        ("stock_quantity", "Stock quantity"),
+        ("image_url", "Image URL"),
+    ]:
+        assert f'name="{field}"' in html
+        assert f">{label}</label>" in html
+        assert f'id="{field}-error"' in html
+    assert "Create listing" in html and 'role="alert"' in html
+    for asset, content_type in [
+        ("/static/seller-product-new.js", "javascript"),
+        ("/static/seller-product-new.css", "text/css"),
+    ]:
+        response = api.get(asset)
+        assert response.status_code == 200
+        assert content_type in response.headers["content-type"]
+
+
 def test_service_error_carries_the_conflict_status():
     error = SellerProductError("ERR_CONCURRENCY_CONFLICT", "message")
 
