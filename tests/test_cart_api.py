@@ -189,6 +189,23 @@ def test_delete_removes_the_line_and_recalculates_the_total(
     assert stored_lines(engine, BUYER_ID) == []
 
 
+def test_quantity_at_the_stock_limit_is_accepted_and_one_more_is_refused(
+    api: TestClient, engine: Engine
+) -> None:
+    add_product(engine, "P-100", stock=10, reserved=3)
+
+    add_at_limit = add_item(api, "P-100", 7, BUYER)
+    add_one_more = add_item(api, "P-100", 1, BUYER)
+    patch_at_limit = api.patch("/api/v1/cart/items/P-100", json={"quantity": 7}, headers=BUYER)
+    patch_over = api.patch("/api/v1/cart/items/P-100", json={"quantity": 8}, headers=BUYER)
+
+    assert add_at_limit.status_code == 201
+    assert (add_one_more.status_code, error_code(add_one_more)) == (409, "ERR_STOCK_EXCEEDED")
+    assert patch_at_limit.status_code == 200
+    assert (patch_over.status_code, error_code(patch_over)) == (409, "ERR_STOCK_EXCEEDED")
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 7)]
+
+
 @pytest.mark.parametrize("quantity", [0, -1])
 def test_non_positive_quantity_is_a_bad_request(
     api: TestClient, engine: Engine, quantity: int

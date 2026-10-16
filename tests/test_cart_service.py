@@ -157,6 +157,110 @@ def test_add_checks_stock_against_the_quantity_after_adding(engine: Engine) -> N
     assert stored_lines(engine, BUYER_ID) == [("P-100", 5)]
 
 
+# (stock_quantity, reserved_stock) whose available stock is 10, 7 and 1.
+STOCK_LEVELS = [(10, 0), (10, 3), (1, 0)]
+
+# One more than the available stock, including products with nothing left to sell.
+ONE_TOO_MANY = [
+    (10, 0, "Cannot add more than 10 items (available stock limit)"),
+    (10, 3, "Cannot add more than 7 items (available stock limit)"),
+    (1, 0, "Cannot add more than 1 items (available stock limit)"),
+    (0, 0, "This product is out of stock."),
+    (5, 5, "This product is out of stock."),
+]
+
+
+@pytest.mark.parametrize(("stock", "reserved"), STOCK_LEVELS)
+def test_add_accepts_exactly_the_available_stock(engine: Engine, stock: int, reserved: int) -> None:
+    add_product(engine, "P-100", stock=stock, reserved=reserved)
+
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", stock - reserved)
+
+    assert stored_lines(engine, BUYER_ID) == [("P-100", stock - reserved)]
+
+
+@pytest.mark.parametrize(("stock", "reserved", "message"), ONE_TOO_MANY)
+def test_add_refuses_one_more_than_the_available_stock(
+    engine: Engine, stock: int, reserved: int, message: str
+) -> None:
+    add_product(engine, "P-100", stock=stock, reserved=reserved)
+
+    with open_cart(engine) as cart, pytest.raises(CartError) as error:
+        cart.add_item(BUYER_ID, "P-100", stock - reserved + 1)
+
+    assert (error.value.code, error.value.message) == (CartErrorCode.STOCK_EXCEEDED, message)
+    assert stored_lines(engine, BUYER_ID) == []
+
+
+def test_adding_to_a_line_may_reach_exactly_the_available_stock(engine: Engine) -> None:
+    add_product(engine, "P-100", stock=10, reserved=3)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 4)
+
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 3)
+
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 7)]
+
+
+@pytest.mark.parametrize(("in_cart", "adding"), [(4, 4), (7, 1)])
+def test_adding_to_a_line_may_not_go_past_the_available_stock(
+    engine: Engine, in_cart: int, adding: int
+) -> None:
+    add_product(engine, "P-100", stock=10, reserved=3)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", in_cart)
+
+    with open_cart(engine) as cart, pytest.raises(CartError) as error:
+        cart.add_item(BUYER_ID, "P-100", adding)
+
+    assert error.value.code is CartErrorCode.STOCK_EXCEEDED
+    assert stored_lines(engine, BUYER_ID) == [("P-100", in_cart)]
+
+
+@pytest.mark.parametrize(("stock", "reserved"), STOCK_LEVELS)
+def test_update_accepts_exactly_the_available_stock(
+    engine: Engine, stock: int, reserved: int
+) -> None:
+    add_product(engine, "P-100", stock=stock, reserved=reserved)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 1)
+
+    with open_cart(engine) as cart:
+        cart.update_item(BUYER_ID, "P-100", stock - reserved)
+
+    assert stored_lines(engine, BUYER_ID) == [("P-100", stock - reserved)]
+
+
+@pytest.mark.parametrize(("stock", "reserved", "message"), ONE_TOO_MANY[:3])
+def test_update_refuses_one_more_than_the_available_stock(
+    engine: Engine, stock: int, reserved: int, message: str
+) -> None:
+    add_product(engine, "P-100", stock=stock, reserved=reserved)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 1)
+
+    with open_cart(engine) as cart, pytest.raises(CartError) as error:
+        cart.update_item(BUYER_ID, "P-100", stock - reserved + 1)
+
+    assert (error.value.code, error.value.message) == (CartErrorCode.STOCK_EXCEEDED, message)
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 1)]
+
+
+def test_update_refuses_every_quantity_once_the_stock_is_gone(engine: Engine) -> None:
+    add_product(engine, "P-100", stock=5)
+    with open_cart(engine) as cart:
+        cart.add_item(BUYER_ID, "P-100", 2)
+    change_product(engine, "P-100", stock_quantity=0)
+
+    with open_cart(engine) as cart, pytest.raises(CartError) as error:
+        cart.update_item(BUYER_ID, "P-100", 1)
+
+    assert error.value.message == "This product is out of stock."
+    assert stored_lines(engine, BUYER_ID) == [("P-100", 2)]
+
+
 @pytest.mark.parametrize("quantity", INVALID_QUANTITIES)
 def test_add_refuses_an_invalid_quantity(engine: Engine, quantity: object) -> None:
     add_product(engine, "P-100")
