@@ -26,7 +26,7 @@ async function init() {
   try {
     const user = await request("/api/v1/auth/me");
     // Scope saved delivery details and request keys to the authenticated account.
-    storageKey = `checkout:${user.id ?? user.user?.id ?? user.data?.id}`;
+    storageKey = `checkout:${user.id}`;
     try { pending = JSON.parse(sessionStorage.getItem(storageKey)); } catch { pending = null; }
     if (pending) {
       for (const [name,value] of Object.entries(pending.body)) form.elements[name].value = value;
@@ -46,8 +46,10 @@ async function init() {
     statusText.textContent = !cart.items.length ? "Your cart is empty." : valid ? "Enter delivery information." : "Update unavailable items in your cart first.";
   } catch (e) { message(e.message); retry.hidden = false; }
 }
+let sending = false;
 async function submit() {
-  if (busy && !pending) return;
+  if (sending || !pending) return;
+  sending = true;
   retry.hidden = true; message(""); lock(true); statusText.textContent = "Placing your order...";
   try {
     const {data} = await request("/api/v1/orders", {method:"POST", headers:{"Idempotency-Key":pending.key}, body:JSON.stringify(pending.body)});
@@ -59,12 +61,15 @@ async function submit() {
       sessionStorage.removeItem(storageKey); pending = null; lock(false);
     } else { retry.hidden = false; }
     statusText.textContent = "Order was not confirmed. Your delivery information is preserved.";
-  }
+  } finally { sending = false; }
 }
 form.addEventListener("submit", event => {
   event.preventDefault(); if (busy || !form.reportValidity()) return;
   const body = Object.fromEntries(new FormData(form));
   for (const name in body) body[name] = body[name].trim();
+  for (const name of ["recipient_name", "delivery_address"]) {
+    if (!body[name]) { message(`Please enter ${name.replaceAll("_", " ")}.`); form.elements[name].focus(); return; }
+  }
   if (!/^[+0-9 ()-]+$/.test(body.phone_number) || (body.phone_number.match(/\d/g) || []).length < 7 || (body.phone_number.match(/\d/g) || []).length > 15) {
     message("Phone number must contain 7 to 15 digits."); return;
   }

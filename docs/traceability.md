@@ -300,3 +300,29 @@ Numbered, so issues and tests can cite them.
 | BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | Design only: one checkout transaction with an optimistic check on `products.version` ([transaction rules](design.md#26-transaction-level-rules)). Checkout is not built. | None yet |
 | BR9 | Product updates (price, stock quantity, and product information) must validate that price is strictly positive (> 0) and stock quantity is a non-negative integer (>= 0). If an update fails validation, the database transaction is aborted, and all previous valid data remains unchanged. | Schema only: CHECK `price > 0`, `stock_quantity >= 0`, `reserved_stock >= 0` and `reserved_stock <= stock_quantity` on `products` (#46). The update flow (US07, P1) is not built. | None yet; no test writes an invalid value (gap G7) |
 | BR10 | Seller best-selling product analytics must rank only the authenticated seller's own products using quantities from completed order items in the selected reporting period. | Design only: completed `seller_orders` and `order_items` quantities ([data model](design.md#25-business-rule-mapping)). Analytics (P2) is not built. | None yet |
+
+
+## US04 implementation update (#80)
+
+This branch supersedes the historical Sprint 2 US04 "Not implemented" entries above.
+Implementation branch: feat/80-atomic-checkout; baseline main includes cart PR #92.
+
+| Screen / API | Access | Status |
+|---|---|---|
+| /checkout; POST /api/v1/orders | Buyer | Implemented on branch, pending PR review/merge |
+| /checkout/confirmation/{orderId}; GET /api/v1/orders/{orderId} | Owning buyer | Implemented on branch, pending PR review/merge |
+
+| Requirement / business rule | Automated verification in tests/test_checkout.py |
+|---|---|
+| Valid multi-seller checkout, totals and price snapshot (BR3/BR8) | test_multi_seller_checkout_and_price_snapshots |
+| No partial orders, stock changes or cart deletion (BR8) | test_invalid_second_item_rolls_back_everything; test_failure_after_writes_rolls_back_and_session_remains_usable |
+| Last unit and same-key races (BR8) | test_concurrent_requests_on_separate_connections (separate SQLite connections) |
+| Optimistic locking and cart mutation | test_stale_product_version_aborts_checkout; test_cart_quantity_change_aborts_checkout |
+| Idempotency, changed payload and buyer | test_replay_before_empty_cart_check_and_payload_conflict |
+| Receipt ownership (BR4) | test_api_create_replay_and_ownership |
+| Validation and authentication | test_api_validation_does_not_write; test_auth_empty_cart_key_and_pages |
+| Existing schema migration | test_existing_database_migration_is_repeatable |
+| Unexpected constraint error rolls back | test_unrelated_constraint_failure_is_not_retried |
+
+Actual page script logic is checked in tests/checkout_ui.mjs. Browser layout and
+real-user usability are not claimed; see [US04 evidence](evidence/us04.md).

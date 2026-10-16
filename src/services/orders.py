@@ -2,6 +2,7 @@
 
 import hashlib
 import time
+from datetime import UTC
 
 from sqlalchemy import delete, update
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -33,8 +34,10 @@ def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
         .where(SellerOrder.order_id == order.id)
         .order_by(OrderItem.id)
     ).all()
+    values = order.model_dump(exclude={"buyer_id", "request_key", "request_hash"})
+    values["created_at"] = order.created_at.replace(tzinfo=UTC)
     return OrderData(
-        **order.model_dump(exclude={"buyer_id", "request_key", "request_hash"}),
+        **values,
         items=[
             OrderLine(**item.model_dump(), line_total=item.quantity * item.unit_price)
             for item in items
@@ -42,7 +45,9 @@ def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
     )
 
 
-def checkout(session: Session, buyer_id: int, body: CheckoutRequest, key: str):
+def checkout(
+    session: Session, buyer_id: int, body: CheckoutRequest, key: str
+) -> tuple[OrderData, bool]:
     """Own the request session transaction; auth may already have begun it."""
     fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
     for attempt in range(5):
@@ -127,7 +132,13 @@ def checkout(session: Session, buyer_id: int, body: CheckoutRequest, key: str):
         except (IntegrityError, OperationalError) as exc:
             session.rollback()
             busy = (getattr(exc.orig, "sqlite_errorcode", 0) or 0) & 255 in (5, 6)
-            if not isinstance(exc, IntegrityError) and not busy:
+            if isinstance(exc, IntegrityError):
+                # Only a committed request-key collision is an idempotency race.
+                # Other constraint failures must retain the database-failure response.
+                collision = session.exec(select(Order).where(Order.request_key == key)).first()
+                if collision is None:
+                    raise
+            elif not busy:
                 raise
             if attempt == 4:
                 raise CheckoutError(

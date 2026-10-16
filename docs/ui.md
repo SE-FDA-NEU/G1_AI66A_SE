@@ -17,7 +17,7 @@ visual styling and component implementation may evolve after review.
 | Seller product creation | `/seller/products/new` | Create a product listing | `POST /api/v1/seller/products` | Authenticated seller | Create listing | Created product |
 | Seller order management | `/seller/orders` | Process seller-owned order items | `GET/PATCH /api/v1/seller/orders` | Authenticated seller | Update status | Next order or dashboard |
 | Login | `/login` | Authenticate a buyer or seller | `POST /api/v1/auth/login` | Guest | Sign in | Return to intended screen |
-| Order confirmation | `/orders/:orderId/confirmation` | Confirm successful order creation | `GET /api/v1/orders/{orderId}` | Authenticated buyer | Continue shopping / View order | Catalog or order history |
+| Order confirmation | `/checkout/confirmation/{orderId}` | Confirm successful order creation | `GET /api/v1/orders/{orderId}` | Authenticated buyer | Continue shopping / View order | Catalog or order history |
 
 ### Navigation flows
 
@@ -30,7 +30,7 @@ visual styling and component implementation may evolve after review.
 /products --> /products/:productCode --> /cart --> /checkout
                                                    |
                                                    v
-                                      /orders/:orderId/confirmation
+                                      /checkout/confirmation/{orderId}
 ```
 
 **Seller flow**
@@ -177,7 +177,7 @@ visual styling and component implementation may evolve after review.
 - **Access:** Authenticated buyer.
 - **Primary CTA:** **Confirm order**.
 - **Next step:** On success, navigate to
-  `/orders/:orderId/confirmation`.
+  `/checkout/confirmation/{orderId}`.
 - **Data state:** Show cart items, quantities, prices, delivery form, fees,
   and final total.
 - **Loading state:** Disable form controls and show `Placing your order...`.
@@ -280,7 +280,7 @@ visual styling and component implementation may evolve after review.
 - **Error state:** Show `Invalid email or password.` without revealing which
   credential was incorrect.
 
-### 2.8 Order confirmation — `/orders/:orderId/confirmation`
+### 2.8 Order confirmation — `/checkout/confirmation/{orderId}`
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -338,3 +338,20 @@ frontend tasks should turn each screen section into components and tests,
 while preserving the documented endpoints, access rules, CTA labels, and
 loading/empty/error/data behavior. This document should be updated if the
 review changes the user flow or acceptance criteria.
+
+
+### US04 runtime contract (#80)
+
+The checkout summary uses GET /api/v1/cart. Final prices are calculated on the server;
+shipping is zero (the fees in the earlier wireframe are illustrative, not charged).
+Required input: recipient name 1-100 characters, address 1-1000 characters, phone
+7-20 characters containing 7-15 digits; spaces, plus, hyphen and parentheses are
+accepted. Whitespace is trimmed. Invalid fields are named in ERR_VALIDATION and
+input is preserved; inventory errors identify the item and preserve the cart.
+
+Before submitting, the page saves the request key and payload in account-scoped
+sessionStorage. A timeout/server failure locks the fields; Retry reuses the same
+key and payload. Reload restores that pending request. Success clears it and opens
+/checkout/confirmation/{orderId}. A definite client error unlocks the form.
+Confirmation Retry only uses GET; it never places a new order. Empty and unavailable
+carts cannot submit. User-facing API text is rendered with textContent.

@@ -1009,3 +1009,47 @@ Between the delivery of Milestone 1 and the completion of Sprint 2 (Milestone 2)
   - Enforced purchase-time price immutability: `order_items.unit_price` preserves the price at the moment of checkout, guaranteeing that seller revenue calculations (BR7) and best-selling metrics (BR10) remain historically accurate regardless of subsequent product price modifications.
   - Implemented optimistic concurrency control via `products.version` and relational integrity via SQLite foreign key pragma (`PRAGMA foreign_keys = ON`) and column CHECK constraints (`price > 0`, `stock_quantity >= 0`).
 - **Impact:** Ensures clean architectural separation of concerns between buyers and sellers, satisfies marketplace business rules (BR5, BR6, BR7, BR9, BR10), and prevents race conditions and overselling during checkout transactions.
+
+
+## US04 atomic checkout implementation (#80)
+
+The orders API uses src/schemas/orders.py and src/services/orders.py. The service
+owns the request session transaction; authentication may already have started it.
+The API never commits separately or calls auto-committing cart mutations.
+
+| Route | Access | Contract |
+|---|---|---|
+| POST /api/v1/orders | Buyer | Required Idempotency-Key header (1-64 chars, no surrounding whitespace); delivery JSON only; 201 created, 200 committed replay |
+| GET /api/v1/orders/{orderId} | Owning buyer | 200 data; 404 ERR_ORDER_NOT_FOUND for both missing and other-buyer orders |
+| /checkout | Browser shell | Cart summary, delivery input and request submission |
+| /checkout/confirmation/{orderId} | Browser shell | Protected receipt API; canonical URL follows issue #80 |
+
+Orders and seller orders start PENDING. Total is the integer-VND sum of current
+product prices times cart quantities; no shipping fee. Unit prices are persisted
+on order items. Items, quantities and buyer identity never come from request JSON.
+
+Schema: nullable unique indexed orders.request_key VARCHAR(64), plus nullable
+orders.request_hash VARCHAR(64), SHA-256 of normalized delivery JSON. migrate_db()
+adds missing columns/index without deleting existing orders; repeating it is safe.
+Fresh databases use SQLModel metadata. Replay checks key, buyer and hash before
+checking the cart (which is empty after success). Same key with another buyer or
+changed payload returns 409 ERR_IDEMPOTENCY_CONFLICT without exposing order data.
+Stored order items are authoritative on replay; a newly refilled cart is untouched.
+
+One transaction creates the order, seller orders and purchase-price items, decrements
+stock, deletes purchased cart lines and commits. Any failure rolls back everything.
+Stock UPDATE requires active status, matching products.version and
+stock_quantity - reserved_stock >= quantity; it decreases physical stock and
+increments version. Zero updated rows abort checkout. Cart deletion checks line ID
+and quantity; changed/deleted lines abort. Newly added lines are not deleted.
+Products are processed in product-ID order.
+
+SQLite BUSY/LOCKED and verified committed key collisions retry after rollback,
+at most five attempts. Other integrity/database failures remain database errors.
+Errors retain {error: {code, message}}. Empty cart: 400 ERR_EMPTY_CART; unavailable
+item: 409 ERR_PRODUCT_UNAVAILABLE; stock/version race: 409 ERR_STOCK_EXCEEDED;
+cart/race exhaustion: 409 ERR_CONCURRENCY_CONFLICT; invalid fields/missing key:
+422 ERR_VALIDATION; auth: 401/403; database failure: 500 ERR_DATABASE_FAILURE.
+The earlier contract's 400 for schema-invalid delivery input is superseded by 422,
+consistent with existing FastAPI validation. Checkout errors list field names only,
+not raw inputs. See docs/evidence/us04.md for verification and manual checks.
