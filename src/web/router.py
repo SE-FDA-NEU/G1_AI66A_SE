@@ -22,3 +22,9 @@ def products_page() -> FileResponse:
 def login_page() -> FileResponse:
     """Serve the login page."""
     return FileResponse(PAGES_DIR / "login.html")
+
+
+@router.get("/seller/orders", response_class=FileResponse, include_in_schema=False)
+def seller_orders_page() -> FileResponse:
+    """Serve the seller order management page."""
+    return FileResponse(PAGES_DIR / "seller-orders.html")

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seller Orders | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/seller-orders.css">
+  <script src="/static/seller-orders.js" defer></script>
+</head>
+<body>
+  <main class="orders">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/products">Products</a>
+      <button id="logout-button" type="button">Log out</button>
+    </nav>
+    <h1>Seller orders</h1>
+    <form id="filters" class="filters">
+      <label>Status
+        <select id="status">
+          <option value="">All</option>
+          <option value="PENDING">Pending</option>
+          <option value="PROCESSING">Processing</option>
+          <option value="SHIPPED">Shipped</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+      </label>
+      <label>From <input id="from" type="date"></label>
+      <label>To <input id="to" type="date"></label>
+      <button type="submit">Filter</button>
+    </form>
+    <p id="orders-status" role="status" aria-live="polite">Loading orders…</p>
+    <section id="orders-empty" hidden>No seller orders found.</section>
+    <section id="orders-error" hidden>
+      <p>Unable to load seller orders.</p>
+      <button id="orders-retry" type="button">Retry</button>
+    </section>
+    <div id="orders-list"></div>
+  </main>
+</body>
+</html>
