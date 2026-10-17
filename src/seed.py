@@ -1,8 +1,15 @@
+import argparse
+from datetime import UTC, datetime
+
 from sqlmodel import Session, select
 
 from src.auth import hash_password
 from src.database import engine, init_db
+from src.models.cart_item import CartItem
+from src.models.order import Order
+from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.seller_order import SellerOrder
 from src.models.user import User
 
 DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
@@ -192,15 +199,9 @@ def seed_products() -> None:
         products = build_products(seller_id=seller.id)
 
         existing_products = session.exec(select(Product)).all()
-        existing_codes = {
-            product.code for product in existing_products
-        }
+        existing_codes = {product.code for product in existing_products}
 
-        new_products = [
-            product
-            for product in products
-            if product.code not in existing_codes
-        ]
+        new_products = [product for product in products if product.code not in existing_codes]
 
         if new_products:
             session.add_all(new_products)
@@ -209,16 +210,124 @@ def seed_products() -> None:
 
         all_products = session.exec(select(Product)).all()
 
-        active_products = [
-            product
-            for product in all_products
-            if product.is_active
-        ]
+        active_products = [product for product in all_products if product.is_active]
 
         print(f"Added: {len(new_products)} products")
         print(f"Total products: {len(all_products)}")
         print(f"Active products: {len(active_products)}")
 
 
-if __name__ == "__main__":
+DEMO_MARKER = "seed84:PENDING"
+DEMO_DATE = datetime(2026, 10, 10, 12, tzinfo=UTC)
+DEMO_PRODUCTS = (
+    ("P-DEMO-CART", "Demo cart item", DEMO_SELLER_EMAIL, 100_000, 12),
+    ("P-DEMO-PENDING", "Demo pending item", DEMO_SELLER_EMAIL, 150_000, 9),
+    ("P-DEMO-PROCESS", "Demo processing item", "seller@example.com", 200_000, 8),
+    ("P-DEMO-COMPLETE", "Demo completed item", DEMO_SELLER_EMAIL, 250_000, 7),
+    ("P-DEMO-CANCEL", "Demo cancelled item", "seller@example.com", 300_000, 10),
+    ("P-DEMO-OUT", "Demo out-of-stock item", "seller@example.com", 50_000, 0),
+)
+DEMO_ORDERS = (
+    ("PENDING", "P-DEMO-PENDING", 1),
+    ("PROCESSING", "P-DEMO-PROCESS", 2),
+    ("COMPLETED", "P-DEMO-COMPLETE", 3),
+    ("CANCELLED", "P-DEMO-CANCEL", 1),
+)
+
+
+def seed_demo_scenarios() -> bool:
+    """Install the optional demo dataset once, preserving subsequent user changes.
+
+    The pending order request key is the installation marker. All scenario rows
+    and the marker are committed together. An existing marker means no data is
+    refilled/reset, even if the user emptied a cart or processed a demo order.
+    """
+    init_db()
+    with Session(engine) as session:
+        if session.exec(select(Order.id).where(Order.request_key == DEMO_MARKER)).first():
+            return False
+        users = seed_users(session)
+        for entry in SEED_USERS:
+            if users[entry["email"]].role != entry["role"]:
+                raise RuntimeError(
+                    "A demo account exists with a different role; no scenarios added."
+                )
+        codes = [entry[0] for entry in DEMO_PRODUCTS]
+        if session.exec(select(Product.id).where(Product.code.in_(codes))).first():
+            raise RuntimeError(
+                "Demo product codes already exist without the marker; no scenarios added."
+            )
+        buyer = users[DEMO_BUYER_EMAIL]
+        products = {}
+        for code, name, seller_email, price, stock in DEMO_PRODUCTS:
+            product = make_product(
+                code, name, "Issue #84 demo fixture", price, stock, seller_id=users[seller_email].id
+            )
+            # Orders below already represent purchased units; stock is the final
+            # physical balance, not a second live checkout stock deduction.
+            if code in {"P-DEMO-PENDING", "P-DEMO-PROCESS", "P-DEMO-COMPLETE"}:
+                product.version = 2
+            elif code == "P-DEMO-CANCEL":
+                product.version = 3
+            session.add(product)
+            session.flush()
+            products[code] = product
+        session.add(
+            CartItem(
+                buyer_id=buyer.id,
+                product_id=products["P-DEMO-CART"].id,
+                quantity=2,
+                created_at=DEMO_DATE,
+            )
+        )
+        for status, code, quantity in DEMO_ORDERS:
+            product = products[code]
+            parent = Order(
+                buyer_id=buyer.id,
+                total_amount=product.price * quantity,
+                status=status,
+                recipient_name="Demo Buyer",
+                delivery_address="123 Demo Street",
+                phone_number="0900000000",
+                request_key=f"seed84:{status}",
+                created_at=DEMO_DATE,
+            )
+            session.add(parent)
+            session.flush()
+            child = SellerOrder(
+                order_id=parent.id,
+                seller_id=product.seller_id,
+                status=status,
+                created_at=DEMO_DATE,
+                completed_at=DEMO_DATE if status == "COMPLETED" else None,
+            )
+            session.add(child)
+            session.flush()
+            session.add(
+                OrderItem(
+                    seller_order_id=child.id,
+                    product_id=product.id,
+                    quantity=quantity,
+                    unit_price=product.price,
+                )
+            )
+        session.commit()
+        return True
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed the catalog and optional P0 demo scenarios.")
+    parser.add_argument("--demo", action="store_true", help="Add carts and sample orders once")
+    args = parser.parse_args()
     seed_products()
+    if args.demo:
+        created = seed_demo_scenarios()
+        print(
+            "Demo scenarios: added" if created else "Demo scenarios: already installed (unchanged)"
+        )
+        with Session(engine) as session:
+            print(f"Products after demo seed: {len(session.exec(select(Product)).all())}")
+
+
+if __name__ == "__main__":
+    main()
