@@ -11,10 +11,21 @@
   <main class="catalog">
     <nav class="site-nav" aria-label="Main navigation">
       <a href="/products">Products</a>
+      <a id="cart-link" href="/cart">Cart</a>
+      <a id="seller-new-product-link" href="/seller/products/new">Create product</a>
       <a id="login-link" href="/login">Log in</a>
       <button id="logout-button" class="button" type="button" hidden>Log out</button>
     </nav>
     <h1 class="catalog__title">Products</h1>
+
+    <form id="products-search" class="catalog-search" role="search">
+      <label for="product-search-input">Search products</label>
+      <div class="catalog-search__controls">
+        <input id="product-search-input" name="search" type="search"
+          autocomplete="off" placeholder="Search by product name">
+        <button class="button" type="submit">Search</button>
+      </div>
+    </form>
 
     <p id="products-status" class="visually-hidden" role="status" aria-live="polite"></p>
 
@@ -30,6 +41,12 @@
     </ul>
 
     <ul id="products-grid" class="product-grid" hidden></ul>
+
+    <nav id="products-pagination" class="pagination" aria-label="Product pages" hidden>
+      <button id="products-previous" class="button" type="button">Previous</button>
+      <span id="products-page" aria-live="polite"></span>
+      <button id="products-next" class="button" type="button">Next</button>
+    </nav>
 
     <section id="products-empty" class="state" hidden>
       <p class="state__message">No products available at the moment.</p>

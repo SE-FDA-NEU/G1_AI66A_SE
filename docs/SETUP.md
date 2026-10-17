@@ -327,3 +327,11 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) automatically valida
 3. **Static Analysis & Linting:** Executes `ruff check .` to guarantee code style and identify errors.
 4. **Smoke and Unit Tests:** Executes `pytest -v --cov --cov-report=term-missing --junitxml=junit.xml` to verify endpoint availability and response contracts.
 5. **Credential & Secret Scanning:** Validates that no secret keys, API tokens, `.env` files, or database binaries are accidentally committed.
+
+
+## US04 orders migration (#80)
+
+Startup (python -m src.main) and seeding (python -m src.seed) automatically add
+nullable orders.request_key and orders.request_hash plus the unique key index.
+Existing orders are preserved; repeated startup is safe. No reset is required.
+See [checkout verification](evidence/us04.md) for the buyer checkout/receipt flow.

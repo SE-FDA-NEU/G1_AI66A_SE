@@ -11,10 +11,11 @@ A mini marketplace where sellers can list products, buyers can add products to c
 - **Product Owner (PO):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
 - **Scrum Master (SM - Sprint 1):** [@leducminh290506-eng](https://github.com/leducminh290506-eng)
 - **Scrum Master (SM - Sprint 2):** [@minhnm162](https://github.com/minhnm162)
+- **Scrum Master (SM - Sprint 3):** [@teddywristh](https://github.com/teddywristh)
 
 | Name | GitHub username | Team Role |
 | --- | --- | --- |
-| Nguyen Thuy Quynh | [@teddywristh](https://github.com/teddywristh) | Member |
+| Nguyen Thuy Quynh | [@teddywristh](https://github.com/teddywristh) | SM - Sprint 3 / Member |
 | Nguyen Quang Minh | [@MinhQuangQu](https://github.com/MinhQuangQu) | Member |
 | Nguyen Ho Nhat Minh | [@minhnm162](https://github.com/minhnm162) | SM - Sprint 2 / Member |
 | Le Duc Minh | [@leducminh290506-eng](https://github.com/leducminh290506-eng) | PO / SM - Sprint 1 / Member |
@@ -119,3 +120,26 @@ The application will be accessible at:
 - **Interactive API Documentation:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Walking Skeleton Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
 - **Products Page (US01):** [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products)
+- **Cart Page (US03):** [http://127.0.0.1:8000/cart](http://127.0.0.1:8000/cart) (log in as the buyer `user@example.com`)
+
+
+### Checkout and confirmation (US04 / #80)
+
+From a buyer cart choose Checkout, enter recipient name, address and phone, then
+confirm. Success opens /checkout/confirmation/{orderId}; only its buyer can retrieve
+the data. Checkout is atomic; retrying the same key returns the recorded order.
+No shipping fee is added. Startup/seeding applies a non-destructive orders schema
+upgrade to existing databases. See [US04 verification](docs/evidence/us04.md).
+
+### Seller product creation (US06 / #81)
+
+Log in as a seller (`seller@example.com` / `password`) and choose **Create product**
+in the catalog navigation, or open
+[http://127.0.0.1:8000/seller/products/new](http://127.0.0.1:8000/seller/products/new).
+Enter name, description, price (whole VND), stock and an absolute http(s) image URL.
+The listing is created active and owned by the logged-in seller; the page shows its
+product code and a link to it. Stock 0 is allowed: the product page shows Out of
+stock and the catalog leaves it out. Buyers and guests cannot create products. The
+page-script checks run with `node tests/checkout_ui.mjs` and
+`node tests/seller_products_ui.mjs` (Node is only needed for these checks). See
+[US06 verification](docs/evidence/us06.md).

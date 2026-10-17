@@ -1,0 +1,45 @@
+"""Checkout contracts; money is integer VND and items come from the buyer cart."""
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class CheckoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    recipient_name: str = Field(min_length=1, max_length=100)
+    delivery_address: str = Field(min_length=1, max_length=1000)
+    phone_number: str = Field(min_length=7, max_length=20)
+
+    @field_validator("phone_number")
+    @classmethod
+    def valid_phone(cls, value: str) -> str:
+        if any(c not in "+0123456789 ()-" for c in value):
+            raise ValueError("Phone contains invalid characters")
+        if not 7 <= sum(c.isdigit() for c in value) <= 15:
+            raise ValueError("Phone must contain 7 to 15 digits")
+        return value
+
+
+class OrderLine(BaseModel):
+    product_id: int
+    seller_order_id: int
+    quantity: int
+    unit_price: int
+    line_total: int
+
+
+class OrderData(BaseModel):
+    id: int
+    status: str
+    total_amount: int
+    recipient_name: str
+    delivery_address: str
+    phone_number: str
+    created_at: datetime
+    items: list[OrderLine]
+
+
+class OrderResponse(BaseModel):
+    data: OrderData

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New product | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/products.css">
+  <link rel="stylesheet" href="/static/seller-product-new.css">
+  <script src="/static/seller-product-new.js" defer></script>
+</head>
+<body>
+  <main class="catalog seller-product">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/products">Products</a>
+      <a href="/seller/products/new" aria-current="page">Create product</a>
+    </nav>
+    <p class="seller-product__breadcrumb">Seller center › New product</p>
+    <h1 class="catalog__title">New product</h1>
+
+    <p id="account-status" class="state__message" role="status" aria-live="polite">Checking your account…</p>
+    <button id="account-retry" class="button" type="button" hidden>Try again</button>
+
+    <section id="forbidden" class="state" hidden>
+      <p class="state__message">Only seller accounts can create product listings.</p>
+      <a class="button button--link" href="/products">Back to products</a>
+      <a id="seller-login" class="button button--link" href="/login?return_to=%2Fseller%2Fproducts%2Fnew">Log in as a seller</a>
+    </section>
+
+    <div id="error-summary" class="form-summary" role="alert" tabindex="-1" hidden>
+      <p id="error-summary-title" class="form-summary__title"></p>
+      <ul id="error-summary-list" class="form-summary__list"></ul>
+      <button id="reload-page" class="button" type="button" hidden>Reload page</button>
+    </div>
+
+    <form id="product-form" class="product-form" novalidate hidden>
+      <div class="form-field">
+        <label for="product-name">Product name</label>
+        <input id="product-name" name="name" type="text" maxlength="200" required autocomplete="off" aria-describedby="name-error">
+        <p id="name-error" class="field-error" hidden></p>
+      </div>
+
+      <div class="form-field">
+        <label for="product-description">Description</label>
+        <textarea id="product-description" name="description" rows="5" maxlength="3000" required aria-describedby="description-hint description-error"></textarea>
+        <p id="description-hint" class="field-hint">Up to 3000 characters.</p>
+        <p id="description-error" class="field-error" hidden></p>
+      </div>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label for="product-price">Price (₫)</label>
+          <input id="product-price" name="price" type="number" inputmode="numeric" min="1" max="1000000000" step="1" required aria-describedby="price-hint price-error">
+          <p id="price-hint" class="field-hint">Whole VND, from 1 to 1.000.000.000 ₫.</p>
+          <p id="price-error" class="field-error" hidden></p>
+        </div>
+
+        <div class="form-field">
+          <label for="product-stock">Stock quantity</label>
+          <input id="product-stock" name="stock_quantity" type="number" inputmode="numeric" min="0" max="1000000" step="1" required aria-describedby="stock_quantity-hint stock_quantity-error">
+          <p id="stock_quantity-hint" class="field-hint">0 is allowed: the product is shown as Out of stock.</p>
+          <p id="stock_quantity-error" class="field-error" hidden></p>
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label for="product-image">Image URL</label>
+        <input id="product-image" name="image_url" type="url" maxlength="2048" required autocomplete="off" placeholder="https://example.com/product.jpg" aria-describedby="image_url-hint image_url-error">
+        <p id="image_url-hint" class="field-hint">An absolute http:// or https:// link. If the image cannot be loaded, buyers see a placeholder.</p>
+        <p id="image_url-error" class="field-error" hidden></p>
+      </div>
+
+      <p class="field-hint">New listings are created active. A listing with stock 0 stays out of the catalog until it has stock.</p>
+
+      <div class="form-actions">
+        <a class="button button--link button--secondary" href="/products">Cancel</a>
+        <button id="create-button" class="button" type="submit">Create listing</button>
+      </div>
+      <p id="submit-status" class="state__message" role="status" aria-live="polite"></p>
+    </form>
+
+    <section id="product-created" class="state product-created" tabindex="-1" hidden aria-labelledby="created-title">
+      <h2 id="created-title">Listing created</h2>
+      <p><strong id="created-name"></strong></p>
+      <p>Product code: <code id="created-code"></code></p>
+      <p id="created-stock" class="state__message"></p>
+      <div class="form-actions form-actions--center">
+        <a id="view-product" class="button button--link" href="/products">View product</a>
+        <a class="button button--link button--secondary" href="/products">Continue browsing</a>
+        <button id="create-another" class="button button--secondary" type="button">Create another product</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

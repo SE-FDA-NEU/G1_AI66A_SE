@@ -63,6 +63,16 @@ def migrate_db() -> None:
                     )
                 )
 
+        if "orders" in tables:
+            columns = {c["name"] for c in inspector.get_columns("orders")}
+            for name in ("request_key", "request_hash"):
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(64)"))
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_orders_request_key ON orders (request_key)"
+            ))
+
+
 
 def init_db() -> None:
     """Register application models, create missing tables, and run migrations."""
