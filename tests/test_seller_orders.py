@@ -157,7 +157,9 @@ def test_valid_transition_creates_history_and_updates_parent(
     with Session(engine) as session:
         history = session.exec(select_history()).all()
         assert [(row.from_status, row.to_status) for row in history] == [("PENDING", "PROCESSING")]
-        assert session.get(Order, 1) is not None
+        parent = session.get(Order, 1)
+        assert parent is not None
+        assert parent.status == "PROCESSING"
 
 
 def test_invalid_transition_returns_business_error(
@@ -200,11 +202,96 @@ def test_cancellation_restores_stock_once(
         json={"status": "CANCELLED"},
     )
     assert response.status_code == 200
+    second_response = client.patch(
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+        json={"status": "CANCELLED"},
+    )
+    assert second_response.status_code == 400
     with Session(engine) as session:
         product = session.get(Product, seller_order_data["product_a"])
         assert product is not None
         assert product.stock_quantity == 7
-        assert session.exec(select_history()).all()
+        assert product.version == 2
+        history = session.exec(select_history()).all()
+        assert len(history) == 1
+        assert (history[0].from_status, history[0].to_status) == ("PENDING", "CANCELLED")
+
+
+def test_completion_sets_completed_at(
+    client: TestClient,
+    seller_order_data,
+) -> None:
+    token = _token(client, seller_order_data["seller_a"])
+    url = f"/api/v1/seller/orders/{seller_order_data['seller_order_a']}/status"
+    for status in ("PROCESSING", "SHIPPED", "COMPLETED"):
+        response = client.patch(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            json={"status": status},
+        )
+        assert response.status_code == 200
+
+    with Session(engine) as session:
+        seller_order = session.get(SellerOrder, seller_order_data["seller_order_a"])
+        assert seller_order is not None
+        assert seller_order.completed_at is not None
+
+
+def test_cancellations_increment_shared_product_stock_atomically(
+    client: TestClient,
+    seller_order_data,
+) -> None:
+    with Session(engine) as session:
+        session.add(
+            OrderItem(
+                seller_order_id=seller_order_data["seller_order_b"],
+                product_id=seller_order_data["product_a"],
+                quantity=2,
+                unit_price=100,
+            )
+        )
+        session.commit()
+
+    seller_a_token = _token(client, seller_order_data["seller_a"])
+    seller_b_token = _token(client, seller_order_data["seller_b"])
+    for order_id, token in (
+        (seller_order_data["seller_order_a"], seller_a_token),
+        (seller_order_data["seller_order_b"], seller_b_token),
+    ):
+        response = client.patch(
+            f"/api/v1/seller/orders/{order_id}/status",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"status": "CANCELLED"},
+        )
+        assert response.status_code == 200
+
+    with Session(engine) as session:
+        product = session.get(Product, seller_order_data["product_a"])
+        assert product is not None
+        assert product.stock_quantity == 9
+        assert product.version == 3
+
+
+def test_end_date_includes_the_selected_day(
+    client: TestClient,
+    seller_order_data,
+) -> None:
+    with Session(engine) as session:
+        parent = session.get(Order, 1)
+        assert parent is not None
+        parent.created_at = datetime(2026, 10, 17, 23, 59, 59, tzinfo=UTC)
+        session.add(parent)
+        session.commit()
+
+    token = _token(client, seller_order_data["seller_a"])
+    response = client.get(
+        "/api/v1/seller/orders?to=2026-10-17",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["meta"]["total"] == 1
 
 
 def select_history():

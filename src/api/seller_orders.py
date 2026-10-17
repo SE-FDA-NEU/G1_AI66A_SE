@@ -1,11 +1,11 @@
 """Seller-scoped order listing and fulfilment transitions."""
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlmodel import select
 
 from src.auth import SellerUser
@@ -150,7 +150,7 @@ def list_seller_orders(
         query = query.where(Order.created_at >= start)
         count_query = count_query.where(Order.created_at >= start)
     if end:
-        end_of_day = end.replace(hour=23, minute=59, second=59)
+        end_of_day = end + timedelta(days=1)
         query = query.where(Order.created_at < end_of_day)
         count_query = count_query.where(Order.created_at < end_of_day)
 
@@ -197,6 +197,30 @@ def update_seller_order_status(
         )
 
     old_status = seller_order.status
+    status_values: dict[str, object] = {"status": new_status}
+    if new_status == "COMPLETED":
+        status_values["completed_at"] = datetime.now(UTC)
+    changed = session.exec(
+        update(SellerOrder)
+        .where(
+            SellerOrder.id == seller_order.id,
+            SellerOrder.seller_id == seller.id,
+            SellerOrder.status == old_status,
+        )
+        .values(**status_values)
+        .execution_options(synchronize_session=False)
+    )
+    if changed.rowcount != 1:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=error_detail(
+                "ERR_CONCURRENCY_CONFLICT",
+                "The seller order changed. Please refresh and try again.",
+            ),
+        )
+    session.refresh(seller_order)
+
     items = session.exec(
         select(OrderItem, Product)
         .join(Product, Product.id == OrderItem.product_id)
@@ -204,11 +228,16 @@ def update_seller_order_status(
     ).all()
     if new_status == "CANCELLED":
         for item, product in items:
-            product.stock_quantity += item.quantity
-            session.add(product)
+            session.exec(
+                update(Product)
+                .where(Product.id == product.id)
+                .values(
+                    stock_quantity=Product.stock_quantity + item.quantity,
+                    version=Product.version + 1,
+                )
+                .execution_options(synchronize_session=False)
+            )
 
-    seller_order.status = new_status
-    session.add(seller_order)
     session.add(
         OrderHistory(
             seller_order_id=seller_order.id,

@@ -8,3 +8,5 @@ body { font-family: system-ui, sans-serif; margin: 0; color: #17202a; }
 .order-card__items { padding-left: 1.25rem; }
 .status { font-weight: 700; }
 button { cursor: pointer; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
+button:disabled { cursor: not-allowed; opacity: .6; }

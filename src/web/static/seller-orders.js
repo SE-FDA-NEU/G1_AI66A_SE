@@ -10,6 +10,10 @@ const elements = {
   error: document.getElementById("orders-error"),
   retry: document.getElementById("orders-retry"),
   list: document.getElementById("orders-list"),
+  pagination: document.getElementById("orders-pagination"),
+  previous: document.getElementById("orders-previous"),
+  next: document.getElementById("orders-next"),
+  page: document.getElementById("orders-page"),
   logout: document.getElementById("logout-button"),
 };
 
@@ -21,11 +25,14 @@ const transitions = {
   CANCELLED: [],
 };
 
+let currentPage = 1;
+
 function setState(state, message) {
   elements.message.textContent = message;
   elements.empty.hidden = state !== "empty";
   elements.error.hidden = state !== "error";
   elements.list.hidden = state !== "success";
+  elements.pagination.hidden = state !== "success";
 }
 
 function createOrderCard(order) {
@@ -61,9 +68,19 @@ function createOrderCard(order) {
   return card;
 }
 
-async function loadOrders() {
+function updatePagination(meta) {
+  const totalPages = Math.ceil(meta.total / meta.limit);
+  currentPage = meta.page;
+  elements.pagination.hidden = totalPages <= 1;
+  elements.previous.disabled = currentPage <= 1;
+  elements.next.disabled = currentPage >= totalPages;
+  elements.page.textContent = `Page ${currentPage} of ${totalPages}`;
+}
+
+async function loadOrders(page = currentPage) {
+  currentPage = page;
   setState("loading", "Loading orders…");
-  const params = new URLSearchParams({ page: "1", limit: "20" });
+  const params = new URLSearchParams({ page: String(currentPage), limit: "20" });
   if (elements.status.value) params.set("status", elements.status.value);
   if (elements.from.value) params.set("from", elements.from.value);
   if (elements.to.value) params.set("to", elements.to.value);
@@ -77,6 +94,7 @@ async function loadOrders() {
     if (!Array.isArray(payload.data)) throw new Error("Invalid seller order response.");
     elements.list.replaceChildren(...payload.data.map(createOrderCard));
     setState(payload.data.length ? "success" : "empty", `${payload.data.length} seller orders found.`);
+    if (payload.data.length) updatePagination(payload.meta);
   } catch (error) {
     setState("error", error.message);
   }
@@ -99,8 +117,14 @@ async function updateStatus(id, status) {
   }
 }
 
-elements.form.addEventListener("submit", (event) => { event.preventDefault(); loadOrders(); });
+elements.form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  currentPage = 1;
+  loadOrders();
+});
 elements.retry.addEventListener("click", loadOrders);
+elements.previous.addEventListener("click", () => loadOrders(currentPage - 1));
+elements.next.addEventListener("click", () => loadOrders(currentPage + 1));
 elements.logout.addEventListener("click", () => {
   localStorage.removeItem("access_token");
   window.location.href = "/login?return_to=/seller/orders";
