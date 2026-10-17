@@ -405,4 +405,3 @@ def test_cart_route_served_and_detail_script_provides_cart_navigation(
     assert "/cart" in script_resp.text
     assert "getPreservedQuantity" in script_resp.text
     assert "quantityValue" in script_resp.text
-
