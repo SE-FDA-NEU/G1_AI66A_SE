@@ -37,6 +37,12 @@ def login_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "login.html")
 
 
+@router.get("/seller/products/new", response_class=FileResponse, include_in_schema=False)
+def seller_product_new_page() -> FileResponse:
+    """Serve the seller product form (US06); POST /api/v1/seller/products enforces the role."""
+    return FileResponse(PAGES_DIR / "seller-product-new.html")
+
+
 @router.get("/checkout", response_class=FileResponse, include_in_schema=False)
 def checkout_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "checkout.html")

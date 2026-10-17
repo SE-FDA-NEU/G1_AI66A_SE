@@ -625,7 +625,7 @@ model; this contract does not assume that every identifier is a UUID.
 | `PATCH /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; JSON: `{ "quantity": 2 }` | `200 OK`: updated cart with recalculated line and cart totals | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity, because a line is removed with `DELETE`; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer; `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`) or the new quantity exceeds available stock (`ERR_STOCK_EXCEEDED`) | US03 Cart management |
 | `DELETE /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; no body | `200 OK`: updated cart after removing the line | `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code | US03 Cart management |
 | `POST /api/v1/orders` | U (buyer) | JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, item snapshots, quantities, total, status, and delivery information | `400 Bad Request` for missing/invalid delivery data or an empty cart; `401 Unauthorized`; `409 Conflict` when a product is unavailable or stock changed; `500 Internal Server Error` if the transaction cannot be completed | US04 Checkout and order placement |
-| `POST /api/v1/seller/products` | S | Multipart or JSON product body: `name`, `description`, `price`, `stock_quantity`, and `image`; seller comes from the token | `201 Created`: newly created product listing with seller ownership and `is_active` status | `400 Bad Request` for empty name/description or invalid values; `401 Unauthorized`; `403 Forbidden` for a non-seller account; `422 Unprocessable Entity` for malformed fields | US06 Create product listing |
+| `POST /api/v1/seller/products` | S | JSON product body: `name`, `description`, `price` (integer VND), `stock_quantity`, and `image_url` (absolute http(s) URL); seller, code and status come from the server (#81) | `201 Created`: `{ "data": ... }` with the new listing, its generated `code`, seller ownership and `is_active` status | `422 Unprocessable Entity` (`ERR_VALIDATION`) with messages per field in `error.fields` for empty, invalid or out-of-range values; `401 Unauthorized`; `403 Forbidden` for a non-seller account; `409 Conflict` when no unique product code could be assigned; `500` on database failure | US06 Create product listing |
 | `GET /api/v1/seller/orders` | S | Query: `status`, `from`, `to`, `page`, and `limit` (default `20`) | `200 OK`: paginated seller orders (`seller_orders` rows) owned by the authenticated seller only, each with its `id` (the `subOrderId`), parent `order_id`, status, and its order items (product, quantity, unit price) | `400 Bad Request` for invalid status/date/pagination; `401 Unauthorized`; `403 Forbidden` for a non-seller account | US08 Seller order management |
 | `PATCH /api/v1/seller/orders/{subOrderId}/status` | S | Path: `subOrderId`, the `seller_orders.id` of a seller order owned by the authenticated seller; JSON: `{ "status": "PROCESSING" }` | `200 OK`: updated sub-order status and transition timestamp | `400 Bad Request` with `ERR_INVALID_TRANSITION` for an invalid status transition; `401 Unauthorized`; `403 Forbidden` if the seller order belongs to another seller; `404 Not Found` when the seller order does not exist | US08 Seller order management |
 
@@ -1066,3 +1066,45 @@ uses that captured token and checks current authentication before sending and af
 reading a response. A changed token blocks initial submit/retry, clears stale UI,
 and offers Reload checkout. The old account's pending request stays under its own
 storage key; a full reload must fetch the current account before confirmation.
+
+
+## US06 seller product creation implementation (#81)
+
+The seller products API uses `src/schemas/seller_products.py`,
+`src/services/seller_products.py` and `src/api/seller_products.py`. The service owns
+the request session transaction (authentication may already have read the user with
+it): it adds the product, flushes, builds the response, and commits once. The router
+never commits. No schema migration is needed: every stored field already exists.
+
+| Route | Access | Contract |
+|---|---|---|
+| POST /api/v1/seller/products | Seller | JSON `name`, `description`, `price`, `stock_quantity`, `image_url`; `201` with `{data: listing}` |
+| /seller/products/new | Browser shell | Form, field errors, success region with code, name and product link |
+
+`ProductCreate` is separate from the `Product` table model, forbids extra fields and
+trims strings. Name 1-200 characters on one line, description 1-3000; both need at
+least one visible character (zero-width and other invisible characters do not count).
+Price a strict integer
+`1..1000000000` VND, stock a strict integer `0..1000000`, image URL an absolute
+http(s) URL of at most 2048 characters. The upper numeric bounds are technical
+guardrails that keep price x stock within JavaScript's safe integers; they are not
+business rules from the issue. The server sets `seller_id` from the token (BR5),
+`reserved_stock = 0`, `version = 1`, `is_active = true`, and a code `P-` + 18 random
+upper-case hex characters. Stock 0 does not make a listing inactive.
+
+Price and stock rules are enforced twice: by `ProductCreate` and by the CHECK
+constraints on `products` (BR9). A failed request writes nothing.
+
+Product code uniqueness comes from the UNIQUE constraint on `products.code`. After an
+`IntegrityError` the service rolls back and checks whether the code now exists; only
+then does it retry with a new code, at most three attempts, ending in
+`409 ERR_CONCURRENCY_CONFLICT`. Any other integrity or database error is rolled back
+and answers `500 ERR_DATABASE_FAILURE` without SQL details.
+
+Validation errors for this route (POST to the exact path only) keep the common
+`{error: {code, message}}` envelope and add `error.fields`, a map from field name to
+messages. Errors that are not about one field (malformed JSON, a body that is not an
+object, server-owned or unknown fields) are listed under `_form`. Messages never echo
+the submitted input. All other routes keep their existing validation responses.
+See [docs/us06-create-product.md](us06-create-product.md#11-runtime-contract-81) and
+[docs/evidence/us06.md](evidence/us06.md).

@@ -15,9 +15,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from src import __version__
 from src.api.health import router as health_router
 from src.api.router import api_router
+from src.api.seller_products import SELLER_PRODUCTS_PATH
 from src.config import get_settings
 from src.database import init_db
 from src.errors import error_detail
+from src.schemas.seller_products import validation_error_detail
 from src.web.router import STATIC_DIR
 from src.web.router import router as web_router
 
@@ -77,6 +79,8 @@ def create_app() -> FastAPI:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
+        if request.method == "POST" and request.url.path == SELLER_PRODUCTS_PATH:
+            return JSONResponse(status_code=422, content=validation_error_detail(exc.errors()))
         message = "The request contains invalid fields."
         if request.url.path == "/api/v1/orders":
             fields = sorted({str(error["loc"][-1]) for error in exc.errors() if error["loc"]})

@@ -130,3 +130,16 @@ confirm. Success opens /checkout/confirmation/{orderId}; only its buyer can retr
 the data. Checkout is atomic; retrying the same key returns the recorded order.
 No shipping fee is added. Startup/seeding applies a non-destructive orders schema
 upgrade to existing databases. See [US04 verification](docs/evidence/us04.md).
+
+### Seller product creation (US06 / #81)
+
+Log in as a seller (`seller@example.com` / `password`) and choose **Create product**
+in the catalog navigation, or open
+[http://127.0.0.1:8000/seller/products/new](http://127.0.0.1:8000/seller/products/new).
+Enter name, description, price (whole VND), stock and an absolute http(s) image URL.
+The listing is created active and owned by the logged-in seller; the page shows its
+product code and a link to it. Stock 0 is allowed: the product page shows Out of
+stock and the catalog leaves it out. Buyers and guests cannot create products. The
+page-script checks run with `node tests/checkout_ui.mjs` and
+`node tests/seller_products_ui.mjs` (Node is only needed for these checks). See
+[US06 verification](docs/evidence/us06.md).

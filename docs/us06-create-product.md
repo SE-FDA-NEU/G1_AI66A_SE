@@ -250,3 +250,80 @@ A non-seller cannot access product creation.
 Covered by Section 4.
 
 ---
+## 11. Runtime contract (#81)
+
+Sections 1-10 are the Milestone 1 specification from issue #18. This section records
+what issue #81 built and the decisions the specification left open.
+
+### Image mechanism
+
+The listing stores an image **URL**; no file is uploaded. The form field is labelled
+"Image URL" and is required. The server accepts an absolute `http://` or `https://`
+URL with a host, up to 2048 characters, and never downloads it. A URL that is valid
+but cannot be loaded keeps the listing: the catalog and the product page show the
+existing placeholder image instead. Products seeded earlier keep their relative
+`/images/...` paths; the rule applies to new listings only.
+
+### Request and validation
+
+`POST /api/v1/seller/products` takes JSON. Strings are trimmed before they are checked;
+unknown fields are refused.
+
+| Field | Rule |
+|---|---|
+| `name` | Text, 1-200 characters after trimming, at least one visible character, on one line (no newline, tab or other control character) |
+| `description` | Text, 1-3000 characters after trimming, at least one visible character; line breaks allowed |
+| `price` | JSON integer VND, `1` to `1000000000` |
+| `stock_quantity` | JSON integer, `0` to `1000000` |
+| `image_url` | Absolute http(s) URL, at most 2048 characters |
+
+Text made only of invisible characters (spaces of any kind, zero-width spaces, byte
+order marks, Hangul fillers, braille blanks) counts as empty, so it gets the same
+"is required" message as a blank field. Booleans, fractions (including `1.0`),
+numeric strings and `null` are refused for price and stock. The upper bounds are technical guardrails, not business rules from
+the issue: price x stock stays below JavaScript's `Number.MAX_SAFE_INTEGER`, so the
+form and cart totals never lose precision.
+
+### Server-owned fields
+
+The server sets `seller_id` from the token (BR5), generates `code`, and sets
+`reserved_stock = 0`, `version = 1` and `is_active = true`. A request that sends any
+of `id`, `code`, `seller_id`, `reserved_stock`, `version` or `is_active` is refused
+with `422`. A listing with stock 0 is still active: it has a product page that shows
+"Out of stock" and stays out of the catalog until it has stock.
+
+### Product code
+
+Codes are `P-` followed by 18 random upper-case hex characters (20 characters, the
+column size), for example `P-6E1059D348A4CB729F`. The UNIQUE constraint on
+`products.code` guarantees uniqueness. When an insert fails because the code is
+already taken, the service tries a new code, at most three times, then answers
+`409 ERR_CONCURRENCY_CONFLICT` with nothing written. Any other database failure is
+rolled back and answers `500 ERR_DATABASE_FAILURE`.
+
+### Responses
+
+| Situation | Response |
+|---|---|
+| Valid seller request | `201`, `{ "data": { id, code, seller_id, name, description, price, stock_quantity, reserved_stock, image_url, is_active, version } }` |
+| No token, invalid or expired token | `401 ERR_AUTH_REQUIRED` / `ERR_INVALID_TOKEN` |
+| Buyer token | `403 ERR_SELLER_REQUIRED` |
+| Invalid fields | `422 ERR_VALIDATION`; `error.fields` maps each field to its messages, several fields at once |
+| Body is not a JSON object, or contains fields the client may not send | `422 ERR_VALIDATION`; messages under `error.fields._form` |
+| Product code still collides after three attempts | `409 ERR_CONCURRENCY_CONFLICT` |
+| Database failure | `500 ERR_DATABASE_FAILURE` |
+
+Validation messages never repeat the submitted values. No error writes a row.
+
+### Form (`/seller/products/new`)
+
+The page is a public HTML shell; the API enforces the seller role. A guest is sent to
+`/login?return_to=%2Fseller%2Fproducts%2Fnew`; a buyer sees a forbidden message and
+the form stays disabled. The page checks each field before sending, then shows the
+server's `error.fields` beside the matching inputs and request-level errors in the
+summary. Entered values are kept after every failure. A request that times out is
+reported as unconfirmed and is never resent automatically, because the listing may
+already exist. On success the page shows the product name, its code, and links to
+**View product** (`/products/{code}`) and **Continue browsing**.
+
+Tests and evidence: [docs/evidence/us06.md](evidence/us06.md).

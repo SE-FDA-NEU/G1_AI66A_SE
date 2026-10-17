@@ -15,7 +15,7 @@ update this file should not be approved.
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
 | `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
 | `/seller/products` | Manage seller products | U | P0 | F4 Product Management | None | None | None yet | Not implemented; not in the Milestone 1 requirements (gap G8) |
-| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | [#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18) | [#32](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/32) | None yet | Not implemented |
+| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | [#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18), [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81) | [#32](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/32) | Branch `feat/81-seller-product-creation` (Sprint 3) | Implemented on the branch, pending PR review; see [US06 implementation update](#us06-implementation-update-81) |
 | `/seller/products/:productId/edit` | Update product information and stock | U | P1 | F4 Product Management | [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | [#34](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/34) | None yet | Not implemented |
 | `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | None yet | Not implemented |
 | `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | [#33](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/33) | None yet | Not implemented |
@@ -46,7 +46,7 @@ the database since PR #68 (#46), but only the catalog reads them.
 | [US02](us02-view-product-detail.md) View product details ([#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14)) | `/products/:productId` | `GET /api/v1/products/{productCode}` | `products` | Not implemented | None yet; the screen and the endpoint name the product differently (G4) |
 | [US03](us03-cart.md) Cart management ([#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15)) | `/cart` | `GET /api/v1/cart`; `POST /api/v1/cart/items`; `PATCH` and `DELETE /api/v1/cart/items/{productCode}` | `cart_items`, `products`, `users` | Implemented on `feat/79-cart` ([#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79)) for authenticated buyers. Buyers add products with Add to Cart on the product detail page (#78, [PR #91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)) | `tests/test_cart_service.py`, `tests/test_cart_api.py`, `tests/test_cart_page.py`; [evidence for issue #79](#evidence-for-issue-79) |
 | [US04](us04-checkout.md) Checkout and order placement ([#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16)) | `/checkout` | `POST /api/v1/orders` | `orders`, `seller_orders`, `order_items`, `cart_items`, `products`, `users` | Not implemented; the tables exist | None yet |
-| [US06](us06-create-product.md) Create product listing ([#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18)) | `/seller/products/new` | `POST /api/v1/seller/products` | `products`, `users` | Not implemented | None yet |
+| [US06](us06-create-product.md) Create product listing ([#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18), [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81)) | `/seller/products/new` | `POST /api/v1/seller/products` | `products`, `users` | Implemented on `feat/81-seller-product-creation` for authenticated sellers | `tests/test_seller_products.py`, `tests/seller_products_ui.mjs`; [evidence for issue #81](evidence/us06.md) |
 | [US08](us08-seller-order-management.md) Seller order management ([#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20)) | `/seller/orders` | `GET /api/v1/seller/orders`; `PATCH /api/v1/seller/orders/{subOrderId}/status` | `seller_orders`, `order_items`, `orders`, `products`, `users` | Not implemented; the tables exist | None yet |
 
 Routes that run on `main` at `37e80c3`: the `/products` page, `GET /api/v1/products`,
@@ -326,3 +326,34 @@ Implementation branch: feat/80-atomic-checkout; baseline main includes cart PR #
 
 Actual page script logic is checked in tests/checkout_ui.mjs. Browser layout and
 real-user usability are not claimed; see [US04 evidence](evidence/us04.md).
+
+
+## US06 implementation update (#81)
+
+This section supersedes the historical Sprint 2 US06 "Not implemented" entries and
+the BR5/BR9 rows above for product creation.
+Implementation branch: `feat/81-seller-product-creation`, based on `main` at
+`859e6f0` (after PR #94).
+
+| Screen / API | Access | Implementation | Status |
+|---|---|---|---|
+| `/seller/products/new` | Public shell; form for sellers only | `src/web/pages/seller-product-new.html`, `src/web/static/seller-product-new.js` | Implemented on branch, pending PR review/merge |
+| `POST /api/v1/seller/products` | Seller (`SellerUser`) | `src/api/seller_products.py`, `src/services/seller_products.py`, `src/schemas/seller_products.py` | Implemented on branch, pending PR review/merge |
+| Entry point **Create product** | Catalog navigation | `src/web/pages/products.html` | Implemented on branch |
+
+| Rule | Enforced where | Tested by (`tests/test_seller_products.py` unless noted) |
+|---|---|---|
+| BR5 seller ownership | `create_product()` takes the seller id from `SellerUser`; `ProductCreate` refuses `seller_id`, `code`, `reserved_stock`, `version`, `is_active` and `id` | `test_the_owner_always_comes_from_the_token_never_the_body`, `test_seller_creates_an_active_listing_with_trimmed_values`, `test_each_seller_owns_the_listings_they_create`, `test_server_owned_fields_cannot_be_sent`, `test_a_listing_with_stock_is_discoverable_and_can_be_bought` (seller order belongs to the creating seller) |
+| BR9 price > 0, stock >= 0 integer; failed writes leave no data | `ProductCreate` (strict integers, bounds) and the `products` CHECK constraints; the service rolls back on any failure | `test_invalid_field_is_reported_beside_that_field_and_nothing_is_written`, `test_boundary_values_are_accepted`, `test_failure_before_commit_rolls_back_and_the_session_stays_usable`, `test_an_unrelated_constraint_failure_is_not_treated_as_a_code_collision` |
+
+| Acceptance criterion of #81 | Automated verification | Browser check ([evidence](evidence/us06.md)) |
+|---|---|---|
+| AC1 valid seller, correct owner, unique code | `test_seller_creates_an_active_listing_with_trimmed_values`, `test_each_seller_owns_the_listings_they_create`, `test_generated_codes_fit_the_column_and_do_not_repeat`, `test_a_code_collision_is_retried_with_a_new_code`, `test_repeated_code_collisions_end_in_a_conflict_without_a_row`, `test_concurrent_creations_on_separate_connections_get_distinct_codes` | Seller creates a listing; code shown |
+| AC2 field-level errors, no product created | `test_invalid_field_is_reported_beside_that_field_and_nothing_is_written`, `test_every_invalid_field_is_reported_in_one_response`, `test_a_body_that_is_not_a_product_object_gets_a_form_error`, `test_validation_errors_never_echo_submitted_values`; client checks in `tests/seller_products_ui.mjs` | Client and server field errors beside fields |
+| AC3 stock 0: detail shows Out of stock, not in catalog | `test_a_zero_stock_listing_has_a_detail_page_but_stays_out_of_the_catalog`; detail script check in `tests/seller_products_ui.mjs` | Detail Out of stock, Add to Cart disabled, catalog search empty |
+| AC4 buyer or guest API call rejected, nothing created | `test_guests_buyers_and_invalid_tokens_cannot_create`, `test_a_deleted_seller_token_is_rejected` | Guest sent to login; buyer sees forbidden state |
+| AC5 failed request keeps values and shows the error at the right place | `tests/seller_products_ui.mjs` (422 fields, `_form`, 403/409/500/502, network error, session expiry draft) | 422 at Image URL, simulated 500 and network error keep values |
+| AC6 success shows code/name and a product link | `tests/seller_products_ui.mjs` (success region, encoded link, text rendering); `test_a_listing_with_stock_is_discoverable_and_can_be_bought` (`/products/{code}` opens) | Success region, View product, catalog search with placeholder image, buyer purchase |
+
+Shared contracts: `test_other_routes_keep_their_validation_error_shape` checks that
+cart, checkout, catalog and login validation responses are unchanged.
