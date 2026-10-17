@@ -343,7 +343,7 @@ Implementation branch: `feat/81-seller-product-creation`, based on `main` at
 
 | Rule | Enforced where | Tested by (`tests/test_seller_products.py` unless noted) |
 |---|---|---|
-| BR5 seller ownership | `create_product()` takes the seller id from `SellerUser`; `ProductCreate` refuses `seller_id`, `code`, `reserved_stock`, `version`, `is_active` and `id` | `test_seller_creates_an_active_listing_with_trimmed_values`, `test_each_seller_owns_the_listings_they_create`, `test_server_owned_fields_cannot_be_sent`, `test_a_listing_with_stock_is_discoverable_and_can_be_bought` (seller order belongs to the creating seller) |
+| BR5 seller ownership | `create_product()` takes the seller id from `SellerUser`; `ProductCreate` refuses `seller_id`, `code`, `reserved_stock`, `version`, `is_active` and `id` | `test_the_owner_always_comes_from_the_token_never_the_body`, `test_seller_creates_an_active_listing_with_trimmed_values`, `test_each_seller_owns_the_listings_they_create`, `test_server_owned_fields_cannot_be_sent`, `test_a_listing_with_stock_is_discoverable_and_can_be_bought` (seller order belongs to the creating seller) |
 | BR9 price > 0, stock >= 0 integer; failed writes leave no data | `ProductCreate` (strict integers, bounds) and the `products` CHECK constraints; the service rolls back on any failure | `test_invalid_field_is_reported_beside_that_field_and_nothing_is_written`, `test_boundary_values_are_accepted`, `test_failure_before_commit_rolls_back_and_the_session_stays_usable`, `test_an_unrelated_constraint_failure_is_not_treated_as_a_code_collision` |
 
 | Acceptance criterion of #81 | Automated verification | Browser check ([evidence](evidence/us06.md)) |

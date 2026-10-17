@@ -1082,7 +1082,9 @@ never commits. No schema migration is needed: every stored field already exists.
 | /seller/products/new | Browser shell | Form, field errors, success region with code, name and product link |
 
 `ProductCreate` is separate from the `Product` table model, forbids extra fields and
-trims strings. Name 1-200 characters, description 1-3000, price a strict integer
+trims strings. Name 1-200 characters on one line, description 1-3000; both need at
+least one visible character (zero-width and other invisible characters do not count).
+Price a strict integer
 `1..1000000000` VND, stock a strict integer `0..1000000`, image URL an absolute
 http(s) URL of at most 2048 characters. The upper numeric bounds are technical
 guardrails that keep price x stock within JavaScript's safe integers; they are not

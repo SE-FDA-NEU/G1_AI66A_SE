@@ -375,7 +375,8 @@ tab logs in or out), the page hides the form, sends nothing and asks for a reloa
 Each field has a label, a hint where useful, and an error line linked with
 `aria-describedby`. Invalid fields get `aria-invalid="true"`; the summary uses
 `role="alert"`, and focus moves to the first invalid field. Client checks mirror the
-server: required trimmed text, name up to 200 and description up to 3000 characters,
+server: required trimmed text with at least one visible character, a one-line name
+up to 200 and description up to 3000 characters,
 whole-number price 1 to 1.000.000.000 ₫ and stock 0 to 1.000.000, absolute http(s)
 image URL. The server's `error.fields` are shown beside the matching inputs;
 `_form`, 409, 500 and network errors appear in the summary only. While the request

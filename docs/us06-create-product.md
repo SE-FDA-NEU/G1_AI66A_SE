@@ -271,14 +271,16 @@ unknown fields are refused.
 
 | Field | Rule |
 |---|---|
-| `name` | Text, 1-200 characters after trimming |
-| `description` | Text, 1-3000 characters after trimming |
+| `name` | Text, 1-200 characters after trimming, at least one visible character, on one line (no newline, tab or other control character) |
+| `description` | Text, 1-3000 characters after trimming, at least one visible character; line breaks allowed |
 | `price` | JSON integer VND, `1` to `1000000000` |
 | `stock_quantity` | JSON integer, `0` to `1000000` |
 | `image_url` | Absolute http(s) URL, at most 2048 characters |
 
-Booleans, fractions (including `1.0`), numeric strings and `null` are refused for
-price and stock. The upper bounds are technical guardrails, not business rules from
+Text made only of invisible characters (spaces of any kind, zero-width spaces, byte
+order marks, Hangul fillers, braille blanks) counts as empty, so it gets the same
+"is required" message as a blank field. Booleans, fractions (including `1.0`),
+numeric strings and `null` are refused for price and stock. The upper bounds are technical guardrails, not business rules from
 the issue: price x stock stays below JavaScript's `Number.MAX_SAFE_INTEGER`, so the
 form and cart totals never lose precision.
 
