@@ -157,6 +157,34 @@ def test_server_owned_fields_cannot_be_sent(api, engine, field, value):
     assert stored(engine) == []
 
 
+def test_the_owner_always_comes_from_the_token_never_the_body(api, engine):
+    # A buyer naming a real seller is still refused for not being a seller.
+    as_buyer = api.post(
+        URL, json={**VALID, "seller_id": SELLER_ID}, headers=headers(engine, BUYER_ID)
+    )
+    # A seller cannot create a listing in another seller's name.
+    as_other = api.post(
+        URL, json={**VALID, "seller_id": SELLER_ID}, headers=headers(engine, OTHER_SELLER_ID)
+    )
+    # The same seller cannot pass their own id either: the server sets it.
+    as_self = api.post(
+        URL, json={**VALID, "seller_id": SELLER_ID}, headers=headers(engine, SELLER_ID)
+    )
+
+    assert (as_buyer.status_code, as_buyer.json()["error"]["code"]) == (403, "ERR_SELLER_REQUIRED")
+    for response in (as_other, as_self):
+        assert response.status_code == 422
+        assert response.json()["error"]["fields"] == {
+            "_form": ["seller_id is set by the server and cannot be sent."]
+        }
+    assert stored(engine) == []
+    assert "seller_id" not in ProductCreate.model_fields
+
+    created = api.post(URL, json=VALID, headers=headers(engine, OTHER_SELLER_ID))
+    assert created.json()["data"]["seller_id"] == OTHER_SELLER_ID
+    assert [p.seller_id for p in stored(engine)] == [OTHER_SELLER_ID]
+
+
 def test_guests_buyers_and_invalid_tokens_cannot_create(api, engine):
     expired = headers(engine, expires_in=-1)
     cases = [
@@ -309,12 +337,20 @@ def test_boundary_values_are_accepted(api, engine, patch):
 
 
 def test_every_invalid_field_is_reported_in_one_response(api, engine):
-    body = {"name": "", "description": "ok", "price": 0, "stock_quantity": -1, "image_url": "x"}
+    body = {"name": " ", "description": "​", "price": 0, "stock_quantity": 1.5, "image_url": "x"}
     response = api.post(URL, json=body, headers=headers(engine))
 
     assert response.status_code == 422
-    fields = response.json()["error"]["fields"]
-    assert set(fields) == {"name", "price", "stock_quantity", "image_url"}
+    error = response.json()["error"]
+    assert (error["code"], error["message"]) == ("ERR_VALIDATION", VALIDATION_MESSAGE)
+    # Keys are exactly the request field names, so the form can put each message under its input.
+    assert error["fields"] == {
+        "name": ["Product name is required."],
+        "description": ["Description is required."],
+        "price": ["Price must be greater than 0 ₫."],
+        "stock_quantity": ["Stock quantity must be a whole number."],
+        "image_url": ["Image URL must be an absolute http:// or https:// address."],
+    }
     assert stored(engine) == []
 
 
