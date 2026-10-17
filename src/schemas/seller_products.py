@@ -4,11 +4,13 @@ The request schema is separate from the `Product` table: the table does not vali
 construction, and the owner, code and status are set by the server, never by the client.
 """
 
+import unicodedata
 from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
+from pydantic_core import PydanticCustomError
 
 NAME_MAX_LENGTH = 200  # products.name
 DESCRIPTION_MAX_LENGTH = 3000
@@ -37,6 +39,22 @@ BODY_MESSAGE = (
 INVALID_JSON_MESSAGE = "The request body is not valid JSON."
 UNKNOWN_FIELD_MESSAGE = "The request contains fields that are not accepted."
 IMAGE_URL_MESSAGE = "Image URL must be an absolute http:// or https:// address."
+NAME_LINE_MESSAGE = "Product name must be one line, without tabs or control characters."
+
+# Trimming removes whitespace only. These characters also render as nothing, so text made
+# of them alone (for example zero-width spaces) still counts as empty.
+INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Zs", "Zl", "Zp", "Cn"})
+BLANK_CHARACTERS = frozenset("ᅟᅠ⠀ㅤﾠ")  # Hangul fillers, braille blank
+LINE_BREAK_CATEGORIES = frozenset({"Cc", "Zl", "Zp"})  # newline, tab, NUL, line separators
+
+
+def has_visible_character(value: str) -> bool:
+    return any(
+        not char.isspace()
+        and char not in BLANK_CHARACTERS
+        and unicodedata.category(char) not in INVISIBLE_CATEGORIES
+        for char in value
+    )
 
 
 def vnd(amount: int) -> str:
@@ -71,6 +89,22 @@ class ProductCreate(BaseModel):
     stock_quantity: StrictInt = Field(ge=0, le=STOCK_MAX)
     image_url: StrictStr = Field(min_length=1, max_length=IMAGE_URL_MAX_LENGTH)
 
+    @field_validator("name", "description")
+    @classmethod
+    def visible_text(cls, value: str) -> str:
+        """Refuse text that is blank once invisible characters are ignored."""
+        if not has_visible_character(value):
+            raise PydanticCustomError("blank_text", "The text has no visible characters.")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def single_line_name(cls, value: str) -> str:
+        """A name is shown on one line; descriptions may keep their line breaks."""
+        if any(unicodedata.category(char) in LINE_BREAK_CATEGORIES for char in value):
+            raise PydanticCustomError("name_line", NAME_LINE_MESSAGE)
+        return value
+
     @field_validator("image_url")
     @classmethod
     def absolute_http_url(cls, value: str) -> str:
@@ -104,10 +138,12 @@ def field_message(field: str, error: Mapping[str, Any]) -> str:
     """A message for one invalid product field; the submitted value is never repeated."""
     label = FIELD_LABELS[field]
     kind = error["type"]
-    if kind in ("missing", "string_too_short") or error.get("input", "") is None:
+    if kind in ("missing", "string_too_short", "blank_text") or error.get("input", "") is None:
         return f"{label} is required."
     if kind == "string_too_long":
         return f"{label} must be at most {error['ctx']['max_length']} characters."
+    if kind == "name_line":
+        return NAME_LINE_MESSAGE
     if field == "price":
         if kind == "greater_than":
             return "Price must be greater than 0 ₫."

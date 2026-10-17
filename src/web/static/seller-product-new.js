@@ -23,6 +23,11 @@ const LIMITS = {
 };
 const FIELDS_TITLE = "Please correct the highlighted fields.";
 const IMAGE_URL_MESSAGE = "Image URL must be an absolute http:// or https:// address.";
+const NAME_LINE_MESSAGE = "Product name must be one line, without tabs or control characters.";
+// Same rules as the server: text made only of invisible characters (zero-width spaces,
+// Hangul fillers, braille blanks) counts as empty, and a name stays on one line.
+const VISIBLE_CHARACTER = /[^\s\p{Cc}\p{Cf}\p{Z}\p{Cn}ᅟᅠ⠀ㅤﾠ]/u;
+const LINE_BREAK_OR_CONTROL = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 const UNCONFIRMED_MESSAGE =
   "The server did not confirm the listing (network error or timeout). Your values are kept. " +
   "The listing may already exist, so check before submitting again.";
@@ -140,6 +145,10 @@ function readText(name, errors) {
     errors[name] = [`${LABELS[name]} is required.`];
   } else if ([...value].length > LIMITS[name]) {
     errors[name] = [`${LABELS[name]} must be at most ${LIMITS[name]} characters.`];
+  } else if (name !== "image_url" && !VISIBLE_CHARACTER.test(value)) {
+    errors[name] = [`${LABELS[name]} is required.`];
+  } else if (name === "name" && LINE_BREAK_OR_CONTROL.test(value)) {
+    errors[name] = [NAME_LINE_MESSAGE];
   }
   return value;
 }

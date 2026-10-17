@@ -203,6 +203,12 @@ const checks = [
   [{stock_quantity: ""}, "stock_quantity", "Stock quantity is required."],
   [{name: "x".repeat(201)}, "name", "Product name must be at most 200 characters."],
   [{description: " \n "}, "description", "Description is required."],
+  [{name: "​​"}, "name", "Product name is required."],
+  [{name: "ㅤ"}, "name", "Product name is required."],
+  [{name: "⠀﻿"}, "name", "Product name is required."],
+  [{name: "Mouse\tPad"}, "name", "Product name must be one line, without tabs or control characters."],
+  [{name: "Mouse Pad"}, "name", "Product name must be one line, without tabs or control characters."],
+  [{description: "​\n‍"}, "description", "Description is required."],
   [{image_url: "https://exa mple.com/a.jpg"}, "image_url", "Image URL must be an absolute http:// or https:// address."],
   [{image_url: "/images/p-100.jpg"}, "image_url", "Image URL must be an absolute http:// or https:// address."],
   [{image_url: "javascript:alert(1)"}, "image_url", "Image URL must be an absolute http:// or https:// address."],
@@ -228,10 +234,12 @@ assert.equal(page.posts().length, 0);
 // 200 emoji are 400 UTF-16 units but 200 characters, which the server accepts.
 page = setup({responses: [SELLER, CREATED]});
 await settle();
-page.fill({...VALID, name: "🙂".repeat(200)});
+page.fill({...VALID, name: "🙂".repeat(200), description: "Dòng 1\nDòng 2\n\tChi tiết"});
 page.submit();
 await settle();
 assert.equal(JSON.parse(page.posts()[0].options.body).name, "🙂".repeat(200));
+assert.equal(JSON.parse(page.posts()[0].options.body).description, "Dòng 1\nDòng 2\n\tChi tiết",
+  "Descriptions keep their line breaks");
 console.log("Client validation passed: required, whole numbers, bounds, URL, no POST.");
 
 // A valid form sends trimmed text and JSON numbers with the page's token.
