@@ -8,7 +8,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -120,9 +120,11 @@ def create_app() -> FastAPI:
     )
 
     # Root route - provides informative landing response
-    @app.get("/", tags=["Root"])
-    def read_root() -> Dict[str, str]:
-        """Root endpoint confirming application is live and accessible."""
+    @app.get("/", tags=["Root"], response_model=None)
+    def read_root(request: Request) -> Dict[str, str] | RedirectResponse:
+        """Open the catalog in browsers and retain metadata for API/status clients."""
+        if "text/html" in request.headers.get("accept", "").lower():
+            return RedirectResponse("/products", status_code=307)
         return {
             "app": settings.APP_NAME,
             "version": __version__,
