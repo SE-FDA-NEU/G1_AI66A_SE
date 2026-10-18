@@ -178,11 +178,13 @@ Leave this terminal open while you use the app; stop it with `Ctrl+C`.
 | http://127.0.0.1:8000/products | Heading "Products" and 20 product cards. The first card shows "Wireless Mouse", "180.000 ₫" and "In Stock". Images show a grey placeholder because the seeded image URLs are not served. |
 | http://127.0.0.1:8000/api/v1/products?page=1&limit=20 | JSON with 20 items in `data`, the first with `"code": "P-100"`, and `"meta": {"current_page": 1, "limit": 20, "total": 45, "total_pages": 3}` |
 | http://127.0.0.1:8000/health | `{"status":"ok","version":"0.1.0","environment":"development","database":"connected"}` |
-| http://127.0.0.1:8000/ | JSON with `"status": "running"` |
+| http://127.0.0.1:8000/ | A browser is sent to `/products`; `curl http://127.0.0.1:8000/` (no HTML `Accept` header) gets JSON with `"status": "running"` |
 | http://127.0.0.1:8000/docs | Swagger UI listing the API |
 
 `/health` only proves that the database connection works. The products page and
-the API prove that the seeded data is there.
+the API prove that the seeded data is there. The other P0 screens and the account
+for each are listed in the README ("Start Application Server"); their states and
+messages are documented in [ui.md](ui.md).
 
 To run the automated tests, use a second terminal with the virtual environment
 activated (or stop the server first):
@@ -261,9 +263,10 @@ section 4 asks to delete it.
 | **Validation & Settings** | Pydantic / Pydantic-Settings | `>= 2.8.0` / `>= 2.4.0` | Type-safe request validation and environment configuration |
 | **Database ORM** | SQLModel on SQLAlchemy | `>= 0.0.22, < 0.0.23` / `>= 2.0.30` | Table models, sessions and queries |
 | **Database Engine** | SQLite | Built-in | Zero-configuration file database (dynamic runtime generation) |
-| **Web UI** | HTML / CSS / JavaScript | - | `/products` page served by FastAPI; no build step |
+| **Web UI** | HTML / CSS / JavaScript | - | Eight pages (catalog, detail, cart, checkout, confirmation, login, seller product form, seller orders) served by FastAPI; no build step |
 | **Testing** | pytest, pytest-cov, HTTPX | `>= 8.0.0` / `>= 5.0.0` / `>= 0.27.0` | Automated unit, integration, and smoke testing with coverage |
 | **Code Quality** | Ruff | `>= 0.5.0` | High-speed linting and code formatting |
+| **Page script checks** | Node.js (optional) | `>= 20` | Runs `tests/checkout_ui.mjs` and `tests/seller_products_ui.mjs`; not needed to run the app |
 
 ---
 
@@ -272,47 +275,44 @@ section 4 asks to delete it.
 ```
 .
 ├── .github/
+│   ├── pull_request_template.md   # PR form used by every pull request
 │   └── workflows/
-│       ├── ci.yml                 # Continuous Integration pipeline (linting, tests, secret scan)
-│       └── ...
+│       ├── ci.yml                 # Lint, pytest, page script checks, secret scan
+│       └── ...                    # Board, label and Scrum checks
 ├── docs/
 │   ├── SETUP.md                   # This setup and run guide
-│   ├── requirements.md           # Product requirements & user stories (US01-US10)
-│   ├── traceability.md           # Traceability matrix and implementation evidence
-│   ├── design.md                  # System design
-│   ├── sprint-log.md             # Sprint log
-│   ├── images/                    # Screenshots used as evidence
-│   └── ...
+│   ├── requirements.md            # Product requirements & user stories (US01-US10)
+│   ├── design.md                  # Architecture, data model, API contract and error codes
+│   ├── ui.md                      # Screens, states, error cases and known UI gaps
+│   ├── traceability.md            # Route, story, business rule and test traceability
+│   ├── us01-...md to us10-...md   # One specification per user story
+│   ├── sprint-log.md              # Sprint log
+│   ├── evidence/                  # Sprint and story evidence (milestone3.md, us04.md, us06.md, ...)
+│   └── images/                    # Screenshots used as evidence
 ├── src/
 │   ├── __init__.py                # Package version metadata
 │   ├── config.py                  # Pydantic environment configuration loader
-│   ├── database.py                # Database engine and sessions; `python -m src.database` creates missing tables only
-│   ├── seed.py                    # Demo seller and sample products; `python -m src.seed` creates missing tables and loads them
-│   ├── main.py                    # Application entrypoint & ASGI app factory
-│   ├── models/
-│   │   ├── __init__.py            # Model registry; importing it registers every table
-│   │   ├── base.py                # SQLAlchemy DeclarativeBase and common mixins
-│   │   ├── user.py                # users table (buyers and sellers)
-│   │   ├── product.py             # products table
-│   │   ├── cart_item.py           # cart_items table
-│   │   ├── order.py               # orders table
-│   │   ├── seller_order.py        # seller_orders table
-│   │   └── order_item.py          # order_items table
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── router.py              # Main API router (/api/v1)
-│   │   ├── health.py              # Health check endpoint (/health & /api/v1/health)
-│   │   └── products.py            # Product catalog API backed by the database (US01)
+│   ├── database.py                # Engine, sessions and lightweight migrations
+│   ├── seed.py                    # Accounts, catalog and the optional --demo scenarios
+│   ├── auth.py                    # Password hashing, JWTs and role dependencies
+│   ├── errors.py                  # Common {"error": {code, message}} envelope
+│   ├── main.py                    # Application factory, error handlers and `/`
+│   ├── models/                    # users, products, cart_items, orders, seller_orders, order_items, order_history
+│   ├── schemas/                   # Request/response models: cart, orders, seller_products
+│   ├── services/                  # Business rules: cart, orders (checkout), seller_products
+│   ├── api/                       # /api/v1 routers: auth, products, cart, orders, seller_products, seller_orders, health
 │   └── web/
-│       ├── router.py              # Serves the /products page
-│       ├── pages/products.html    # Page markup
-│       └── static/                # products.js, products.css, placeholder image (/static)
+│       ├── router.py              # Serves the HTML pages
+│       ├── pages/                 # products, product-detail, cart, checkout, confirmation, login, seller-product-new, seller-orders
+│       └── static/                # Page scripts, styles and the placeholder image (/static)
 ├── tests/
-│   ├── conftest.py                # Pytest fixtures and test client configuration (in-memory SQLite)
-│   └── test_*.py                  # Config, database, health, products API, products page, issue #45 scenarios
+│   ├── conftest.py                # Shared fixtures (in-memory SQLite)
+│   ├── cart_db.py                 # Disposable SQLite file database for service/API tests
+│   ├── test_*.py                  # pytest suites per feature, P0 flows and the docs contract
+│   └── *_ui.mjs                   # Page script checks run with Node
 ├── .env.example                   # Committed environment variable template (no secrets)
 ├── .gitignore                     # Excludes .env, *.db, *.sqlite*, caches, virtual environments
-├── pyproject.toml                 # Modern Python build metadata, pytest, and ruff settings
+├── pyproject.toml                 # Build metadata, pytest and ruff settings
 ├── requirements.txt               # Dependencies installed by this guide and by CI
 ├── requirements.lock              # Pinned versions; not used by this guide or by CI
 └── README.md                      # Project overview and quick start guide
@@ -327,7 +327,8 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) automatically valida
 2. **Clean Dependency Installation:** Sets up Python 3.12 runner and installs `requirements.txt` and testing utilities.
 3. **Static Analysis & Linting:** Executes `ruff check .` to guarantee code style and identify errors.
 4. **Smoke and Unit Tests:** Executes `pytest -v --cov --cov-report=term-missing --junitxml=junit.xml` to verify endpoint availability and response contracts.
-5. **Credential & Secret Scanning:** Validates that no secret keys, API tokens, `.env` files, or database binaries are accidentally committed.
+5. **Page Script Checks:** Sets up Node 22 and runs `node tests/checkout_ui.mjs` and `node tests/seller_products_ui.mjs`.
+6. **Credential & Secret Scanning:** Validates that no secret keys, API tokens, `.env` files, or database binaries are accidentally committed.
 
 
 ## US04 orders migration (#80)

@@ -6,18 +6,18 @@ This table is the single source of truth for Milestone 1 section 6 and for the
 Milestone 4 report. Keep it current - a PR that adds a route and does not
 update this file should not be approved.
 
-| Route | Purpose | Access | Priority | Feature | Story issue | Spec PR (Milestone 1) | Implementation PR (Sprint 2) | Runtime |
+| Route | Purpose | Access | Priority | Feature | Story issue | Spec PR (Milestone 1) | Implementation PR (Sprint 2 and 3) | Runtime |
 |---|---|---|---|---|---|---|---|---|
-| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13), [#45](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/45) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | [#57](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/57), [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60), [#61](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/61), [#64](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/64), [#65](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/65), [#68](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/68), [#70](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/70) | Partial |
-| `/products/:productId` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | None yet | Not implemented |
-| `/cart` | Manage shopping cart | U | P0 | F2 Cart | [#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15), [#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79) | [#31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/31) | Branch `feat/79-cart` (Sprint 3) | Implemented on `feat/79-cart`; buyers add products from `/products/:productCode` (#78, [PR #91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)) |
-| `/checkout` | Place an order | U | P0 | F3 Ordering | [#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16) | [#23](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/23) | None yet | Not implemented |
+| `/products` | Browse product catalog | G | P0 | F1 Product Discovery | [#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13), [#45](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/45), [#77](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/77) | [#24](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/24) | [#57](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/57), [#58](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/58), [#59](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/59), [#60](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/60), [#61](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/61), [#64](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/64), [#65](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/65), [#68](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/68), [#70](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/70), [#90](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/90) | Implemented: search, pagination, stock filter (BR1) |
+| `/products/:productCode` | View product details | G | P0 | F1 Product Discovery | [#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14), [#78](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/78) | [#35](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/35) | [#91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91) | Implemented; Add to Cart for buyers |
+| `/cart` | Manage shopping cart | U | P0 | F2 Cart | [#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15), [#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79) | [#31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/31) | [#92](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/92) | Implemented: four states, quantity changes, stock flags (BR2) |
+| `/checkout` | Place an order | U | P0 | F3 Ordering | [#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16), [#80](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/80) | [#23](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/23) | [#94](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/94) | Implemented: atomic, idempotent checkout; confirmation at `/checkout/confirmation/:orderId` |
 | `/orders` | View buyer orders | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
 | `/orders/:id` | View buyer order details | U | P1 | F3 Ordering | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | [#27](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/27) | None yet | Not implemented |
 | `/seller/products` | Manage seller products | U | P0 | F4 Product Management | None | None | None yet | Not implemented; not in the Milestone 1 requirements (gap G8) |
-| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | [#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18), [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81) | [#32](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/32) | Branch `feat/81-seller-product-creation` (Sprint 3) | Implemented on the branch, pending PR review; see [US06 implementation update](#us06-implementation-update-81) |
+| `/seller/products/new` | Create product listing | U | P0 | F4 Product Management | [#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18), [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81) | [#32](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/32) | [#95](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/95) | Implemented: field-level errors, owner from token (BR5, BR9) |
 | `/seller/products/:productId/edit` | Update product information and stock | U | P1 | F4 Product Management | [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | [#34](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/34) | None yet | Not implemented |
-| `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | None yet | Not implemented |
+| `/seller/orders` | Manage incoming orders | U | P0 | F5 Order Management | [#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20), [#82](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/82) | [#26](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/26) | [#96](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/96) | Implemented: own sub-orders, status transitions, cancellation restock (BR6) |
 | `/seller/analytics` | View sales analytics | U | P1 | F6 Analytics | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | [#33](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/33) | None yet | Not implemented |
 | `/seller/analytics/products` | View best-selling product ranking | U | P2 | F6 Analytics | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | [#39](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/39) | None yet | Not implemented |
 
@@ -26,31 +26,32 @@ update this file should not be approved.
 **Spec PR:** the merged Milestone 1 pull request that specified the story. A
 merged spec PR means the story is specified, not built.
 
-**Runtime** on `main` at `37e80c3`: Implemented / Partial / Not implemented.
-`/products` is Partial because the walking skeleton covers part of US01; see
-[P0 story map](#p0-story-map).
+**Runtime** on `main` at `932f480` (after PR #96), updated in #85: Implemented /
+Partial / Not implemented. All six P0 screens are implemented. The login page
+(`/login`, #75, PR #89) and the browser entry at `/` (#83, PR #97, open) are shared
+screens, not story screens; see [docs/ui.md](ui.md#1-screen-inventory-and-navigation).
 
 ## P0 story map
 
 Each P0 story traced from the Milestone 1 requirements through the screen, the
 endpoint in the [API design](design.md#33-p0-endpoint-contract) and the tables
-in the [data model](design.md#22-table-definitions) to what runs today. The
-data model (PR #66, approved by @MinhQuangQu) and the API contract (PR #63,
-approved by @minhnm162; restored and aligned with `seller_orders` in PR #69,
-approved by @minhnm162) are merged for all six stories. All six tables exist in
-the database since PR #68 (#46), but only the catalog reads them.
+in the [data model](design.md#22-table-definitions) to what runs on `main` at
+`932f480`. All six stories are implemented and merged in Sprint 3. Cross-story
+flows are tested in `tests/test_p0_flows.py` (#83, PR #97, open), and screenshots
+of every screen and state are in the [Milestone 3 evidence](evidence/milestone3.md).
 
 | Story | Screen | Endpoint | Tables | Runtime on `main` | Tests and evidence |
 |---|---|---|---|---|---|
-| [US01](us01-browse-product-catalog.md) Browse product catalog ([#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13)) | `/products` | `GET /api/v1/products` | `products`; `users` as the owning seller | Partial. The page and the API read the database. The page shows only the first 20 products, with no page controls or filters (G3), and out-of-stock products are still listed (G2). | `tests/test_products.py`, `tests/test_issue45_scenarios.py`, `tests/test_products_page.py`; items E1 to E6 in the [evidence index](evidence/sprint2.md) |
-| [US02](us02-view-product-detail.md) View product details ([#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14)) | `/products/:productId` | `GET /api/v1/products/{productCode}` | `products` | Not implemented | None yet; the screen and the endpoint name the product differently (G4) |
-| [US03](us03-cart.md) Cart management ([#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15)) | `/cart` | `GET /api/v1/cart`; `POST /api/v1/cart/items`; `PATCH` and `DELETE /api/v1/cart/items/{productCode}` | `cart_items`, `products`, `users` | Implemented on `feat/79-cart` ([#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79)) for authenticated buyers. Buyers add products with Add to Cart on the product detail page (#78, [PR #91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)) | `tests/test_cart_service.py`, `tests/test_cart_api.py`, `tests/test_cart_page.py`; [evidence for issue #79](#evidence-for-issue-79) |
-| [US04](us04-checkout.md) Checkout and order placement ([#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16)) | `/checkout` | `POST /api/v1/orders` | `orders`, `seller_orders`, `order_items`, `cart_items`, `products`, `users` | Not implemented; the tables exist | None yet |
-| [US06](us06-create-product.md) Create product listing ([#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18), [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81)) | `/seller/products/new` | `POST /api/v1/seller/products` | `products`, `users` | Implemented on `feat/81-seller-product-creation` for authenticated sellers | `tests/test_seller_products.py`, `tests/seller_products_ui.mjs`; [evidence for issue #81](evidence/us06.md) |
-| [US08](us08-seller-order-management.md) Seller order management ([#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20)) | `/seller/orders` | `GET /api/v1/seller/orders`; `PATCH /api/v1/seller/orders/{subOrderId}/status` | `seller_orders`, `order_items`, `orders`, `products`, `users` | Not implemented; the tables exist | None yet |
+| [US01](us01-browse-product-catalog.md) Browse product catalog ([#13](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/13)) | `/products` | `GET /api/v1/products` | `products`; `users` as the owning seller | Implemented ([#77](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/77), [#90](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/90)): search, 20 per page with page controls, only active products with available stock | `tests/test_products.py`, `tests/test_products_page.py`, `tests/test_issue45_scenarios.py`; evidence M3-02 to M3-05 |
+| [US02](us02-view-product-detail.md) View product details ([#14](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/14)) | `/products/:productCode` | `GET /api/v1/products/{productCode}` | `products` | Implemented ([#78](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/78), [#91](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/91)): detail by public code, Out of stock state, Add to Cart with login return | `tests/test_product_detail.py`; evidence M3-06 to M3-08 |
+| [US03](us03-cart.md) Cart management ([#15](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/15)) | `/cart` | `GET /api/v1/cart`; `POST /api/v1/cart/items`; `PATCH` and `DELETE /api/v1/cart/items/{productCode}` | `cart_items`, `products`, `users` | Implemented ([#79](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/79), [#92](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/92)) for authenticated buyers, with the four required states | `tests/test_cart_service.py`, `tests/test_cart_api.py`, `tests/test_cart_page.py`; [evidence for issue #79](#evidence-for-issue-79); M3-11 to M3-16 |
+| [US04](us04-checkout.md) Checkout and order placement ([#16](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/16)) | `/checkout`, `/checkout/confirmation/:orderId` | `POST /api/v1/orders` | `orders`, `seller_orders`, `order_items`, `cart_items`, `products`, `users` | Implemented ([#80](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/80), [#94](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/94)): one transaction, Idempotency-Key replay, buyer-owned receipt | `tests/test_checkout.py`, `tests/checkout_ui.mjs`; [US04 evidence](evidence/us04.md); M3-17 to M3-19 |
+| [US06](us06-create-product.md) Create product listing ([#18](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/18), [#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81)) | `/seller/products/new` | `POST /api/v1/seller/products` | `products`, `users` | Implemented ([#81](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/81), [#95](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/95)) for authenticated sellers | `tests/test_seller_products.py`, `tests/seller_products_ui.mjs`; [US06 evidence](evidence/us06.md); M3-20 to M3-21 |
+| [US08](us08-seller-order-management.md) Seller order management ([#20](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/20)) | `/seller/orders` | `GET /api/v1/seller/orders`; `PATCH /api/v1/seller/orders/{subOrderId}/status` | `seller_orders`, `order_items`, `orders`, `products`, `users` | Implemented ([#82](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/82), [#96](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/96)): seller-scoped list with filters, transitions with `order_history`, cancellation restock | `tests/test_seller_orders.py`; M3-22 to M3-25 |
 
-Routes that run on `main` at `37e80c3`: the `/products` page, `GET /api/v1/products`,
-`GET /health`, `GET /api/v1/health` and `GET /`. No other P0 endpoint exists yet.
+Every P0 route of the [API design](design.md#33-p0-endpoint-contract) runs on `main`
+at `932f480`, together with `/login`, `/api/v1/auth/login`, `/api/v1/auth/me`, `/health`
+and `GET /`.
 
 ## Task 3: Database-backed product API
 
@@ -260,15 +261,15 @@ product, cart, checkout, seller product, and seller order workflows.
 
 | Design deliverable | Coverage | Status |
 |---|---|---|
-| REST endpoint contract | 10 documented endpoints under `/api/v1` | Done |
-| Error handling contract | Documents `400`, `401`, `403`, `404`, `409`, `422`, and `500` conditions | Done |
+| REST endpoint contract | 13 documented endpoints under `/api/v1`, updated to the running behaviour in #85 | Done |
+| Error handling contract | Every error code the API raises, with its status and trigger (design.md section 3.4); checked by `tests/test_ui_docs_contract.py` | Done |
 | P0 story coverage | US01, US02, US03, US04, US06, and US08 mapped to endpoints | Done |
 
 ## P0 UI wireframes and documentation
 
-The initial UI contract is documented in [`docs/ui.md`](./ui.md). It provides
-wireframes and implementation-facing traceability for all six P0 screens,
-plus login and order confirmation.
+The UI contract is documented in [`docs/ui.md`](./ui.md): wireframes from #76
+(PR #88), finalized against the running screens in #85. It covers all six P0
+screens, plus login, order confirmation and the browser entry at `/`.
 
 | UI requirement | Evidence in `docs/ui.md` | Traceability |
 |---|---|---|
@@ -281,25 +282,27 @@ plus login and order confirmation.
 | Wireframe for seller order management | Section 2.6, `/seller/orders` | US08 / issue #20 |
 | Login and confirmation screens | Sections 2.7 and 2.8 | Shared authentication and checkout completion |
 | Purpose, endpoint, access, CTA, next step, and UI states | Sections 1 and 2 | Applies to every documented screen |
+| API, business-rule and UI error cases | Section 3.2, 20 cases with code, rule, exact message and test | Checked by `tests/test_ui_docs_contract.py` |
+| Known UI gaps | Section 4.3, UI-G1 to UI-G7 | Follow-ups for #86 or Sprint 4 |
 | Buyer and seller flows | Section 1, “Navigation flows” | US01 → US04 and US06 → US08 |
-| Review before implementation | Section 4, “Wireframe review checklist” | Pending product, buyer, seller, accessibility, and engineering review |
+| Review before implementation | Section 4.1, “Wireframe review checklist” | Wireframes reviewed in PR #88; running screens checked in a browser (#85); product owner and user review pending in #83 |
 
 ## Business rules
 
 Numbered, so issues and tests can cite them.
 
-| # | Rule | Enforced where (on `main` at `37e80c3`) | Tested by |
+| # | Rule | Enforced where (on `main` at `932f480`, updated in #85) | Tested by |
 |---|------|----------------|-----------|
-| BR1 | Only available products can be displayed in the product catalog. | `list_products()` in `src/api/products.py` returns only rows with `is_active = TRUE`. Stock is not checked: an out-of-stock product is listed with `stock_status: out_of_stock` (gap G2). | `test_products_database_pagination_and_visibility` in `tests/test_products.py` (an inactive product is left out); the scenarios in `tests/test_issue45_scenarios.py` |
+| BR1 | Only available products can be displayed in the product catalog. | `list_products()` in `src/api/products.py` returns only rows with `is_active = TRUE` and `stock_quantity > reserved_stock` (#77, PR #90); the detail page still opens an out-of-stock product and shows "Out of stock" (#78, PR #91). | `test_products_database_pagination_and_visibility` and `test_list_products_searches_available_product_names` in `tests/test_products.py`; `test_out_of_stock_product_remains_visible_but_unavailable`; `test_a_zero_stock_listing_has_a_detail_page_but_stays_out_of_the_catalog` |
 | BR2 | Buyers may add or update cart items only when the requested quantity is a positive integer and does not exceed current available stock. Adding an item to the cart does not reserve stock. | `validate_quantity()` and `validate_purchasable_quantity()` in `src/services/cart.py` (#79): available stock is `stock_quantity - reserved_stock`, and `POST` checks the quantity after adding to an existing line. The cart never writes to `products`. Backed by CHECK `quantity > 0` and `UNIQUE(buyer_id, product_id)` on `cart_items` (#46). | `tests/test_cart_service.py` (`test_reserved_stock_is_not_available_to_the_cart`, `test_add_checks_stock_against_the_quantity_after_adding`, `test_cart_changes_never_touch_product_stock`, invalid quantities); `tests/test_cart_api.py` (`409`, `400` and `422` responses); `test_add_rechecks_stock_when_the_line_filled_up_after_reading`; the stock boundary tests (`test_add_accepts_exactly_the_available_stock`, `test_add_refuses_one_more_than_the_available_stock`, `test_adding_to_a_line_may_reach_exactly_the_available_stock`, `test_update_accepts_exactly_the_available_stock`, `test_quantity_at_the_stock_limit_is_accepted_and_one_more_is_refused`); and `test_concurrent_additions_respect_stock_limit` in `tests/test_product_detail.py` |
-| BR3 | A buyer must be authenticated before placing an order. | Design only: Bearer token on checkout ([API design](design.md#32-authentication-and-common-response-rules)). No authentication exists. | None yet |
-| BR4 | A buyer can view only their own orders. | Design only: order endpoints and authentication are not built. | None yet |
-| BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | Schema only: `products.seller_id` is a foreign key to `users.id` (#46). Taking the seller from the token needs authentication, which does not exist. | None yet (gap G7) |
-| BR6 | Sellers can view and manage incoming orders related to their products. | Schema only: `seller_orders.seller_id` and `UNIQUE(order_id, seller_id)` (#46). No seller order endpoint exists. | None yet |
-| BR7 | Seller revenue is calculated only from the authenticated seller's order items in COMPLETED orders, using the item price recorded at purchase time. | Design only: `order_items.unit_price`, `seller_orders.status` and `seller_orders.completed_at` ([data model](design.md#25-business-rule-mapping)). Analytics (P1) is not built. | None yet |
-| BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | Design only: one checkout transaction with an optimistic check on `products.version` ([transaction rules](design.md#26-transaction-level-rules)). Checkout is not built. | None yet |
-| BR9 | Product updates (price, stock quantity, and product information) must validate that price is strictly positive (> 0) and stock quantity is a non-negative integer (>= 0). If an update fails validation, the database transaction is aborted, and all previous valid data remains unchanged. | Schema only: CHECK `price > 0`, `stock_quantity >= 0`, `reserved_stock >= 0` and `reserved_stock <= stock_quantity` on `products` (#46). The update flow (US07, P1) is not built. | None yet; no test writes an invalid value (gap G7) |
-| BR10 | Seller best-selling product analytics must rank only the authenticated seller's own products using quantities from completed order items in the selected reporting period. | Design only: completed `seller_orders` and `order_items` quantities ([data model](design.md#25-business-rule-mapping)). Analytics (P2) is not built. | None yet |
+| BR3 | A buyer must be authenticated before placing an order. | `POST /api/v1/orders` depends on `BuyerUser` (`src/api/orders.py`, #80); `/checkout` sends a guest to `/login?return_to=%2Fcheckout`. | `test_auth_empty_cart_key_and_pages` in `tests/test_checkout.py` (401 for a guest, 403 for a seller) |
+| BR4 | A buyer can view only their own orders. | `receipt()` in `src/services/orders.py` selects the order by id and buyer; another buyer's order answers `404 ERR_ORDER_NOT_FOUND` (#80). | `test_api_create_replay_and_ownership` in `tests/test_checkout.py` |
+| BR5 | Sellers may create and manage only products belonging to their own store. Product ownership must be derived from the authenticated seller identity. | `create_product()` in `src/services/seller_products.py` takes the owner from `SellerUser`; `ProductCreate` refuses `seller_id` and other server-owned fields (#81, PR #95). | `test_the_owner_always_comes_from_the_token_never_the_body`, `test_each_seller_owns_the_listings_they_create` in `tests/test_seller_products.py` |
+| BR6 | Sellers can view and manage incoming orders related to their products. | `list_seller_orders()` filters `seller_orders.seller_id` by the token's seller; a status change on another seller's sub-order answers `403 ERR_RESOURCE_OWNER` (#82, PR #96). | `test_seller_order_listing_is_scoped_to_authenticated_seller`, `test_other_seller_cannot_update_owned_order` in `tests/test_seller_orders.py`; `test_buyers_and_guests_cannot_use_seller_orders` in `tests/test_ui_docs_contract.py` |
+| BR7 | Seller revenue is calculated only from the authenticated seller's order items in COMPLETED orders, using the item price recorded at purchase time. | Data only: checkout stores `order_items.unit_price` (#80) and completing a seller order sets `seller_orders.completed_at` (#82). Revenue analytics (US09, P1) is not built. | Inputs only: `test_multi_seller_checkout_and_price_snapshots`, `test_completion_sets_completed_at`; no revenue test |
+| BR8 | Before creating an order, the system must revalidate product availability and stock using the latest stock data. If stock is insufficient, the order must not be created and the buyer must be informed which item caused the problem. | `checkout()` in `src/services/orders.py` rechecks every line in one transaction: active product, matching `version` and `stock_quantity - reserved_stock >= quantity`; any failure rolls everything back and names the item (#80, PR #94). | `test_invalid_second_item_rolls_back_everything`, `test_stale_product_version_aborts_checkout`, `test_concurrent_requests_on_separate_connections` in `tests/test_checkout.py` |
+| BR9 | Product updates (price, stock quantity, and product information) must validate that price is strictly positive (> 0) and stock quantity is a non-negative integer (>= 0). If an update fails validation, the database transaction is aborted, and all previous valid data remains unchanged. | Product creation: `ProductCreate` (strict integers, price > 0, stock >= 0) and the CHECK constraints on `products`; a failed create writes nothing (#81, PR #95). The update flow (US07, P1) is not built. | `test_invalid_field_is_reported_beside_that_field_and_nothing_is_written`, `test_failure_before_commit_rolls_back_and_the_session_stays_usable` in `tests/test_seller_products.py` |
+| BR10 | Seller best-selling product analytics must rank only the authenticated seller's own products using quantities from completed order items in the selected reporting period. | Design only: best-selling analytics (US10, P2) is not built. | None yet |
 
 
 ## US04 implementation update (#80)
@@ -309,8 +312,8 @@ Implementation branch: feat/80-atomic-checkout; baseline main includes cart PR #
 
 | Screen / API | Access | Status |
 |---|---|---|
-| /checkout; POST /api/v1/orders | Buyer | Implemented on branch, pending PR review/merge |
-| /checkout/confirmation/{orderId}; GET /api/v1/orders/{orderId} | Owning buyer | Implemented on branch, pending PR review/merge |
+| /checkout; POST /api/v1/orders | Buyer | Merged in PR #94 |
+| /checkout/confirmation/{orderId}; GET /api/v1/orders/{orderId} | Owning buyer | Merged in PR #94 |
 
 | Requirement / business rule | Automated verification in tests/test_checkout.py |
 |---|---|
@@ -337,9 +340,9 @@ Implementation branch: `feat/81-seller-product-creation`, based on `main` at
 
 | Screen / API | Access | Implementation | Status |
 |---|---|---|---|
-| `/seller/products/new` | Public shell; form for sellers only | `src/web/pages/seller-product-new.html`, `src/web/static/seller-product-new.js` | Implemented on branch, pending PR review/merge |
-| `POST /api/v1/seller/products` | Seller (`SellerUser`) | `src/api/seller_products.py`, `src/services/seller_products.py`, `src/schemas/seller_products.py` | Implemented on branch, pending PR review/merge |
-| Entry point **Create product** | Catalog navigation | `src/web/pages/products.html` | Implemented on branch |
+| `/seller/products/new` | Public shell; form for sellers only | `src/web/pages/seller-product-new.html`, `src/web/static/seller-product-new.js` | Merged in PR #95 |
+| `POST /api/v1/seller/products` | Seller (`SellerUser`) | `src/api/seller_products.py`, `src/services/seller_products.py`, `src/schemas/seller_products.py` | Merged in PR #95 |
+| Entry point **Create product** | Catalog navigation | `src/web/pages/products.html` | Merged in PR #95 |
 
 | Rule | Enforced where | Tested by (`tests/test_seller_products.py` unless noted) |
 |---|---|---|
@@ -357,3 +360,19 @@ Implementation branch: `feat/81-seller-product-creation`, based on `main` at
 
 Shared contracts: `test_other_routes_keep_their_validation_error_shape` checks that
 cart, checkout, catalog and login validation responses are unchanged.
+
+
+## P0 integration and usability verification (#83)
+
+The complete Story -> Screen -> Route -> Endpoint -> BR -> Test Case -> Evidence
+matrix and acceptance status are in [Sprint 3 evidence, section 4](evidence/sprint3.md#4-p0-flows-and-real-user-usability--issue-83).
+`tests/test_p0_flows.py` links seller creation, buyer purchase/receipt and (after
+US08 integration) seller fulfilment/cancellation using authenticated HTTP calls and
+independent committed database checks. The tests do not constitute real-user
+sessions. Human forms, findings and retests are linked from the evidence index.
+
+
+PR #97 scope clarification: automated P0 checks and usability test templates only.
+The human evidence indexes contain no completed independent-review or external-user
+records. Blank forms live in docs/evidence/issue83/templates/ and are not evidence
+of completed testing. Issue #83 remains open for actual reviews/sessions and retests.

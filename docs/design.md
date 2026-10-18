@@ -85,17 +85,27 @@ error handling.
 | Six-table schema of section 2 with foreign keys and CHECK constraints | Designed in #44; implemented in #46 (PR #68) with models in `src/models/` and foreign key enforcement enabled in `src/database.py` |
 | Cart (#79) | `/cart` page and the four `/api/v1/cart` endpoints for authenticated buyers, backed by `CartService` and the `cart_items` table; covered by `tests/test_cart_service.py`, `tests/test_cart_api.py` and `tests/test_cart_page.py`. Buyers add products with Add to Cart on the product detail page (#78, PR #91) |
 | Product detail (#78) | `/products/{productCode}` page and `GET /api/v1/products/{productCode}` (PR #91); its Add to Cart button calls `POST /api/v1/cart/items` |
-| Checkout, seller product creation, seller orders | Designed in section 3 (#47); no routes yet |
+| Checkout (#80) | `/checkout`, `/checkout/confirmation/{orderId}`, `POST /api/v1/orders` and `GET /api/v1/orders/{orderId}` (PR #94); covered by `tests/test_checkout.py` and `tests/checkout_ui.mjs` |
+| Seller product creation (#81) | `/seller/products/new` and `POST /api/v1/seller/products` (PR #95); covered by `tests/test_seller_products.py` and `tests/seller_products_ui.mjs` |
+| Seller order management (#82) | `/seller/orders`, `GET /api/v1/seller/orders` and `PATCH /api/v1/seller/orders/{subOrderId}/status` with the `order_history` audit table (PR #96); covered by `tests/test_seller_orders.py` |
+| P0 end-to-end flows (#83) | Browser entry at `/` and `tests/test_p0_flows.py` (PR #97, open) |
 | Buyer and seller authentication | Implemented in `src/auth.py` and `src/api/auth.py`: signed HS256 JWTs, password hashing, `/auth/login`, `/auth/me`, and seller-role dependency |
 | Deployment | One local process (`python -m src.main`) and one SQLite file; the page is served by the same process, so there is no separate frontend deployment |
 
 ### 1.5 Running catalog API compared with the API contract
 
-`GET /api/v1/products` already follows the path, pagination parameters and
-`{data, meta}` shape of section 3. Three details still differ:
+`GET /api/v1/products` follows the path, pagination parameters and `{data, meta}`
+shape of section 3. Since #75 its errors use the common envelope, and section 3.3
+now records `422 ERR_VALIDATION` for an invalid `page` or `limit` (#85). One detail
+still differs:
 
 | Detail | Section 3 contract | Running code (`src/api/products.py`) |
 |---|---|---|
+| Product `id` | Internal integer | Returned as a string, for example `"1"` |
+
+Public URLs and cart calls use `code`, so no screen depends on the type of `id`.
+
+---|---|---|
 | Product `id` | Internal integer | Returned as a string, for example `"1"` |
 | Invalid `page` or `limit` | `400 Bad Request` | `422 Unprocessable Entity`, from FastAPI query validation |
 | Error body | `{"error": {"code", "message"}}` | FastAPI's `{"detail": "..."}` |
@@ -576,6 +586,9 @@ The ERD in `docs/images/design_erd.png` must remain consistent with all table de
 ## 3. API Design
 
 This section defines the API contract for the P0 user stories in Milestone 1.
+Sections 3.3 and 3.4 were updated in #85 to the behaviour that runs at Milestone 3;
+`tests/test_ui_docs_contract.py` checks that section 3.4 lists exactly the error
+codes the code raises.
 All endpoints use the `/api/v1` prefix and return JSON. Unless stated
 otherwise, timestamps are ISO 8601 UTC strings.
 
@@ -618,16 +631,19 @@ model; this contract does not assume that every identifier is a UUID.
 
 | Method and path | Access | Input parameters/body | Successful response | Error responses | Relevant P0 story |
 |---|---|---|---|---|---|
-| `GET /api/v1/products` | G | Query: `page` (positive integer, default `1`), `limit` (1-100, default `20`), optional catalog filters | `200 OK`: paginated product summaries with internal integer `id`, public `code`, `name`, `price`, `image_url`/`thumbnail_url`, `stock_quantity`, and `stock_status` | `400 Bad Request` for invalid pagination/filter values; `500 Internal Server Error` when the catalog cannot be read | US01 Browse product catalog |
+| `GET /api/v1/products` | G | Query: `page` (positive integer, default `1`), `limit` (1-100, default `20`), optional catalog filters | `200 OK`: paginated product summaries with internal integer `id`, public `code`, `name`, `price`, `image_url`/`thumbnail_url`, `stock_quantity`, and `stock_status` | `422 Unprocessable Entity` (`ERR_VALIDATION`) for invalid pagination values; `500` (`ERR_DATABASE_FAILURE`) when the catalog cannot be read | US01 Browse product catalog |
 | `GET /api/v1/products/{productCode}` | G | Path: `productCode` public product code, for example `P-100` | `200 OK`: one product with `id` (internal integer), `code`, full description, image, price, and current stock status | `404 Not Found` when the product code does not exist or the product is inactive; `422 Unprocessable Entity` when the code is empty or exceeds 20 characters | US02 View product details |
-| `GET /api/v1/cart` | U (buyer) | No body; cart is identified by the authenticated buyer | `200 OK`: the cart in the shape described under "Cart response and rules" below. A buyer with no cart lines gets `200 OK` with `items: []` and `cart_total: 0`, not `404` | `401 Unauthorized` when the token is missing/invalid | US03 Cart management |
+| `GET /api/v1/cart` | U (buyer) | No body; cart is identified by the authenticated buyer | `200 OK`: the cart in the shape described under "Cart response and rules" below. A buyer with no cart lines gets `200 OK` with `items: []` and `cart_total: 0`, not `404` | `401 Unauthorized` when the token is missing/invalid; `403 Forbidden` (`ERR_BUYER_REQUIRED`) for a seller token | US03 Cart management |
 | `POST /api/v1/cart/items` | U (buyer) | JSON: `{ "product_code": "P-100", "quantity": 1 }` | `201 Created` for a new line, or `200 OK` when an existing line is increased; returns the updated cart in the same shape as `GET` | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer, such as `true`, `1.5` or `"2"`; `401 Unauthorized`; `404 Not Found` (`ERR_PRODUCT_NOT_FOUND`) for an unknown product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`), when the quantity after adding exceeds available stock (`ERR_STOCK_EXCEEDED`), or when concurrent requests on the same line still collide after five attempts (`ERR_CONCURRENCY_CONFLICT`) | US03 Cart management |
 | `PATCH /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; JSON: `{ "quantity": 2 }` | `200 OK`: updated cart with recalculated line and cart totals | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity, because a line is removed with `DELETE`; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer; `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`) or the new quantity exceeds available stock (`ERR_STOCK_EXCEEDED`) | US03 Cart management |
 | `DELETE /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; no body | `200 OK`: updated cart after removing the line | `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code | US03 Cart management |
-| `POST /api/v1/orders` | U (buyer) | JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, item snapshots, quantities, total, status, and delivery information | `400 Bad Request` for missing/invalid delivery data or an empty cart; `401 Unauthorized`; `409 Conflict` when a product is unavailable or stock changed; `500 Internal Server Error` if the transaction cannot be completed | US04 Checkout and order placement |
+| `POST /api/v1/orders` | U (buyer) | Header `Idempotency-Key` (1-64 characters); JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, item snapshots, quantities, total, status, and delivery information; `200 OK` with the same order when the same key and body are replayed | `400 Bad Request` for an empty cart (`ERR_EMPTY_CART`) or a key with surrounding spaces (`ERR_INVALID_KEY`); `422` (`ERR_VALIDATION`) for invalid delivery fields or a missing key; `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `409 Conflict` when a product is unavailable (`ERR_PRODUCT_UNAVAILABLE`), stock changed (`ERR_STOCK_EXCEEDED`), the cart changed (`ERR_CONCURRENCY_CONFLICT`) or the key was used with another body (`ERR_IDEMPOTENCY_CONFLICT`); `500` (`ERR_DATABASE_FAILURE`) | US04 Checkout and order placement |
+| `GET /api/v1/orders/{orderId}` | U (buyer) | Path: integer `orderId` | `200 OK`: the same order shape as checkout | `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `404 Not Found` (`ERR_ORDER_NOT_FOUND`) for a missing order or another buyer's order; `422` for a non-integer id | US04 Order confirmation |
 | `POST /api/v1/seller/products` | S | JSON product body: `name`, `description`, `price` (integer VND), `stock_quantity`, and `image_url` (absolute http(s) URL); seller, code and status come from the server (#81) | `201 Created`: `{ "data": ... }` with the new listing, its generated `code`, seller ownership and `is_active` status | `422 Unprocessable Entity` (`ERR_VALIDATION`) with messages per field in `error.fields` for empty, invalid or out-of-range values; `401 Unauthorized`; `403 Forbidden` for a non-seller account; `409 Conflict` when no unique product code could be assigned; `500` on database failure | US06 Create product listing |
-| `GET /api/v1/seller/orders` | S | Query: `status`, `from`, `to`, `page`, and `limit` (default `20`) | `200 OK`: paginated seller orders (`seller_orders` rows) owned by the authenticated seller only, each with its `id` (the `subOrderId`), parent `order_id`, status, and its order items (product, quantity, unit price) | `400 Bad Request` for invalid status/date/pagination; `401 Unauthorized`; `403 Forbidden` for a non-seller account | US08 Seller order management |
-| `PATCH /api/v1/seller/orders/{subOrderId}/status` | S | Path: `subOrderId`, the `seller_orders.id` of a seller order owned by the authenticated seller; JSON: `{ "status": "PROCESSING" }` | `200 OK`: updated sub-order status and transition timestamp | `400 Bad Request` with `ERR_INVALID_TRANSITION` for an invalid status transition; `401 Unauthorized`; `403 Forbidden` if the seller order belongs to another seller; `404 Not Found` when the seller order does not exist | US08 Seller order management |
+| `GET /api/v1/seller/orders` | S | Query: `status`, `from`, `to`, `page`, and `limit` (default `20`) | `200 OK`: paginated seller orders (`seller_orders` rows) owned by the authenticated seller only, each with its `id` (the `subOrderId`), parent `order_id`, status, and its order items (product, quantity, unit price) | `400 Bad Request` for an unknown status (`ERR_INVALID_STATUS`), a date that is not ISO (`ERR_INVALID_DATE`) or `from` after `to` (`ERR_INVALID_DATE_RANGE`); `422` (`ERR_VALIDATION`) for invalid `page`/`limit`; `401 Unauthorized`; `403 Forbidden` (`ERR_SELLER_REQUIRED`) for a non-seller account. Success `meta` is `{page, limit, total}` | US08 Seller order management |
+| `PATCH /api/v1/seller/orders/{subOrderId}/status` | S | Path: `subOrderId`, the `seller_orders.id` of a seller order owned by the authenticated seller; JSON: `{ "status": "PROCESSING" }` | `200 OK`: `{ "data": ... }` with the updated sub-order and its items; the change is recorded in `order_history`, and cancelling restores stock once | `400 Bad Request` with `ERR_INVALID_TRANSITION` for an invalid status transition; `422` (`ERR_VALIDATION`) for an unknown status value; `401 Unauthorized`; `403 Forbidden` (`ERR_SELLER_REQUIRED`, or `ERR_RESOURCE_OWNER` if the seller order belongs to another seller); `404 Not Found` (`ERR_ORDER_NOT_FOUND`) when the seller order does not exist; `409` (`ERR_CONCURRENCY_CONFLICT`) when it changed meanwhile | US08 Seller order management |
+| `POST /api/v1/auth/login` | G | JSON: `{ "email": "...", "password": "..." }` | `200 OK`: `access_token`, `token_type: bearer` and the user (`id`, `name`, `email`, `role`) | `401 Unauthorized` (`ERR_INVALID_CREDENTIALS`); `422` (`ERR_VALIDATION`) for a malformed email | All protected stories |
+| `GET /api/v1/auth/me` | U | No body | `200 OK`: the user of the token | `401 Unauthorized` (`ERR_AUTH_REQUIRED`, `ERR_INVALID_TOKEN`) | Checkout and seller pages |
 
 `subOrderId` is `seller_orders.id` from section 2. Fulfilment status is stored per seller order, so a seller changes the status of their whole part of a marketplace order, not of a single order item.
 
@@ -698,17 +714,43 @@ token itself:
 
 ### 3.4 Error handling
 
-The API uses these HTTP status codes consistently:
+Every error response has the body `{"error": {"code", "message"}}`; the
+seller product route adds `error.fields` (section "US06 seller product creation
+implementation"). This table lists every code the code raises, checked by
+`tests/test_ui_docs_contract.py`. The messages a user sees for each case are in
+[docs/ui.md section 3.2](ui.md#32-error-cases-api-code-business-rule-and-ui-message).
 
-| Status | Code examples | Condition |
-|---|---|---|
-| `400 Bad Request` | `ERR_INVALID_QUANTITY`, `ERR_INVALID_TRANSITION` | The request is syntactically valid but violates a business rule, such as quantity `0` or reverting a shipped sub-order to pending. |
-| `401 Unauthorized` | `ERR_AUTH_REQUIRED`, `ERR_INVALID_TOKEN` | An authenticated endpoint is called without a valid bearer token. |
-| `403 Forbidden` | `ERR_SELLER_REQUIRED`, `ERR_BUYER_REQUIRED`, `ERR_RESOURCE_OWNER` | The identity is authenticated but lacks the required seller or buyer role, or does not own the requested seller resource. |
-| `404 Not Found` | `ERR_PRODUCT_NOT_FOUND`, `ERR_CART_ITEM_NOT_FOUND` | The requested product, cart line, or seller sub-order does not exist or is not visible to the caller. |
-| `409 Conflict` | `ERR_STOCK_EXCEEDED`, `ERR_PRODUCT_UNAVAILABLE`, `ERR_CONCURRENCY_CONFLICT` | The request conflicts with current inventory or availability, including a checkout race with another purchase or cart requests that keep colliding on the same line. |
-| `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, such as an invalid product code, phone number, price, or stock quantity. |
-| `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | An unexpected database or infrastructure failure prevents the operation from completing. The response must not expose SQL details. |
+| Status | Code | Raised when | Where |
+|---|---|---|---|
+| `400 Bad Request` | `ERR_INVALID_QUANTITY` | A cart quantity is 0 or negative | Cart |
+| `400 Bad Request` | `ERR_EMPTY_CART` | Checkout with no cart lines | Orders |
+| `400 Bad Request` | `ERR_INVALID_KEY` | The `Idempotency-Key` has surrounding spaces | Orders |
+| `400 Bad Request` | `ERR_INVALID_TRANSITION` | A seller order status change that the state machine does not allow (section 3.6) | Seller orders |
+| `400 Bad Request` | `ERR_INVALID_STATUS` | The seller order `status` filter is not a known status | Seller orders |
+| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders |
+| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders |
+| `401 Unauthorized` | `ERR_AUTH_REQUIRED` | No bearer token | All protected routes |
+| `401 Unauthorized` | `ERR_INVALID_TOKEN` | A malformed, expired or no longer valid token (there is no separate expired-token code) | All protected routes |
+| `401 Unauthorized` | `ERR_INVALID_CREDENTIALS` | Wrong email or password | Login |
+| `403 Forbidden` | `ERR_SELLER_REQUIRED` | A buyer calls a seller route | Seller products, seller orders |
+| `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
+| `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
+| `404 Not Found` | `ERR_PRODUCT_NOT_FOUND` | Unknown or inactive product code | Products, cart |
+| `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
+| `404 Not Found` | `ERR_ORDER_NOT_FOUND` | Unknown order, another buyer's order, or unknown seller order | Orders, seller orders |
+| `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
+| `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
+| `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
+| `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
+| `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
+| `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | A database failure; the response never contains SQL | All routes |
+| Any | `ERR_BAD_REQUEST`, `ERR_FORBIDDEN`, `ERR_NOT_FOUND`, `ERR_CONFLICT`, `ERR_INTERNAL_SERVER`, `ERR_REQUEST_FAILED` | Fallback codes in `src/main.py` for an `HTTPException` raised without an envelope; no route raises one today | Shared handler |
+
+The Sprint 3 planning list (`docs/evidence/sprint3.md` section 2.3) also named
+`ERR_EXPIRED_TOKEN` and `ERR_INTERNAL`; neither was implemented: an expired token
+answers `ERR_INVALID_TOKEN`, and an unexpected database error answers
+`ERR_DATABASE_FAILURE`. A request to an unknown `/api/v1` path still answers
+Starlette's `{"detail": "Not Found"}` (gap UI-G1 in docs/ui.md).
 
 ### 3.5 P0 coverage
 
@@ -1011,6 +1053,23 @@ Between the delivery of Milestone 1 and the completion of Sprint 2 (Milestone 2)
 - **Impact:** Ensures clean architectural separation of concerns between buyers and sellers, satisfies marketplace business rules (BR5, BR6, BR7, BR9, BR10), and prevents race conditions and overselling during checkout transactions.
 
 
+### 6.4 Milestone 3 API, schema and architecture changes
+
+Sprint 3 turned the section 3 contract into running code. These changes differ
+from the Milestone 1/2 design; each is in the code on `main` and covered by tests.
+
+| Change | Before (design) | After (running) | Why | Where |
+|---|---|---|---|---|
+| Schema: `users.password_hash` and signed JWTs | No authentication | Scrypt password hashes; HS256 bearer tokens with the role checked against the database on every request | Protected buyer and seller routes (BR3, BR5) | #75, PR #89; `src/auth.py`, `migrate_db()` |
+| API: public product code | `/products/:productId` | `/products/{productCode}` and `product_code` in cart calls; the integer id stays internal | Stable public URLs (section 3.1) | #74/#78, PR #91 |
+| API/business rule: catalog stock filter | Out-of-stock products listed with a badge | Catalog returns only `stock_quantity > reserved_stock`; detail still shows "Out of stock" | BR1 refinement in Sprint 3 planning | #77, PR #90 |
+| API and schema: idempotent checkout | `POST /api/v1/orders` without retry protection | Required `Idempotency-Key` header; new `orders.request_key` (unique) and `orders.request_hash` columns, added to old databases by `migrate_db()`; a replay returns the first order | A timeout retry must not create a second order | #80, PR #94 |
+| API: validation status | `400` for invalid input | `422 ERR_VALIDATION` for schema-invalid input; `400` only for business rules such as `ERR_EMPTY_CART` | One status for FastAPI validation everywhere | #80, #81 |
+| API: seller product body | Multipart or JSON with an uploaded `image` | JSON with an absolute `image_url`; errors grouped per field in `error.fields` | No file storage in the P0 scope; field-level errors for the form | #81, PR #95 |
+| Schema: `order_history` | Not in the six-table design | Audit row for every seller order status change (`from_status`, `to_status`, `changed_by_user_id`, `note`) | Traceable fulfilment and cancellations (BR6) | #82, PR #96 |
+| Architecture: browser entry | `GET /` returns JSON only | Browsers (`Accept: text/html`) get `307` to `/products`; other clients keep the JSON | Usability: the root URL opens the shop | #83, PR #97 (open) |
+| Seed: demo dataset | 45 catalog products | `python -m src.seed --demo` adds 2 buyers, 2 sellers, carts and orders in four statuses; repeat runs change nothing | Demonstrate every P0 state | #84, PR #98 (open) |
+
 ## US04 atomic checkout implementation (#80)
 
 The orders API uses src/schemas/orders.py and src/services/orders.py. The service
@@ -1108,3 +1167,13 @@ object, server-owned or unknown fields) are listed under `_form`. Messages never
 the submitted input. All other routes keep their existing validation responses.
 See [docs/us06-create-product.md](us06-create-product.md#11-runtime-contract-81) and
 [docs/evidence/us06.md](evidence/us06.md).
+
+
+## Browser entry for P0 verification (#83)
+
+GET / with Accept containing text/html returns 307 to /products so a browser can
+begin the buyer journey at the root URL. Other clients retain the original JSON
+status response. No authentication is required at entry; protected APIs continue
+to enforce roles. This addresses technical observation OBS01 from #83. The
+integration test follows the root contract then verifies catalog through receipt;
+existing root metadata tests continue to check the non-browser response.

@@ -57,6 +57,14 @@ def test_cart_page_offers_empty_error_and_checkout_actions(client: TestClient) -
     assert elements["logout-button"][0] == "button"
 
 
+def test_cart_summary_matches_the_checkout_total_without_shipping(client: TestClient) -> None:
+    html = client.get("/cart").text
+
+    # Checkout charges the cart total only (docs/design.md, US04 #80); no fee is promised later.
+    assert "No shipping fee is added at checkout." in html
+    assert "Shipping is calculated" not in html
+
+
 def test_cart_script_sends_the_token_and_returns_to_the_cart_after_login(
     client: TestClient,
 ) -> None:
