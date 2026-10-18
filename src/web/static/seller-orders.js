@@ -1,5 +1,9 @@
 "use strict";
 
+const LOGIN_URL = `/login?return_to=${encodeURIComponent("/seller/orders")}`;
+const NETWORK_MESSAGE = "We could not reach the server. Check your connection, then select Retry.";
+const SELLER_ONLY_MESSAGE = "Only seller accounts can manage orders. Log in with a seller account.";
+
 const elements = {
   form: document.getElementById("filters"),
   status: document.getElementById("status"),
@@ -26,6 +30,40 @@ const transitions = {
 };
 
 let currentPage = 1;
+
+/** A missing or rejected token goes to login and comes back here afterwards. */
+function goToLogin() {
+  localStorage.removeItem("access_token");
+  window.location.replace(LOGIN_URL);
+}
+
+/** Send one request with the stored token; resolves to null when the page leaves for login. */
+async function request(url, options = {}) {
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    goToLogin();
+    return null;
+  }
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...options.headers },
+    });
+  } catch {
+    throw new Error(NETWORK_MESSAGE);
+  }
+  if (response.status === 401) {
+    goToLogin();
+    return null;
+  }
+  const payload = await response.json().catch(() => null);
+  if (response.status === 403 && payload?.error?.code === "ERR_SELLER_REQUIRED") {
+    throw new Error(SELLER_ONLY_MESSAGE);
+  }
+  if (!response.ok) throw new Error(payload?.error?.message || "The server could not complete the request. Select Retry.");
+  return payload;
+}
 
 function setState(state, message) {
   elements.message.textContent = message;
@@ -85,13 +123,9 @@ async function loadOrders(page = currentPage) {
   if (elements.from.value) params.set("from", elements.from.value);
   if (elements.to.value) params.set("to", elements.to.value);
   try {
-    const token = localStorage.getItem("access_token");
-    const response = await fetch(`/api/v1/seller/orders?${params}`, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error?.message || "Unable to load orders.");
-    if (!Array.isArray(payload.data)) throw new Error("Invalid seller order response.");
+    const payload = await request(`/api/v1/seller/orders?${params}`);
+    if (payload === null) return;
+    if (!Array.isArray(payload.data)) throw new Error("The server sent an unexpected answer. Select Retry.");
     elements.list.replaceChildren(...payload.data.map(createOrderCard));
     setState(payload.data.length ? "success" : "empty", `${payload.data.length} seller orders found.`);
     if (payload.data.length) updatePagination(payload.meta);
@@ -102,19 +136,19 @@ async function loadOrders(page = currentPage) {
 
 async function updateStatus(id, status) {
   if (status === "CANCELLED" && !window.confirm("Cancel this order and restore stock?")) return;
+  let payload;
   try {
-    const token = localStorage.getItem("access_token");
-    const response = await fetch(`/api/v1/seller/orders/${id}/status`, {
+    payload = await request(`/api/v1/seller/orders/${id}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error?.message || "Unable to update order.");
-    await loadOrders();
   } catch (error) {
-    setState("error", error.message);
+    // Keep the list on screen; only this order failed to change.
+    elements.message.textContent = `Order #${id} was not updated. ${error.message}`;
+    return;
   }
+  if (payload !== null) await loadOrders();
 }
 
 elements.form.addEventListener("submit", (event) => {

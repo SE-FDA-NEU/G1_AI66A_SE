@@ -4,7 +4,28 @@ A mini marketplace where sellers can list products, buyers can add products to c
 
 **Setup Guide:** [docs/SETUP.md](docs/SETUP.md)
 
-**System Design:** [docs/design.md](docs/design.md)
+**System Design:** [docs/design.md](docs/design.md) · **UI documentation:** [docs/ui.md](docs/ui.md)
+
+## P0 stories and where each one starts
+
+Set up and start the app with [docs/SETUP.md](docs/SETUP.md) (or the Quickstart below),
+load the demo data with `python -m src.seed --demo`, then open
+[http://127.0.0.1:8000/](http://127.0.0.1:8000/): the product catalog opens. Every
+story starts from a link or button from there; no URL has to be typed.
+
+| Story | Where it starts | Test account |
+|---|---|---|
+| US01 Browse the product catalog | The catalog that opens at `/` | None |
+| US02 View product details | Select a product card in the catalog | None |
+| US03 Manage the shopping cart | **Cart** in the top navigation, or **Add to Cart** on a product | `user@example.com` |
+| US04 Place an order | **Checkout** at the bottom of the cart | `user@example.com` |
+| US06 Create a product listing | **Create product** in the top navigation | `seller@example.com` |
+| US08 Manage seller orders | **Seller orders** in the top navigation | `demo.seller@marketplace.local` |
+
+Every test account uses the password `password`; these are development accounts
+only. A protected page sends a guest to **Log in** and returns afterwards. The
+accounts and their demo data are listed in
+[SETUP section 8.1](docs/SETUP.md#81-choose-the-dataset).
 
 ## Team & Roles
 
@@ -145,22 +166,10 @@ The application will be accessible at:
 - **Interactive API Documentation:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
 
-The P0 screens, with the account to use (password `password`):
-
-| Screen | URL | Account |
-|---|---|---|
-| Product catalog (US01) | [/products](http://127.0.0.1:8000/products) | None |
-| Product detail (US02) | [/products/P-100](http://127.0.0.1:8000/products/P-100) | None; Add to Cart needs a buyer |
-| Cart (US03) | [/cart](http://127.0.0.1:8000/cart) | Buyer `user@example.com` |
-| Checkout and confirmation (US04) | [/checkout](http://127.0.0.1:8000/checkout) | Buyer `user@example.com` |
-| Seller product creation (US06) | [/seller/products/new](http://127.0.0.1:8000/seller/products/new) | Seller `seller@example.com` |
-| Seller order management (US08) | [/seller/orders](http://127.0.0.1:8000/seller/orders) | Seller `demo.seller@marketplace.local` |
-| Login | [/login](http://127.0.0.1:8000/login) | Any |
-
+The P0 stories and where each one starts are listed at the top of this README.
 Every screen, its states and its error messages are documented in
-[docs/ui.md](docs/ui.md); screenshots are in the
-[Milestone 3 evidence](docs/evidence/milestone3.md).
-
+[docs/ui.md](docs/ui.md); screenshots are in [docs/images/ui/](docs/images/ui/) and
+the browser record is in the [Milestone 3 evidence](docs/evidence/milestone3.md).
 
 ### Checkout and confirmation (US04 / #80)
 
@@ -179,14 +188,16 @@ Enter name, description, price (whole VND), stock and an absolute http(s) image 
 The listing is created active and owned by the logged-in seller; the page shows its
 product code and a link to it. Stock 0 is allowed: the product page shows Out of
 stock and the catalog leaves it out. Buyers and guests cannot create products. The
-page-script checks run with `node tests/checkout_ui.mjs` and
-`node tests/seller_products_ui.mjs` (Node is only needed for these checks). See
+page-script checks run with `node tests/checkout_ui.mjs`,
+`node tests/seller_products_ui.mjs` and `node tests/seller_orders_ui.mjs` (Node is
+only needed for these checks). See
 [US06 verification](docs/evidence/us06.md).
 
 ### Seller order management (US08 / #82)
 
-Log in as a seller and open [http://127.0.0.1:8000/seller/orders](http://127.0.0.1:8000/seller/orders)
-(there is no navigation link yet). The page lists only that seller's sub-orders,
+Log in as a seller and choose **Seller orders** in the top navigation
+([http://127.0.0.1:8000/seller/orders](http://127.0.0.1:8000/seller/orders)); a guest
+is sent to login first. The page lists only that seller's sub-orders,
 newest first, with status and date filters. Each card offers the next allowed step:
 **Start processing** or **Cancel** for PENDING, **Mark shipped** for PROCESSING and
 **Mark completed** for SHIPPED. Cancelling restores the stock once, and every change

@@ -24,6 +24,9 @@ class CheckoutRequest(BaseModel):
 
 class OrderLine(BaseModel):
     product_id: int
+    # The receipt names each product; unit_price stays the purchase-time snapshot.
+    product_code: str
+    product_name: str
     seller_order_id: int
     quantity: int
     unit_price: int

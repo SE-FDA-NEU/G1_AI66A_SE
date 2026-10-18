@@ -186,6 +186,24 @@ def headers(engine, buyer=2, key="api-key"):
     return {"Authorization": f"Bearer {token}", "Idempotency-Key": key}
 
 
+def test_receipt_names_each_product_and_keeps_the_purchase_price(api, engine):
+    add_product(engine, "P-100", price=150_000)
+    fill(engine, quantity=2)
+    created = api.post("/api/v1/orders", json=BODY, headers=headers(engine)).json()["data"]
+    with Session(engine) as session:
+        product = session.exec(select(Product).where(Product.code == "P-100")).one()
+        product.price = 999_000
+        session.add(product)
+        session.commit()
+
+    receipt = api.get(f"/api/v1/orders/{created['id']}", headers=headers(engine)).json()["data"]
+
+    [line] = receipt["items"]
+    assert line["product_code"] == "P-100" and line["product_name"] == "Product P-100"
+    assert (line["quantity"], line["unit_price"], line["line_total"]) == (2, 150_000, 300_000)
+    assert created["items"] == receipt["items"]
+
+
 def test_api_create_replay_and_ownership(api, engine):
     add_product(engine, "P-100")
     fill(engine)

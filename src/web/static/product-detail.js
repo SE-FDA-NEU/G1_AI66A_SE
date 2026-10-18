@@ -75,7 +75,7 @@ async function loadProduct() {
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       if (response.status === 404) {
-        showError("Product not found.", false);
+        showError("This product does not exist or is no longer for sale. Go back to the catalogue to choose another one.", false);
         return;
       }
       throw new Error(payload?.error?.message || "Unable to load product.");
@@ -112,7 +112,7 @@ async function loadProduct() {
     elements.status.hidden = true;
     configureNavigation();
   } catch (error) {
-    showError("Something went wrong. Please try again later.");
+    showError("We could not load this product. Check your connection, then select Retry.");
   }
 }
 

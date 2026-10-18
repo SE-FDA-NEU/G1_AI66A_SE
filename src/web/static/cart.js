@@ -12,6 +12,7 @@ const THUMBNAIL_SIZE_PX = 96;
 const LOAD_ERROR_MESSAGE = "Unable to load your cart. Please try again.";
 const CHANGE_ERROR_MESSAGE = "We could not update your cart. Please try again.";
 const INVALID_QUANTITY_MESSAGE = "Enter a whole number of at least 1.";
+const BUYER_ONLY_MESSAGE = "The cart is for buyer accounts. Log in with a buyer account to shop.";
 
 const priceFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
@@ -303,7 +304,7 @@ function removeLine(line, item) {
 function showLoadError(error) {
   // A seller is signed in correctly but has no cart, so retrying cannot help.
   const forbidden = error instanceof ApiError && error.status === 403;
-  elements.errorMessage.textContent = forbidden ? error.message : LOAD_ERROR_MESSAGE;
+  elements.errorMessage.textContent = forbidden ? BUYER_ONLY_MESSAGE : LOAD_ERROR_MESSAGE;
   elements.retry.hidden = forbidden;
   showState("error", elements.errorMessage.textContent);
 }

@@ -1,0 +1,29 @@
+flowchart TD
+    Start(["Visitor opens the app at /"]) --> Catalog["/products<br/>Product catalog · US01"]
+    Catalog -->|"Select a product card"| Detail["/products/{productCode}<br/>Product detail · US02"]
+    Detail -->|"Add to Cart"| Cart["/cart<br/>Cart · US03"]
+    Catalog -->|"Cart link"| Cart
+    Cart -->|"Checkout"| Checkout["/checkout<br/>Checkout · US04"]
+    Checkout -->|"Confirm order (BR3, BR8)"| Confirmation["/checkout/confirmation/{orderId}<br/>Order confirmation · US04"]
+    Confirmation -->|"Continue shopping"| Catalog
+    Cart -->|"Continue shopping"| Catalog
+
+    Catalog -->|"Create product link"| Create["/seller/products/new<br/>Create product · US06"]
+    Create -->|"View product"| Detail
+    Catalog -->|"Seller orders link"| SellerOrders["/seller/orders<br/>Seller orders · US08"]
+    Create <-->|"Seller orders / Create product links"| SellerOrders
+    SellerOrders -->|"Start processing, Cancel,<br/>Mark shipped, Mark completed (BR6)"| SellerOrders
+
+    Detail -.->|"Guest selects Add to Cart"| Login["/login<br/>Log in, then back to the<br/>page that sent the user"]
+    Cart -.->|"Guest"| Login
+    Create -.->|"Guest"| Login
+    SellerOrders -.->|"Guest"| Login
+
+    subgraph NotBuilt["Not built: P1 and P2 stories"]
+        Orders["/orders · US05"]
+        Edit["/seller/products/{id}/edit · US07"]
+        Analytics["/seller/analytics · US09, US10"]
+    end
+
+    classDef notBuilt fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 5,color:#6b7280
+    class Orders,Edit,Analytics notBuilt
