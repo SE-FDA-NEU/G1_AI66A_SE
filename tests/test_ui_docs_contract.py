@@ -1,9 +1,10 @@
 """The UI and API documentation must match the running code (Milestone 3, #85).
 
-docs/ui.md section 3.2 lists the error cases a user can meet and docs/design.md section
-3.4 lists every API error code. These tests fail when a documented message, error code,
-business rule, test name or route no longer exists, so the documents cannot drift
-silently from the screens.
+docs/ui.md has the four sections Milestone 3 asks for, in order; its section 3 lists the
+messages a user can meet, and docs/design.md section 3.4 lists every API error code. These
+tests fail when a section is missing, a story status is not one of the allowed values, or
+a documented message, error code, business rule, test name or route no longer exists, so
+the documents cannot drift silently from the screens.
 """
 
 import re
@@ -24,7 +25,16 @@ UI_DOC = ROOT / "docs" / "ui.md"
 DESIGN_DOC = ROOT / "docs" / "design.md"
 TRACEABILITY_DOC = ROOT / "docs" / "traceability.md"
 ERROR_CODE = re.compile(r"\bERR_[A-Z_]+\b")
-PLACEHOLDER = re.compile(r"\{[^}]*\}")
+# A message may join a page sentence and a server sentence, so each part is checked alone.
+MESSAGE_PARTS = re.compile(r"\{[^}]*\}|(?<=\.) ")
+REQUIRED_SECTIONS = [
+    "## 1. P0 stories and status",
+    "## 2. Wireframes",
+    "## 3. Error messages",
+    "## 4. What changed since M2",
+]
+P0_STORIES = {"US01", "US02", "US03", "US04", "US06", "US08"}
+STATUSES = ("works", "partly works", "not started")
 
 
 def section(path: Path, heading: str) -> str:
@@ -37,11 +47,13 @@ def section(path: Path, heading: str) -> str:
     return rest[: following.start()] if following else rest
 
 
-def table_rows(text: str, first_cell: str) -> list[list[str]]:
+def table_rows(text: str, first_cell: str = "") -> list[list[str]]:
+    """Body rows of the Markdown tables in `text` whose first cell starts with `first_cell`."""
     rows = []
     for line in text.splitlines():
-        if line.startswith(f"| {first_cell}"):
-            rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+        if not line.startswith(f"| {first_cell}") or set(line) <= {"|", "-", " "}:
+            continue
+        rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
     return rows
 
 
@@ -65,39 +77,92 @@ def existing_test_names() -> set[str]:
     return names
 
 
-ERROR_CASES = table_rows(
-    section(UI_DOC, "### 3.2 Error cases: API code, business rule and UI message"), "UI-E"
-)
+STORY_ROWS = table_rows(section(UI_DOC, "## 1. P0 stories and status"), "US0")
+MESSAGE_ROWS = table_rows(section(UI_DOC, "## 3. Error messages"), "`")
 
 
-def test_ui_documents_at_least_four_error_cases():
-    assert len(ERROR_CASES) >= 4
-    assert all(len(row) == 8 for row in ERROR_CASES), "every error case needs eight columns"
+def test_ui_has_the_four_required_sections_in_order():
+    headings = re.findall(r"^## .+$", UI_DOC.read_text(encoding="utf-8"), flags=re.MULTILINE)
+
+    assert headings == REQUIRED_SECTIONS
 
 
-@pytest.mark.parametrize("row", ERROR_CASES, ids=[row[0] for row in ERROR_CASES])
-def test_documented_error_case_matches_the_code(row):
-    case, _screen, _trigger, http, rule, message, _recovery, check = row
+def test_every_p0_story_has_an_allowed_status():
+    statuses = {row[0].split()[0]: row[3] for row in STORY_ROWS if len(row) == 5}
+
+    assert P0_STORIES <= set(statuses)
+    for story, status in statuses.items():
+        assert status.startswith(STATUSES), f"{story}: {status!r} is not an allowed status"
+
+
+def test_every_story_route_is_served(client):
+    routes = [
+        route
+        for row in STORY_ROWS
+        if len(row) == 5
+        for route in re.findall(r"`(/[^`]*)`", row[2])
+    ]
+
+    assert len(routes) == 7
+    for path in routes:
+        url = re.sub(r"\{\w*Id\}", "1", path.replace("{productCode}", "P-100"))
+        response = client.get(url, headers={"Accept": "text/html"}, follow_redirects=False)
+        assert response.status_code == 200, f"{path} is not served"
+
+
+def test_every_wireframe_says_why_the_user_comes_and_what_it_calls():
+    wireframes = section(UI_DOC, "## 2. Wireframes")
+    screens = re.split(r"^### ", wireframes, flags=re.MULTILINE)[1:]
+    drawn = [screen for screen in screens if "```text" in screen]
+
+    assert len(drawn) >= 8
+    for screen in drawn:
+        name = screen.splitlines()[0]
+        assert re.search(r"\*The user[^*]* comes here to ", screen), f"{name}: missing purpose"
+        assert "Calls: `" in screen, f"{name}: missing API endpoints"
+    cart = next(screen for screen in drawn if screen.startswith("2.3 Cart"))
+    for state in ("Empty", "Loading", "Error", "Data"):
+        assert f"+- {state} " in cart, f"the cart wireframe is missing the {state} state"
+
+
+def test_ui_lists_at_least_four_error_messages():
+    assert len(MESSAGE_ROWS) >= 4
+    assert all(len(row) == 5 for row in MESSAGE_ROWS), "every message row needs five columns"
+
+
+@pytest.mark.parametrize("row", MESSAGE_ROWS, ids=[row[2][:40] for row in MESSAGE_ROWS])
+def test_documented_message_matches_the_code(row):
+    http, rule, message, _where, check = row
     source = source_text()
 
     shown = re.fullmatch(r"`(.+)`", message)
-    assert shown, f"{case}: the UI message must be quoted exactly in backticks"
-    for fragment in PLACEHOLDER.split(shown.group(1)):
-        if len(fragment.strip()) >= 4:
-            assert fragment in source, f"{case}: {fragment!r} is not shown by any page or API"
+    assert shown, f"{message}: the message must be quoted exactly in backticks"
+    for part in MESSAGE_PARTS.split(shown.group(1)):
+        if len(part.strip()) >= 4:
+            assert part in source, f"{part!r} is not shown by any page or API"
 
-    for code in ERROR_CODE.findall(http):
-        assert code in source_error_codes(), f"{case}: {code} is not raised by the API"
+    codes = ERROR_CODE.findall(http)
+    assert codes, f"{message}: name the API error code"
+    for code in codes:
+        assert code in source_error_codes(), f"{code} is not raised by the API"
 
-    business_rules = {
-        row[0] for row in table_rows(section(TRACEABILITY_DOC, "## Business rules"), "BR")
-    }
+    rules_table = section(TRACEABILITY_DOC, "## Business rules")
+    business_rules = {row[0] for row in table_rows(rules_table, "BR")}
     for rule_id in re.findall(r"BR\d+", rule):
-        assert rule_id in business_rules, f"{case}: {rule_id} is not a documented rule"
+        assert rule_id in business_rules, f"{rule_id} is not a documented rule"
 
     named = re.fullmatch(r"`(test_\w+)`", check)
-    assert named, f"{case}: name one automated test"
-    assert named.group(1) in existing_test_names(), f"{case}: {named.group(1)} does not exist"
+    assert named, f"{message}: name one automated test"
+    assert named.group(1) in existing_test_names(), f"{named.group(1)} does not exist"
+
+
+def test_changes_since_m2_are_recorded_in_design():
+    changes = table_rows(section(UI_DOC, "## 4. What changed since M2"))[1:]
+    design = DESIGN_DOC.read_text(encoding="utf-8")
+
+    assert changes, "name at least one change"
+    assert "API: receipt names products" in design
+    assert "`product_name`" in section(DESIGN_DOC, "### 3.3 P0 endpoint contract")
 
 
 def test_design_error_table_lists_exactly_the_codes_the_api_uses():
@@ -114,15 +179,14 @@ def test_design_error_table_lists_exactly_the_codes_the_api_uses():
     )
 
 
-def test_every_screen_in_the_inventory_is_served(client):
-    inventory = section(UI_DOC, "## 1. Screen inventory and navigation")
-    documented = re.findall(r"^\| [^|]+ \| `(/[^`]*)` \|", inventory, flags=re.MULTILINE)
-
-    assert len(documented) == 9
-    for path in documented:
-        url = re.sub(r"\{\w*Id\}", "1", re.sub(r"\{productCode\}", "P-100", path))
-        response = client.get(url, headers={"Accept": "text/html"}, follow_redirects=False)
-        assert response.status_code in (200, 307), f"{path} is not served"
+def test_pages_never_show_a_generic_error():
+    """Milestone 3: a message says what happened and what to do next, never just "error"."""
+    banned = ("Something went wrong", "Error 422", "Traceback", "Internal Server Error")
+    for pattern in ("src/web/**/*.js", "src/web/**/*.html"):
+        for path in ROOT.glob(pattern):
+            text = path.read_text(encoding="utf-8")
+            for phrase in banned:
+                assert phrase not in text, f"{path.name} shows {phrase!r}"
 
 
 @pytest.fixture
@@ -144,7 +208,7 @@ def api(tmp_path):
 
 
 def test_buyers_and_guests_cannot_use_seller_orders(api):
-    """UI-E18: the seller order page shows this API message to a buyer."""
+    """The seller order page turns this 403 into a message that says to log in as a seller."""
     client, buyer = api
 
     listing = client.get("/api/v1/seller/orders", headers=buyer)
@@ -160,13 +224,3 @@ def test_buyers_and_guests_cannot_use_seller_orders(api):
         }
     assert guest.status_code == 401
     assert guest.json()["error"]["code"] == "ERR_AUTH_REQUIRED"
-
-
-def test_pages_never_show_a_generic_error():
-    """Milestone 3: a message says what happened and what to do next, never just "error"."""
-    banned = ("Something went wrong", "Error 422", "Traceback", "Internal Server Error")
-    for pattern in ("src/web/**/*.js", "src/web/**/*.html"):
-        for path in ROOT.glob(pattern):
-            text = path.read_text(encoding="utf-8")
-            for phrase in banned:
-                assert phrase not in text, f"{path.name} shows {phrase!r}"

@@ -718,7 +718,7 @@ Every error response has the body `{"error": {"code", "message"}}`; the
 seller product route adds `error.fields` (section "US06 seller product creation
 implementation"). This table lists every code the code raises, checked by
 `tests/test_ui_docs_contract.py`. The messages a user sees for each case are in
-[docs/ui.md section 3.2](ui.md#32-error-cases-api-code-business-rule-and-ui-message).
+[docs/ui.md section 3](ui.md#3-error-messages).
 
 | Status | Code | Raised when | Where |
 |---|---|---|---|

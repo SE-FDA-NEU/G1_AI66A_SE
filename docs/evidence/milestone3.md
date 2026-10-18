@@ -30,7 +30,7 @@ this PR.
 | `tests/test_ui_docs_contract.py` | 24 passed |
 
 `tests/test_ui_docs_contract.py` is new in #85. For each of the 20 error cases in
-[docs/ui.md section 3.2](../ui.md#32-error-cases-api-code-business-rule-and-ui-message)
+[docs/ui.md section 3](../ui.md#3-error-messages)
 it checks that the quoted UI message is shown by a page or the API, that every error
 code is raised by the API, that every business rule exists in
 [traceability.md](../traceability.md#business-rules), and that the named test
@@ -62,45 +62,45 @@ Each row was checked in the browser; "Shown" is the text the page displayed.
 | ID | Screen | State | Account | Shown | Screenshot |
 |---|---|---|---|---|---|
 | M3-01 | `/` | Browser entry | Guest | Redirected to `/products`; a JSON client still gets `"status": "running"` | — |
-| M3-02 | Catalog | Loading | Guest | Eight skeleton cards; "Loading products…" | [catalog-loading](../images/issue85-catalog-loading.png) |
-| M3-03 | Catalog | Data | Guest | 20 cards, first "Wireless Mouse", "180.000 ₫", "In Stock"; "Page 1 of 3" | [catalog-data](../images/issue85-catalog-data.png) |
-| M3-04 | Catalog | Empty (search with no match) | Guest | "No products available at the moment." | [catalog-empty](../images/issue85-catalog-empty.png) |
-| M3-05 | Catalog | Error (request blocked) | Guest | "Something went wrong. Please try again later." and Retry | [catalog-error](../images/issue85-catalog-error.png) |
-| M3-06 | Detail `P-100` | Data | Guest | "In Stock (10 available)" | [detail-in-stock](../images/issue85-detail-in-stock.png) |
-| M3-07 | Detail `P-DEMO-OUT` | Out of stock | Guest | "Out of stock"; Add to Cart disabled | [detail-out-of-stock](../images/issue85-detail-out-of-stock.png) |
+| M3-02 | Catalog | Loading | Guest | Eight skeleton cards; "Loading products…" | [catalog-loading](../images/ui/catalog-loading.png) |
+| M3-03 | Catalog | Data | Guest | 20 cards, first "Wireless Mouse", "180.000 ₫", "In Stock"; "Page 1 of 3" | [catalog-data](../images/ui/catalog-data.png) |
+| M3-04 | Catalog | Empty (search with no match) | Guest | "No products available at the moment." | [catalog-empty](../images/ui/catalog-empty.png) |
+| M3-05 | Catalog | Error (request blocked) | Guest | "Something went wrong. Please try again later." and Retry | [catalog-error](../images/ui/catalog-error.png) |
+| M3-06 | Detail `P-100` | Data | Guest | "In Stock (10 available)" | [detail-in-stock](../images/ui/detail-in-stock.png) |
+| M3-07 | Detail `P-DEMO-OUT` | Out of stock | Guest | "Out of stock"; Add to Cart disabled | [detail-out-of-stock](../images/ui/detail-out-of-stock.png) |
 | M3-08 | Detail `P-NOPE` | Not found | Guest | "Product not found." and Back to catalogue | — |
-| M3-09 | Detail → login | Guest adds 2 to the cart | Guest | Sent to `/login?return_to=%2Fproducts%2FP-100%3Fquantity%3D2`; after login back at `/products/P-100?quantity=2` with quantity 2 | [login](../images/issue85-login.png) |
-| M3-10 | Login | Wrong password | Guest | "Email or password is incorrect." | [login-error](../images/issue85-login-error.png) |
-| M3-11 | Cart | Loading | `user@example.com` | Three skeleton lines; "Loading your cart…" | [cart-loading](../images/issue85-cart-loading.png) |
-| M3-12 | Cart | Data | `user@example.com` | "Demo cart item", "P-DEMO-CART · Available: 12", total "200.000 ₫", "No shipping fee is added at checkout." | [cart-data](../images/issue85-cart-data.png) |
-| M3-13 | Cart | Empty | `demo.buyer@marketplace.local` | "Your cart is empty.", "Total: 0 ₫", Continue shopping | [cart-empty](../images/issue85-cart-empty.png) |
-| M3-14 | Cart | Error (request blocked) | `user@example.com` | "Unable to load your cart. Please try again." and Retry | [cart-error](../images/issue85-cart-error.png) |
-| M3-15 | Cart | Quantity 999 | `user@example.com` | "Cannot add more than 12 items (available stock limit)"; quantity stays 2 | [cart-stock-error](../images/issue85-cart-stock-error.png) |
+| M3-09 | Detail → login | Guest adds 2 to the cart | Guest | Sent to `/login?return_to=%2Fproducts%2FP-100%3Fquantity%3D2`; after login back at `/products/P-100?quantity=2` with quantity 2 | [login](../images/ui/login.png) |
+| M3-10 | Login | Wrong password | Guest | "Email or password is incorrect." | [login-error](../images/ui/login-error.png) |
+| M3-11 | Cart | Loading | `user@example.com` | Three skeleton lines; "Loading your cart…" | [cart-loading](../images/ui/cart-loading.png) |
+| M3-12 | Cart | Data | `user@example.com` | "Demo cart item", "P-DEMO-CART · Available: 12", total "200.000 ₫", "No shipping fee is added at checkout." | [cart-data](../images/ui/cart-data.png) |
+| M3-13 | Cart | Empty | `demo.buyer@marketplace.local` | "Your cart is empty.", "Total: 0 ₫", Continue shopping | [cart-empty](../images/ui/cart-empty.png) |
+| M3-14 | Cart | Error (request blocked) | `user@example.com` | "Unable to load your cart. Please try again." and Retry | [cart-error](../images/ui/cart-error.png) |
+| M3-15 | Cart | Quantity 999 | `user@example.com` | "Cannot add more than 12 items (available stock limit)"; quantity stays 2 | [cart-stock-error](../images/ui/cart-stock-error.png) |
 | M3-16 | Cart | Seller opens it | `demo.seller@marketplace.local` | "A buyer account is required."; no Retry | — |
-| M3-17 | Checkout | Invalid phone `abc1234` | `user@example.com` | "Phone number must contain 7 to 15 digits." | [checkout-error](../images/issue85-checkout-error.png) |
+| M3-17 | Checkout | Invalid phone `abc1234` | `user@example.com` | "Phone number must contain 7 to 15 digits." | [checkout-error](../images/ui/checkout-error.png) |
 | M3-18 | Checkout | Empty cart after ordering | `user@example.com` | "Your cart is empty."; form hidden | — |
-| M3-19 | Confirmation | Data | `user@example.com` | "Order placed successfully.", "Order #5 · PENDING", "Total: 200.000 ₫" | [confirmation](../images/issue85-confirmation.png) |
-| M3-20 | Seller product form | Field errors | `demo.seller@marketplace.local` | Summary "Please correct the highlighted fields." and five field messages | [product-form-errors](../images/issue85-product-form-errors.png) |
-| M3-21 | Seller product form | Success | `demo.seller@marketplace.local` | "Listing created", the name, "Product code: P-…", View product | [product-created](../images/issue85-product-created.png) |
-| M3-22 | Seller orders | Data | `demo.seller@marketplace.local` | "3 seller orders found." with PENDING and COMPLETED cards, including order #5 from M3-19 | [seller-orders](../images/issue85-seller-orders.png) |
+| M3-19 | Confirmation | Data | `user@example.com` | "Order placed successfully.", "Order #5 · PENDING", "Total: 200.000 ₫" | [confirmation](../images/ui/confirmation.png) |
+| M3-20 | Seller product form | Field errors | `demo.seller@marketplace.local` | Summary "Please correct the highlighted fields." and five field messages | [product-form-errors](../images/ui/product-form-errors.png) |
+| M3-21 | Seller product form | Success | `demo.seller@marketplace.local` | "Listing created", the name, "Product code: P-…", View product | [product-created](../images/ui/product-created.png) |
+| M3-22 | Seller orders | Data | `demo.seller@marketplace.local` | "3 seller orders found." with PENDING and COMPLETED cards, including order #5 from M3-19 | [seller-orders](../images/ui/seller-orders.png) |
 | M3-23 | Seller orders | Start processing on order #5 | `demo.seller@marketplace.local` | Order #5 shows PROCESSING and offers Mark shipped; `seller@example.com` sees its own PROCESSING and CANCELLED orders only | — |
-| M3-24 | Seller orders | Empty (filter CANCELLED) | `demo.seller@marketplace.local` | "No seller orders found." | [seller-orders-empty](../images/issue85-seller-orders-empty.png) |
+| M3-24 | Seller orders | Empty (filter CANCELLED) | `demo.seller@marketplace.local` | "No seller orders found." | [seller-orders-empty](../images/ui/seller-orders-empty.png) |
 | M3-25 | Seller orders | Buyer and guest | `user@example.com`, guest | Buyer: "A seller account is required." Guest: "The access token is invalid or expired." (gap UI-G3) | — |
-| M3-26 | Catalog, 390 px | Mobile | `user@example.com` | Two cards per row, no sideways scroll | [mobile-catalog](../images/issue85-mobile-catalog.png) |
-| M3-27 | Cart, 390 px | Mobile | `user@example.com` | Controls below the image, no sideways scroll | [mobile-cart](../images/issue85-mobile-cart.png) |
-| M3-28 | Checkout, 390 px | Mobile | `user@example.com` | One column, no sideways scroll | [mobile-checkout](../images/issue85-mobile-checkout.png) |
-| M3-29 | Seller product form, 390 px | Mobile | `seller@example.com` | One column, no sideways scroll | [mobile-product-form](../images/issue85-mobile-product-form.png) |
-| M3-30 | Seller orders, 390 px | Mobile | `demo.seller@marketplace.local` | Cards, no sideways scroll | [mobile-seller-orders](../images/issue85-mobile-seller-orders.png) |
+| M3-26 | Catalog, 390 px | Mobile | `user@example.com` | Two cards per row, no sideways scroll | [mobile-catalog](../images/ui/mobile-catalog.png) |
+| M3-27 | Cart, 390 px | Mobile | `user@example.com` | Controls below the image, no sideways scroll | [mobile-cart](../images/ui/mobile-cart.png) |
+| M3-28 | Checkout, 390 px | Mobile | `user@example.com` | One column, no sideways scroll | [mobile-checkout](../images/ui/mobile-checkout.png) |
+| M3-29 | Seller product form, 390 px | Mobile | `seller@example.com` | One column, no sideways scroll | [mobile-product-form](../images/ui/mobile-product-form.png) |
+| M3-30 | Seller orders, 390 px | Mobile | `demo.seller@marketplace.local` | Cards, no sideways scroll | [mobile-seller-orders](../images/ui/mobile-seller-orders.png) |
 
 No page raised a script error during these checks. "Request blocked" means the
 browser aborted that API request, to show the error state without breaking the
 server.
 
-![Cart with data](../images/issue85-cart-data.png)
+![Cart with data](../images/ui/cart-data.png)
 
-![Seller orders](../images/issue85-seller-orders.png)
+![Seller orders](../images/ui/seller-orders.png)
 
-![Seller product form errors](../images/issue85-product-form-errors.png)
+![Seller product form errors](../images/ui/product-form-errors.png)
 
 ## 5. Error cases seen in the browser
 
@@ -114,7 +114,7 @@ change); they are covered by the automated test named in each row.
 ## 6. Findings recorded while documenting
 
 Seven differences between the screens and the agreed UI rules are recorded as gaps
-UI-G1 to UI-G7 in [docs/ui.md section 4.3](../ui.md#43-known-gaps-and-follow-ups),
+UI-G1 to UI-G7 in [docs/ui.md section 1](../ui.md#known-limits),
 with the area owner. None blocks a P0 acceptance criterion. One mismatch was fixed
 in #85 because it contradicted the checkout total: the cart said "Shipping is
 calculated at checkout." although checkout adds no fee.
