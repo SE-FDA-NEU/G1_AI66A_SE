@@ -78,7 +78,17 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2. Create and Seed the Database
+### 2. Initialize and Migrate the Database
+
+```bash
+python -m src.database
+```
+
+This creates missing tables and applies supported legacy migrations before data
+is inserted. The command is safe to repeat; no separate database server or Alembic
+step is required for the project's SQLite setup.
+
+### 3. Seed the Database
  
 ```bash
 python -m src.seed
@@ -86,23 +96,38 @@ python -m src.seed
 
 The seed creates the SQLite database, runs automatic migrations, and loads development accounts (seller and buyer) with hashed passwords alongside the 45 sample products. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
 
+For the full P0 demonstration dataset (#84), run:
+
+```bash
+python -m src.seed --demo
+```
+
+On a fresh database this adds six scenario products to the 45-item catalog (51
+stored, 50 purchasable), a populated primary-buyer cart, an empty alternate-buyer
+cart, and four sample orders: PENDING, PROCESSING, COMPLETED and CANCELLED.
+Re-running `--demo` preserves the installed scenarios and later user changes.
+See [demo data and fresh-machine checks](docs/SETUP.md#8-sprint-3-demo-data-and-fresh-machine-check-84).
+
 #### Seeded Development Credentials
 | Role | Email | Password |
 |---|---|---|
 | Seller | `demo.seller@marketplace.local` (or `seller@example.com`) | `password` |
 | Buyer | `user@example.com` (or `demo.buyer@marketplace.local`) | `password` |
 
-To reset and recreate the database from scratch:
-- Windows PowerShell: `Remove-Item marketplace.db -ErrorAction SilentlyContinue; python -m src.seed`
-- macOS / Linux: `rm -f marketplace.db && python -m src.seed`
+To reset without dropping tables or losing existing data, stop the server and
+choose a new, unused SQLite filename in `DATABASE_URL`, then repeat initialize ->
+seed -> start. See SETUP section 8.4 for platform-specific environment syntax.
+Existing databases can be migrated in place; no destructive clean flag is needed
+for ordinary reruns. Users/products are inserted with ON CONFLICT DO NOTHING and
+installed demo scenarios are preserved.
 
-### 3. Run the Tests
+### 4. Run the Tests
 
 ```bash
 python -m pytest -v
 ```
 
-### 4. Start Application Server
+### 5. Start Application Server
 
 ```bash
 python -m src.main
