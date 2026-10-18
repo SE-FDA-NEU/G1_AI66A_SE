@@ -1,5 +1,6 @@
 "use strict";
 const retry = document.getElementById("retry");
+const money = n => new Intl.NumberFormat("vi-VN", {style:"currency",currency:"VND"}).format(n);
 async function load() {
   retry.hidden = true; document.getElementById("error").textContent = "";
   const token = localStorage.getItem("access_token");
@@ -13,8 +14,8 @@ async function load() {
     const order = payload.data;
     document.getElementById("status").textContent = "Order placed successfully.";
     const receipt = document.getElementById("receipt"); receipt.replaceChildren();
-    const rows = [`Order #${order.id} \u00b7 ${order.status}`, `Total: ${new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND"}).format(order.total_amount)}`, `${order.recipient_name} \u00b7 ${order.delivery_address} \u00b7 ${order.phone_number}`,
-      ...order.items.map(i => `Product #${i.product_id} \u00d7 ${i.quantity} \u00b7 ${i.unit_price} VND each`)];
+    const rows = [`Order #${order.id} \u00b7 ${order.status}`, `Total: ${money(order.total_amount)}`, `${order.recipient_name} \u00b7 ${order.delivery_address} \u00b7 ${order.phone_number}`,
+      ...order.items.map(i => `${i.product_name} (${i.product_code}) \u00d7 ${i.quantity} \u00b7 ${money(i.unit_price)} each`)];
     for (const text of rows) { const p = document.createElement("p"); p.textContent = text; receipt.append(p); }
   } catch(e) { document.getElementById("status").textContent = "Confirmation unavailable."; document.getElementById("error").textContent = e.message; retry.hidden = false; }
 }

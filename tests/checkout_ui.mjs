@@ -65,12 +65,17 @@ for (const items of [[],[{name:"Mouse",quantity:1,line_total:100,availability:"u
   assert.equal(test.nodes.get("checkout-form").hidden,true);
 }
 // Receipt retries are GET-only and do not create another order.
-test=setup([new Error("timeout"),{payload:{data:{id:1,status:"PENDING",total_amount:100,...body,items:[]}}}],null,confirmationSource);
+const line={product_id:46,product_code:"P-100",product_name:"Mouse",seller_order_id:1,quantity:2,unit_price:100000,line_total:200000};
+test=setup([new Error("timeout"),{payload:{data:{id:1,status:"PENDING",total_amount:200000,...body,items:[line]}}}],null,confirmationSource);
 await tick(); assert.equal(test.nodes.get("retry").hidden,false);
 await vm.runInContext("load()",test.context);
 assert.equal(test.calls.length,2);
 assert.ok(test.calls.every(call=>call.url==="/api/v1/orders/1" && !call.options.method));
 assert.equal(test.nodes.get("status").textContent,"Order placed successfully.");
+// Receipt lines name the product and format the purchase price, never "Product #46".
+const receiptText=test.nodes.get("receipt").children.map(child=>child.textContent);
+assert.ok(receiptText.some(text=>/^Mouse \(P-100\) \u00d7 2 \u00b7 100\.000\s\u20ab each$/.test(text)),receiptText.join(" | "));
+assert.ok(receiptText.every(text=>!text.includes("Product #")));
 console.log("Checkout script checks passed: cart states, timeout/replay, validation, receipt retry.");
 
 // An account switch must block both the first POST and a pending-request retry.

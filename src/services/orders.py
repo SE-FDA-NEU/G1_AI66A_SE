@@ -28,9 +28,10 @@ def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
     ).first()
     if order is None:
         raise CheckoutError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
-    items = session.exec(
-        select(OrderItem)
-        .join(SellerOrder)
+    rows = session.exec(
+        select(OrderItem, Product)
+        .join(SellerOrder, SellerOrder.id == OrderItem.seller_order_id)
+        .join(Product, Product.id == OrderItem.product_id)
         .where(SellerOrder.order_id == order.id)
         .order_by(OrderItem.id)
     ).all()
@@ -39,8 +40,13 @@ def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
     return OrderData(
         **values,
         items=[
-            OrderLine(**item.model_dump(), line_total=item.quantity * item.unit_price)
-            for item in items
+            OrderLine(
+                **item.model_dump(),
+                product_code=product.code,
+                product_name=product.name,
+                line_total=item.quantity * item.unit_price,
+            )
+            for item, product in rows
         ],
     )
 
