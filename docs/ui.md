@@ -446,7 +446,8 @@ The complete list of API error codes, including those no screen can trigger, is 
   `main` and its states were checked in a browser on 2026-10-18
   ([evidence](evidence/milestone3.md)).
 - [x] Keyboard order, focus and labels were checked on the seller product form
-  (#81) and the main buyer pages; screen-reader testing has not been done.
+  (#81). The other pages use native links, buttons and labelled inputs, but their
+  keyboard order has not been tested; screen-reader testing has not been done.
 - [ ] Product owner, buyer and seller review of the running screens: planned in #83
   (heuristic reviews and user sessions), not yet recorded.
 
