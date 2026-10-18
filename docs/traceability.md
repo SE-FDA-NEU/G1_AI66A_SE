@@ -357,3 +357,19 @@ Implementation branch: `feat/81-seller-product-creation`, based on `main` at
 
 Shared contracts: `test_other_routes_keep_their_validation_error_shape` checks that
 cart, checkout, catalog and login validation responses are unchanged.
+
+
+## P0 integration and usability verification (#83)
+
+The complete Story -> Screen -> Route -> Endpoint -> BR -> Test Case -> Evidence
+matrix and acceptance status are in [Sprint 3 evidence, section 4](evidence/sprint3.md#4-p0-flows-and-real-user-usability--issue-83).
+`tests/test_p0_flows.py` links seller creation, buyer purchase/receipt and (after
+US08 integration) seller fulfilment/cancellation using authenticated HTTP calls and
+independent committed database checks. The tests do not constitute real-user
+sessions. Human forms, findings and retests are linked from the evidence index.
+
+
+PR #97 scope clarification: automated P0 checks and usability test templates only.
+The human evidence indexes contain no completed independent-review or external-user
+records. Blank forms live in docs/evidence/issue83/templates/ and are not evidence
+of completed testing. Issue #83 remains open for actual reviews/sessions and retests.

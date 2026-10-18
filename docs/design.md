@@ -1108,3 +1108,13 @@ object, server-owned or unknown fields) are listed under `_form`. Messages never
 the submitted input. All other routes keep their existing validation responses.
 See [docs/us06-create-product.md](us06-create-product.md#11-runtime-contract-81) and
 [docs/evidence/us06.md](evidence/us06.md).
+
+
+## Browser entry for P0 verification (#83)
+
+GET / with Accept containing text/html returns 307 to /products so a browser can
+begin the buyer journey at the root URL. Other clients retain the original JSON
+status response. No authentication is required at entry; protected APIs continue
+to enforce roles. This addresses technical observation OBS01 from #83. The
+integration test follows the root contract then verifies catalog through receipt;
+existing root metadata tests continue to check the non-browser response.

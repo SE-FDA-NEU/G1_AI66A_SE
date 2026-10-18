@@ -123,3 +123,107 @@ Internal database details, tracebacks, and raw SQL queries are excluded from cli
   - `@QuangMinhQu` (Developer)
 - **Attendance Record:** All 4 members attended.
 - **Backlog Refinement Status:** All 13 issues reviewed, acceptance criteria agreed upon, dependencies mapped, and story points committed.
+
+
+## 4. P0 flows and real-user usability ? issue #83
+
+Owner: @minhnm162. Reviewer: @leducminh290506-eng. Status: IN PROGRESS.
+
+PR scope: automated P0 integration checks, traceability and usability test
+preparation. No completed heuristic reviews or external-user sessions are included.
+Blank templates are kept separately in issue83/templates/ and do not satisfy the
+human-testing acceptance criteria. PR #97 must use Refs #83, not a closing keyword.
+
+### 4.1 Baseline and evidence search
+
+Checked on 2026-10-18: branch test/83-p0-flows-usability starts from main fac5740
+(PR #95 merged). US08 PR #96 at 96841c4 was still OPEN; task owner treats that
+content as final. No approval/merge is claimed here. Its code was tested in a
+disposable snapshot with the new #83 test and browser-entry fix, without editing
+the PR or mixing its implementation into this branch.
+
+Searched 57 local/remote refs and 90 unique Markdown blobs, PR descriptions and
+repository issue comments, including #83 and #96. No completed three independent
+heuristic-review records or external-user session measurements were found in that
+search. #83 comments were empty. PR #88 contains wireframes and review guidance,
+not completed sessions. US04 and US06 evidence explicitly excludes real-user
+usability. GitHub code reviews and implementation screenshots do not substitute for
+these required sessions. Evidence may exist outside the connected repository;
+none is assumed or fabricated.
+
+### 4.2 Story -> screen -> route -> endpoint -> BR -> test -> evidence matrix
+
+Manual cases are specified in [the execution guide](issue83/plan.md). Existing
+feature tests remain the detailed rule coverage; #83 adds cross-story integration.
+
+| Story | Screen / route | Endpoint | BR | Case / automated coverage | Evidence / current status |
+|---|---|---|---|---|---|
+| US01 #13/#77 | Entry /; catalog /products | GET /, GET /api/v1/products | BR1 | TC01; test_p0_seller_creation_to_buyer_receipt; test_products.py, test_products_page.py | Automated HTTP/database verified; human navigation pending |
+| US02 #14/#78 | /products/{productCode} | GET /api/v1/products/{productCode}, POST /api/v1/cart/items | BR1, BR2 | TC02; test_product_detail.py; P0 purchase integration | API/page delivery verified; guest-return browser check pending |
+| US03 #15/#79 | /cart | GET /api/v1/cart; POST /items; PATCH/DELETE /items/{productCode} | BR2 | TC03, TC14; test_cart_api.py, test_cart_service.py, test_cart_page.py; P0 integration | Automated rule coverage; manual states/input recovery pending |
+| US04 #16/#80 | /checkout; /checkout/confirmation/{orderId} | POST /api/v1/orders; GET /api/v1/orders/{orderId} | BR3, BR4, BR8 | TC04-TC06, TC13; test_checkout.py, checkout_ui.mjs; P0 integration | Multi-seller receipt, replay, ownership, stock/cart verified automatically; human session pending |
+| US06 #18/#81 | /seller/products/new | POST /api/v1/seller/products | BR5, BR9 | TC07-TC08; test_seller_products.py, seller_products_ui.mjs; P0 integration | Listing-to-purchase integration verified; human session pending |
+| US08 #20/#82 | /seller/orders | GET /api/v1/seller/orders; PATCH /api/v1/seller/orders/{subOrderId}/status | BR6, BR8 (restock) | TC09-TC12; test_p0_receipt_to_seller_fulfilment; PR #96 test_seller_orders.py | #83 integration passed on finalized PR snapshot; rerun on merged main; human session pending |
+
+### 4.3 Automated verification
+
+Commands and test environment: see issue83/plan.md. Python available in this
+session is 3.11.9; repository targets 3.12, so confirm target-runtime CI separately.
+DEBUG=false is set for command processes only. No .env or development database
+is modified by the tests; new integration tests use temporary SQLite files.
+
+- New HTTP/database integration: seller login -> two sellers create listings ->
+  browser-entry redirect -> catalog search -> detail -> cart add/update -> buyer
+  checkout -> owned receipt -> same-key replay -> committed totals/stock/items.
+- PR-snapshot integration: each seller sees only its own suborder; wrong seller
+  rejected; invalid transition rejected; complete both children and assert parent
+  COMPLETED/completed_at; separately cancel both, assert stock restored once,
+  repeated cancellation rejected and parent CANCELLED.
+- On pre-US08 main, the two terminal-state cases deliberately skip with a clear
+  dependency reason. Skips are not passes; the snapshot run supplements them.
+- Browser-entry change: text/html GET / redirects to /products; status/API clients
+  keep the existing JSON. See OBS01 in the findings register.
+
+Verified results on 2026-10-18:
+
+| Baseline | Check | Result |
+|---|---|---|
+| main fac5740 + #83 working changes | Full pytest suite | 313 passed, 2 skipped (US08 not present), 1 existing warning |
+| PR #96 at 96841c4 + #83 main.py/test file | Full pytest suite on disposable snapshot | 322 passed, 1 existing warning |
+| Same PR snapshot | New #83 integration cases | 3 passed, no skips |
+| #83 working branch | Ruff src/tests and git diff --check | Passed |
+| #83 working branch | checkout_ui.mjs and seller_products_ui.mjs via Node runtime | Passed |
+| Connected UI inventory | Browser/manual session availability | No connected browser; no browser execution claimed |
+
+The current-branch total includes the dedicated browser-entry/JSON-contract regression
+in tests/test_health.py, added after the PR-snapshot run. The snapshot result remains
+322 passed and does not claim that additional test was run there.
+
+The warning is the existing Starlette/httpx deprecation. Automated checks are not
+browser screenshots, human task durations or independent heuristic reviews.
+
+### 4.4 Outstanding human verification and preparatory templates
+
+| Required activity | Record | Status |
+|---|---|---|
+| Three independent heuristic reviews | [Evidence index](issue83/heuristic-reviews.md); [blank review template](issue83/templates/heuristic-review.md) | NOT PERFORMED; reviewer names/dates/findings not supplied |
+| External user sessions | [Evidence index](issue83/user-sessions.md); [blank session template](issue83/templates/user-session.md) | NOT PERFORMED; planned participant count needs confirmation |
+| Completion, seconds, misclicks, assistance and blockers | Same session records | NOT MEASURED; no invented zeros or success rates |
+| Findings severity 0-4 and owners | [Findings/retest register](issue83/findings.md) | Technical OBS01 recorded; human findings not yet collected |
+| Severity 3-4 fixes and retests | Same findings register | Must be checked after real sessions; browser retest of OBS01 pending |
+| Screenshots/notes | Link actual files here by case/session ID | Interface screenshots attached to PR #97; no completed human-session evidence included |
+
+### 4.5 Issue acceptance checklist
+
+- [x] Create Story -> Screen -> Route -> Endpoint -> BR -> Test Case -> Evidence matrix.
+- [ ] Test buyer flow from / to receipt in a real browser (automated integration done).
+- [ ] Test seller creation in a real browser for this baseline (automated integration done).
+- [ ] Test seller management in a real browser (PR-snapshot automated integration done).
+- [ ] Conduct 3 independent heuristic reviews.
+- [ ] Record severity 0-4 and an owner for each observed human finding.
+- [ ] Conduct the planned external user-testing sessions.
+- [ ] Record real completion/time/misclick/blocking measurements.
+- [ ] Fix and retest all observed severity 3-4 findings.
+- [x] Store the current evidence index in docs/evidence/sprint3.md.
+
+Do not close #83 until remaining real-browser/reviewer/user evidence is recorded.
