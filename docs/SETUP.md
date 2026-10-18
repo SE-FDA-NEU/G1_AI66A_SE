@@ -1,13 +1,13 @@
 # Setup and Running Guide - Mini Marketplace
 
-This guide takes a fresh machine from `git clone` to the running walking
-skeleton: the `/products` page showing products read from a real SQLite
-database. Run every command from the repository root, the folder that contains
+This guide takes a fresh machine from `git clone` to the running Mini Marketplace
+with its SQLite catalog, authentication, cart, checkout and seller product form.
+Section 8 adds the Sprint 3 demo scenarios and current independent-verification form. Run every command from the repository root, the folder that contains
 `README.md`. Sections 1 to 7 follow the setup checklist in issue #51.
 
-The macOS/Linux commands were run by the author on a clean clone (see section 7).
-The Windows commands have not been run by the author; the independent check in
-section 7 records what was tested.
+Section 7 preserves historical Sprint 2 checks on their original commits. Those
+checks do not establish independent verification of the current Sprint 3 guide.
+Section 8 records current checks separately; a non-author fresh-machine run is pending.
 
 ---
 
@@ -93,7 +93,7 @@ The template works as it is for local development; no value has to be changed.
 |---|---|---|
 | `APP_NAME` | `"Mini Marketplace"` | Application name in the API docs and in `GET /` |
 | `APP_ENV` | `development` | Environment name reported by `GET /` and `/health` |
-| `DEBUG` | `true` | `python -m src.main` reloads on code changes, and SQLAlchemy logs every SQL statement |
+| `DEBUG` | `false` | Set true explicitly for development reload and SQL logging |
 | `APP_HOST` | `127.0.0.1` | Host used by `python -m src.main` |
 | `APP_PORT` | `8000` | Port used by `python -m src.main` |
 | `DATABASE_URL` | `sqlite:///./marketplace.db` | Database location; `./` is the folder the command runs from |
@@ -109,10 +109,11 @@ Settings are read once at start-up, so restart the app after editing `.env`.
 
 ## 4. Database
 
-The app uses a SQLite file, so there is no database server to install. One
-command creates the database and loads the sample data:
+The app uses a SQLite file, so there is no database server to install. The
+initialize/migrate step prepares the schema before the seed loads sample data:
 
 ```bash
+python -m src.database
 python -m src.seed
 ```
 
@@ -129,7 +130,7 @@ Total products: 45
 Active products: 45
 ```
 
-With `DEBUG=true` (the template value), SQLAlchemy also prints every SQL
+If you explicitly enable `DEBUG=true`, SQLAlchemy also prints every SQL
 statement as `INFO sqlalchemy.engine.Engine ...` lines, including one
 `CREATE TABLE` per table on a new database, so the lines above appear among them.
 
@@ -190,8 +191,8 @@ activated (or stop the server first):
 python -m pytest -v
 ```
 
-Expected: every test passes. The tests use an
-in-memory database and do not touch `marketplace.db`.
+Expected: every test passes. Tests use in-memory or disposable file databases;
+subprocess seed checks override DATABASE_URL and do not touch marketplace.db.
 
 `uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload` also starts the
 app; it takes the host and port from the command line and ignores `APP_HOST`
@@ -205,9 +206,9 @@ and `APP_PORT`.
 |---|---|
 | PowerShell refuses `.\.venv\Scripts\Activate.ps1` with "running scripts is disabled on this system" | Skip activation and call the environment's Python directly: replace `python` with `.\.venv\Scripts\python.exe` in every later command, for example `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` and `.\.venv\Scripts\python.exe -m src.main`. |
 | `ModuleNotFoundError: No module named 'sqlmodel'` (or `fastapi`, or `src`) | The command ran outside the virtual environment or outside the repository root. `python -m pip --version` must show a path inside `.venv`. Activate the environment again (or use the direct path above), `cd` to the repository root and rerun `python -m pip install -r requirements.txt`. |
-| `[Errno 98] Address already in use` with the template `.env` (`DEBUG=true`), or `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` with `DEBUG=false`; on Windows the message starts with `[WinError 10048]` | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
+| `[Errno 98] Address already in use` when explicitly using `DEBUG=true`, or `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` with `DEBUG=false`; on Windows the message starts with `[WinError 10048]` | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
 | `/products` shows "No products available at the moment." or the API reports `"total": 0` | The server reads a database that was never seeded. Check that no `DATABASE_URL` is set in the shell (`echo $DATABASE_URL`, `echo %DATABASE_URL%` or `$env:DATABASE_URL`), run `python -m src.seed` from the repository root, then reload the page. |
-| `marketplace.db` was created before a schema change you pulled. A new column makes `python -m src.seed` fail with `sqlite3.OperationalError: no such column: ...` and `/products` show "Something went wrong. Please try again later." with Retry (the API returns `500`, while `/health` still reports `"database":"connected"`). A new constraint or foreign key gives no error at all. | The seed and the app create missing tables but never change existing ones. Stop the app, delete the file (it holds only sample data) with `rm marketplace.db` (macOS/Linux), `del marketplace.db` (Command Prompt) or `Remove-Item marketplace.db` (PowerShell), then run `python -m src.seed` again. |
+| Existing database fails after a schema change | Run `python -m src.database` to apply supported legacy column migrations. If the schema was manually altered beyond supported migrations, retain the file and choose a new unused DATABASE_URL as described in section 8.4. |
 
 ---
 
@@ -335,3 +336,165 @@ Startup (python -m src.main) and seeding (python -m src.seed) automatically add
 nullable orders.request_key and orders.request_hash plus the unique key index.
 Existing orders are preserved; repeated startup is safe. No reset is required.
 See [checkout verification](evidence/us04.md) for the buyer checkout/receipt flow.
+
+
+## 8. Sprint 3 demo data and fresh-machine check (#84)
+
+### 8.1 Choose the dataset
+
+`python -m src.seed` keeps the original 45-product catalog command and automated
+walking-skeleton contract. Use `python -m src.seed --demo` for the full P0 demo.
+The CLI applies schema initialization/migrations first, then inserts accounts,
+catalog and all requested demo scenarios in a single data transaction. On a clean database: 4 users, 51 products (50 visible in catalog),
+1 cart line, 4 orders, 4 seller orders, 4 order items. Active out-of-stock products
+are intentionally hidden from the catalog but accessible by their detail URL.
+
+| New database demo account | Password | Initial scenario |
+|---|---|---|
+| user@example.com | password | Cart: P-DEMO-CART x2, total 200000 VND; owns four sample orders |
+| demo.buyer@marketplace.local | password | Empty cart, no sample orders; buyer isolation check |
+| demo.seller@marketplace.local | password | 45 catalog products plus demo cart/pending/completed products |
+| seller@example.com | password | Demo processing/cancelled/out-of-stock products |
+
+Passwords are stored as scrypt hashes. Existing nonempty hashes, products and user
+changes are not overwritten. These initial cart/count expectations apply only to
+a clean database, not to a database someone has already used.
+
+| Product code | Seller | Physical stock | Related fixture |
+|---|---|---|---|
+| P-DEMO-CART | Primary seller | 12 | Primary buyer cart quantity 2; no stock reservation |
+| P-DEMO-PENDING | Primary seller | 9 | PENDING order, quantity 1, unit price 150000 |
+| P-DEMO-PROCESS | Alternate seller | 8 | PROCESSING order, quantity 2, unit price 200000 |
+| P-DEMO-COMPLETE | Primary seller | 7 | COMPLETED order, quantity 3, unit price 250000 |
+| P-DEMO-CANCEL | Alternate seller | 10 | CANCELLED order, quantity 1, unit price 300000; already restored |
+| P-DEMO-OUT | Alternate seller | 0 | Direct detail shows Out of stock; Add to Cart disabled |
+
+Demo orders have one seller order each and purchase-time price snapshots; their
+parent/child statuses agree. Dates are fixed at 2026-10-10 12:00 UTC (19:00 GMT+7),
+including completed_at for the completed fixture. Filter seller orders on that
+UTC date to find them. These are synthetic fixtures, not actual recorded user
+sessions or status-transition histories. PR #96 supplies seller management and its
+history model; `/seller/orders` is unavailable until that PR is integrated.
+
+`orders.request_key = seed84:PENDING` is the installation marker. Other fixture
+keys are seed84:PROCESSING, seed84:COMPLETED and seed84:CANCELLED. They are reserved
+fixture identifiers, not keys for a live checkout replay. An existing marker makes
+`--demo` leave all scenarios unchanged, including an emptied cart or processed
+order. Do not remove individual marker/product rows to reset the demo. Conflicting
+pre-existing demo product codes or account roles are rejected without partial
+scenario insertion. A failure before commit leaves no scenario marker or partial
+scenario rows. Failure in the demo stage also rolls back catalog/account changes
+made by the same CLI invocation. Schema initialization is a separate prior stage.
+Users/products use SQLite ON CONFLICT DO NOTHING keyed by email/code, preserving
+existing passwords, IDs, quantities and edits. BEGIN IMMEDIATE serializes seed
+writers before checking natural keys and marker; schema creation also serializes
+first-run DDL, so concurrent seed processes do not race missing-table creation.
+
+### 8.2 Fresh Windows PowerShell run
+
+Use a new clone directory and Python 3.12 or later. Record the tested branch/commit.
+Before merge, replace the branch below with chore/84-seed-setup-verification;
+after merge use main. Do not reuse the author's virtual environment or database.
+
+```powershell
+git clone --branch main https://github.com/SE-FDA-NEU/G1_AI66A_SE.git G1_AI66A_SE-fresh84
+cd G1_AI66A_SE-fresh84
+git rev-parse HEAD
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip check
+Copy-Item .env.example .env
+$env:DEBUG = 'false'
+$env:DATABASE_URL = 'sqlite:///./marketplace-fresh84.db'
+python -m src.database
+python -m src.seed --demo
+python -m src.seed --demo
+python -m pytest
+python -m ruff check src tests
+python -m src.main
+```
+
+First run core output: Added: 45 products; Total products: 45; Active products: 45;
+then Demo scenarios: added and Products after demo seed: 51. Second run core output:
+Added: 0 products; Total products: 51; then Demo scenarios: already installed
+(unchanged), final products 51. Stop the server with Ctrl+C when finished.
+DATABASE_URL/DEBUG process variables override .env and must remain set when starting
+that server. If you use another terminal, set the same variables there.
+
+### 8.3 Fresh macOS/Linux run
+
+```bash
+git clone --branch main https://github.com/SE-FDA-NEU/G1_AI66A_SE.git G1_AI66A_SE-fresh84
+cd G1_AI66A_SE-fresh84
+git rev-parse HEAD
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip check
+cp .env.example .env
+export DEBUG=false
+export DATABASE_URL=sqlite:///./marketplace-fresh84.db
+python -m src.database
+python -m src.seed --demo
+python -m src.seed --demo
+python -m pytest
+python -m ruff check src tests
+python -m src.main
+```
+
+### 8.4 Non-destructive migration and reset
+
+Startup/seed/init creates missing tables and migrates users.password_hash and
+orders.request_key/request_hash with the unique index. Existing rows are retained;
+this does not repair arbitrary manually modified schemas. PR #96 registers
+order_history, which init_db creates once that model is present.
+
+To keep existing data, run `python -m src.database`, then optionally
+`python -m src.seed --demo`. Legacy accounts get a hash only when missing; modified
+passwords are preserved. Do not count this upgrade as a clean-machine installation.
+
+For a safe fresh demo without deleting your current database, stop the server and
+set DATABASE_URL to a new unused filename, e.g. marketplace-demo-reset84.db, using
+the platform's environment syntax above. Run seed --demo and start the server in
+the same environment. This creates a clean dataset while retaining the previous
+file. Change back to the earlier DATABASE_URL and restart to recover that dataset.
+Choose another unused filename for each reset; reusing an existing one is not a reset.
+All *.db/*.sqlite/*.sqlite3/*.sql/*.dump and .env files are ignored; commit none.
+
+### 8.5 Independent verification checklist and record
+
+A tester other than the current SETUP author must perform the fresh run and
+complete [the #84 evidence record](evidence/setup84.md). The old #52 check in
+section 7 does not satisfy this requirement for the current commit.
+
+Check /health, /products and /api/v1/products?limit=100 (total 50 on a fresh demo).
+Check /products/P-DEMO-OUT for out-of-stock detail. Log in each buyer and compare
+cart states; the primary total is 200000 VND. Use the primary buyer to load a seeded
+receipt (derive its actual ID from database/API; never assume ID=1). Log in each
+seller and, after PR #96 merges, verify only their own demo orders and the fixed-date
+filter. Existing fixtures include completed/cancelled states; do not attempt to
+cancel a processing order. Save seed output from both runs, test output and browser
+screenshots. Record any missing US08 route honestly instead of marking it passed.
+
+
+### 8.6 Review follow-up: environment and portability
+
+No new environment variables are required by the seed. DATABASE_URL, DEBUG and
+application/auth configuration are all listed in .env.example with development
+defaults; --demo is a command-line flag. The template now defaults DEBUG=false so
+onboarding does not depend on reload mode or SQL logging. Existing .env files are
+not modified automatically. Clear or correct an inherited invalid DEBUG value if
+Pydantic rejects it; process environment variables override .env.
+
+The project's scripts run with `python -m src.database` and `python -m src.seed`
+on all platforms. Use forward-slash SQLite URLs, e.g.
+`sqlite:///./data/demo database.db`, from the repository root. Runtime directory
+creation uses pathlib; SQLAlchemy creates the SQLite file. Relative folders may
+contain spaces and Unicode. Windows activation vs Bash `source` is intentionally
+shown separately; do not paste a Windows drive path into WSL. macOS/Linux/WSL
+execution must still be recorded by a tester on those systems; a Windows test
+against a portable path is not proof of every OS. This repo does not use db:seed,
+PostgreSQL roles/categories or a separate SQL migration tool.

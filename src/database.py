@@ -1,9 +1,11 @@
 from collections.abc import Generator
+from contextlib import nullcontext
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy import event, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
@@ -13,11 +15,7 @@ from src.config import get_settings
 settings = get_settings()
 DATABASE_URL = settings.DATABASE_URL
 
-connect_args = (
-    {"check_same_thread": False}
-    if DATABASE_URL.startswith("sqlite")
-    else {}
-)
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
 database_url = make_url(DATABASE_URL)
 pool_options = (
@@ -26,6 +24,16 @@ pool_options = (
     and database_url.database in (None, "", ":memory:")
     else {}
 )
+
+if database_url.get_backend_name() == "sqlite" and database_url.database not in (
+    None,
+    "",
+    ":memory:",
+):
+    # SQLAlchemy creates the file, but not its parent directories. pathlib keeps
+    # nested relative paths portable across Windows, Linux and WSL.
+    if not database_url.database.startswith("file:"):
+        Path(database_url.database).resolve().parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     DATABASE_URL,
@@ -46,11 +54,11 @@ if database_url.get_backend_name() == "sqlite":
         cursor.close()
 
 
-def migrate_db() -> None:
+def migrate_db(connection: Connection | None = None) -> None:
     """Apply lightweight schema migrations for existing databases."""
     from sqlalchemy import inspect
 
-    with engine.begin() as connection:
+    with nullcontext(connection) if connection is not None else engine.begin() as connection:
         inspector = inspect(connection)
         tables = set(inspector.get_table_names())
         if "users" in tables:
@@ -68,18 +76,24 @@ def migrate_db() -> None:
             for name in ("request_key", "request_hash"):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(64)"))
-            connection.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS ix_orders_request_key ON orders (request_key)"
-            ))
-
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_orders_request_key "
+                    "ON orders (request_key)"
+                )
+            )
 
 
 def init_db() -> None:
     """Register application models, create missing tables, and run migrations."""
     import src.models  # noqa: F401
 
-    SQLModel.metadata.create_all(engine)
-    migrate_db()
+    with engine.begin() as connection:
+        if connection.dialect.name == "sqlite":
+            # Serialize first-run DDL as well as data seeding across processes.
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        SQLModel.metadata.create_all(connection)
+        migrate_db(connection)
 
 
 def check_db_connection() -> bool:

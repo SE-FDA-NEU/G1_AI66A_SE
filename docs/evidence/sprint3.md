@@ -123,3 +123,13 @@ Internal database details, tracebacks, and raw SQL queries are excluded from cli
   - `@QuangMinhQu` (Developer)
 - **Attendance Record:** All 4 members attended.
 - **Backlog Refinement Status:** All 13 issues reviewed, acceptance criteria agreed upon, dependencies mapped, and story points committed.
+
+
+## Seed and fresh-machine preparation (#84)
+
+The optional `python -m src.seed --demo` mode creates complete P0 demonstration
+data once. Catalog-only seeding is retained. Current instructions, account/scenario
+inventory and migration/reset path are in [SETUP section 8](../SETUP.md#8-sprint-3-demo-data-and-fresh-machine-check-84).
+Automated checks and the pending non-author verification record are in
+[setup84.md](setup84.md). This preparation is separate from #83 usability sessions;
+no independent machine/user execution is implied by seed tests.
