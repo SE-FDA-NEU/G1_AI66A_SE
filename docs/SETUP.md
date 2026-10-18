@@ -183,7 +183,7 @@ Leave this terminal open while you use the app; stop it with `Ctrl+C`.
 
 `/health` only proves that the database connection works. The products page and
 the API prove that the seeded data is there. The other P0 screens and the account
-for each are listed in the README ("Start Application Server"); their states and
+for each are listed at the top of the README ("P0 stories and where each one starts"); their states and
 messages are documented in [ui.md](ui.md).
 
 To run the automated tests, use a second terminal with the virtual environment
@@ -266,7 +266,7 @@ section 4 asks to delete it.
 | **Web UI** | HTML / CSS / JavaScript | - | Eight pages (catalog, detail, cart, checkout, confirmation, login, seller product form, seller orders) served by FastAPI; no build step |
 | **Testing** | pytest, pytest-cov, HTTPX | `>= 8.0.0` / `>= 5.0.0` / `>= 0.27.0` | Automated unit, integration, and smoke testing with coverage |
 | **Code Quality** | Ruff | `>= 0.5.0` | High-speed linting and code formatting |
-| **Page script checks** | Node.js (optional) | `>= 20` | Runs `tests/checkout_ui.mjs` and `tests/seller_products_ui.mjs`; not needed to run the app |
+| **Page script checks** | Node.js (optional) | `>= 20` | Runs `tests/checkout_ui.mjs`, `tests/seller_products_ui.mjs` and `tests/seller_orders_ui.mjs`; not needed to run the app |
 
 ---
 
@@ -288,7 +288,7 @@ section 4 asks to delete it.
 │   ├── us01-...md to us10-...md   # One specification per user story
 │   ├── sprint-log.md              # Sprint log
 │   ├── evidence/                  # Sprint and story evidence (milestone3.md, us04.md, us06.md, ...)
-│   └── images/                    # Screenshots used as evidence
+│   └── images/                    # Evidence screenshots; ui/ holds the Milestone 3 UI screenshots and screen flow
 ├── src/
 │   ├── __init__.py                # Package version metadata
 │   ├── config.py                  # Pydantic environment configuration loader
@@ -327,7 +327,7 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) automatically valida
 2. **Clean Dependency Installation:** Sets up Python 3.12 runner and installs `requirements.txt` and testing utilities.
 3. **Static Analysis & Linting:** Executes `ruff check .` to guarantee code style and identify errors.
 4. **Smoke and Unit Tests:** Executes `pytest -v --cov --cov-report=term-missing --junitxml=junit.xml` to verify endpoint availability and response contracts.
-5. **Page Script Checks:** Sets up Node 22 and runs `node tests/checkout_ui.mjs` and `node tests/seller_products_ui.mjs`.
+5. **Page Script Checks:** Sets up Node 22 and runs `node tests/checkout_ui.mjs`, `node tests/seller_products_ui.mjs` and `node tests/seller_orders_ui.mjs`.
 6. **Credential & Secret Scanning:** Validates that no secret keys, API tokens, `.env` files, or database binaries are accidentally committed.
 
 
