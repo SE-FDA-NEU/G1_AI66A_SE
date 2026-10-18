@@ -160,3 +160,13 @@ def test_buyers_and_guests_cannot_use_seller_orders(api):
         }
     assert guest.status_code == 401
     assert guest.json()["error"]["code"] == "ERR_AUTH_REQUIRED"
+
+
+def test_pages_never_show_a_generic_error():
+    """Milestone 3: a message says what happened and what to do next, never just "error"."""
+    banned = ("Something went wrong", "Error 422", "Traceback", "Internal Server Error")
+    for pattern in ("src/web/**/*.js", "src/web/**/*.html"):
+        for path in ROOT.glob(pattern):
+            text = path.read_text(encoding="utf-8")
+            for phrase in banned:
+                assert phrase not in text, f"{path.name} shows {phrase!r}"

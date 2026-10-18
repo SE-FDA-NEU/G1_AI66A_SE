@@ -179,7 +179,7 @@ async function loadProducts(page = currentPage) {
       updatePagination(meta);
     }
   } catch (error) {
-    showState("error", "Something went wrong. Please try again later.");
+    showState("error", "We could not load the products. Check your connection, then select Retry.");
   } finally {
     elements.retry.disabled = false;
   }

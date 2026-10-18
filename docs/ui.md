@@ -95,7 +95,7 @@ renders names, descriptions and server messages with `textContent`.
 | Loading | Eight grey card skeletons; status "Loading products…" for screen readers |
 | Data | Cards with image, name, price and a stock badge ("In Stock", or "Only N left" for 1-5 available); pagination "Page N of M" |
 | Empty | "No products available at the moment." (also when a search finds nothing) |
-| Error | "Something went wrong. Please try again later." and **Retry** |
+| Error | "We could not load the products. Check your connection, then select Retry." and **Retry** |
 
 A missing or broken image falls back to `/static/product-placeholder.svg` once.
 
@@ -131,8 +131,8 @@ Products, Cart, Create product and Log in/Log out.
 | Loading | "Loading product…" |
 | Data | Name, price, description ("No description available." when empty), image, "In Stock (N available)" |
 | Out of stock | "Out of stock"; **Add to Cart** disabled |
-| Not found | "Product not found." and **Back to catalogue** (no Retry) |
-| Error | "Something went wrong. Please try again later.", **Back to catalogue** and **Retry** |
+| Not found | "This product does not exist or is no longer for sale. Go back to the catalogue to choose another one." and **Back to catalogue** (no Retry) |
+| Error | "We could not load this product. Check your connection, then select Retry.", **Back to catalogue** and **Retry** |
 | Add failed | The server message under the button, for example "Cannot add more than 10 items (available stock limit)" or "A buyer account is required." |
 
 **Changed from the initial wireframe:** the route uses the public code (`P-100`);
@@ -183,7 +183,7 @@ Line-level feedback inside the data state:
   is no longer available." or "This product is out of stock."; the summary says
   "Update or remove the highlighted items before checkout." and **Checkout** is
   disabled.
-- A seller token gets "A buyer account is required." without **Retry**.
+- A seller token gets "The cart is for buyer accounts. Log in with a buyer account to shop." without **Retry**.
 
 **Changed from the initial wireframe:** the shipping line became "No shipping fee is
 added at checkout." (#85), matching checkout, which charges the cart total only.
@@ -411,12 +411,12 @@ Each row is a case a user can meet. "UI message" is the exact text on the screen
 
 | Case | Screen | Trigger | HTTP / error code | Rule | UI message | Recovery | Automated check |
 |---|---|---|---|---|---|---|---|
-| UI-E01 | Catalog | The catalog query fails | `500 ERR_DATABASE_FAILURE` | BR1 | `Something went wrong. Please try again later.` | **Retry** | `test_list_products_database_failure_returns_500` |
-| UI-E02 | Product detail | Unknown or inactive product code | `404 ERR_PRODUCT_NOT_FOUND` | BR1 | `Product not found.` | **Back to catalogue** | `test_product_detail_hides_inactive_and_unknown_products` |
+| UI-E01 | Catalog | The catalog query fails | `500 ERR_DATABASE_FAILURE` | BR1 | `We could not load the products. Check your connection, then select Retry.` | **Retry** | `test_list_products_database_failure_returns_500` |
+| UI-E02 | Product detail | Unknown or inactive product code | `404 ERR_PRODUCT_NOT_FOUND` | BR1 | `This product does not exist or is no longer for sale. Go back to the catalogue to choose another one.` | **Back to catalogue** | `test_product_detail_hides_inactive_and_unknown_products` |
 | UI-E03 | Product detail | No available stock | `200`, `stock_status: out_of_stock` | BR1, BR2 | `Out of stock` | Add to Cart disabled | `test_out_of_stock_product_remains_visible_but_unavailable` |
 | UI-E04 | Cart | Quantity above available stock | `409 ERR_STOCK_EXCEEDED` | BR2 | `Cannot add more than {available} items (available stock limit)` | Previous quantity kept | `test_quantity_above_stock_is_refused_and_the_previous_one_kept` |
 | UI-E05 | Cart | Typed quantity is not a whole number of at least 1 | none (checked in the page; the API answers `400 ERR_INVALID_QUANTITY` or `422 ERR_VALIDATION`) | BR2 | `Enter a whole number of at least 1.` | Previous quantity restored | `test_add_refuses_an_invalid_quantity` |
-| UI-E06 | Cart | A seller opens the cart | `403 ERR_BUYER_REQUIRED` | — | `A buyer account is required.` | Log in as a buyer | `test_seller_has_no_cart` |
+| UI-E06 | Cart | A seller opens the cart | `403 ERR_BUYER_REQUIRED` | — | `The cart is for buyer accounts. Log in with a buyer account to shop.` | Log in as a buyer | `test_seller_has_no_cart` |
 | UI-E07 | Cart | The cart cannot be loaded | `500` or network error | — | `Unable to load your cart. Please try again.` | **Retry** | `test_database_failure_is_a_500_without_sql_details` |
 | UI-E08 | Checkout | Stock changed after the cart was filled | `409 ERR_STOCK_EXCEEDED` | BR8 | `Item {name} has insufficient stock or changed.` | Form values kept; update the cart | `test_stale_product_version_aborts_checkout` |
 | UI-E09 | Checkout | Invalid phone number | none (checked in the page; the API answers `422 ERR_VALIDATION`) | — | `Phone number must contain 7 to 15 digits.` | Correct the field | `test_api_validation_does_not_write` |
