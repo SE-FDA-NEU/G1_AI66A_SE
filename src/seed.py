@@ -1,6 +1,8 @@
 import argparse
 from datetime import UTC, datetime
 
+from sqlalchemy import text, update
+from sqlalchemy.dialects.sqlite import insert
 from sqlmodel import Session, select
 
 from src.auth import hash_password
@@ -159,62 +161,76 @@ def build_products(seller_id: int = 1) -> list[Product]:
 
 
 def seed_users(session: Session) -> dict[str, User]:
-    """Ensure standard development accounts exist with usable hashed passwords."""
-    users: dict[str, User] = {}
+    """Upsert by email without resetting passwords or account ownership."""
+    users = {}
     for entry in SEED_USERS:
         user = session.exec(select(User).where(User.email == entry["email"])).first()
         if user is None:
-            user = User(
-                name=entry["name"],
-                email=entry["email"],
-                role=entry["role"],
-                password_hash=hash_password(entry["password"]),
+            session.exec(
+                insert(User)
+                .values(
+                    name=entry["name"],
+                    email=entry["email"],
+                    role=entry["role"],
+                    password_hash=hash_password(entry["password"]),
+                )
+                .on_conflict_do_nothing(index_elements=["email"])
             )
-            session.add(user)
-            session.flush()
-        elif not user.password_hash:
-            user.password_hash = hash_password(entry["password"])
-            session.add(user)
-            session.flush()
+            user = session.exec(select(User).where(User.email == entry["email"])).one()
+        if user.role != entry["role"]:
+            raise RuntimeError("A demo account exists with a different role; seed rolled back.")
+        if not user.password_hash:
+            session.exec(
+                update(User)
+                .where(User.id == user.id, User.password_hash == "")
+                .values(password_hash=hash_password(entry["password"]))
+            )
+            session.refresh(user)
         users[entry["email"]] = user
     return users
 
 
 def get_or_create_demo_seller(session: Session) -> User:
-    """Return the primary demo seller, ensuring hashed password exists."""
-    users = seed_users(session)
-    return users[DEMO_SELLER_EMAIL]
+    return seed_users(session)[DEMO_SELLER_EMAIL]
+
+
+def _seed_catalog(session: Session) -> tuple[int, int, int]:
+    seller = get_or_create_demo_seller(session)
+    added = 0
+    for product in build_products(seller_id=seller.id):
+        result = session.exec(
+            insert(Product)
+            .values(**product.model_dump(exclude={"id"}))
+            .on_conflict_do_nothing(index_elements=["code"])
+        )
+        added += result.rowcount
+    products = session.exec(select(Product)).all()
+    return added, len(products), sum(product.is_active for product in products)
+
+
+def _run_seed(catalog: bool, demo: bool):
+    """Migrate first; serialize SQLite writers and commit all requested fixtures once."""
+    init_db()
+    with Session(engine) as session, session.begin():
+        # This project uses SQLite. Taking the write lock before checking marker
+        # and natural keys also prevents two seed processes from racing each other.
+        session.exec(text("BEGIN IMMEDIATE"))
+        counts = _seed_catalog(session) if catalog else None
+        created = _seed_demo_scenarios(session) if demo else False
+        total = len(session.exec(select(Product)).all())
+    return counts, created, total
+
+
+def _print_catalog(counts: tuple[int, int, int]) -> None:
+    added, total, active = counts
+    print(f"Added: {added} products")
+    print(f"Total products: {total}")
+    print(f"Active products: {active}")
 
 
 def seed_products() -> None:
-    """Create missing tables and seed the sample catalog."""
-    init_db()
-
-    with Session(engine) as session:
-        seller = get_or_create_demo_seller(session)
-
-        if seller.id is None:
-            raise RuntimeError("Demo seller could not be created.")
-
-        products = build_products(seller_id=seller.id)
-
-        existing_products = session.exec(select(Product)).all()
-        existing_codes = {product.code for product in existing_products}
-
-        new_products = [product for product in products if product.code not in existing_codes]
-
-        if new_products:
-            session.add_all(new_products)
-
-        session.commit()
-
-        all_products = session.exec(select(Product)).all()
-
-        active_products = [product for product in all_products if product.is_active]
-
-        print(f"Added: {len(new_products)} products")
-        print(f"Total products: {len(all_products)}")
-        print(f"Active products: {len(active_products)}")
+    counts, _, _ = _run_seed(catalog=True, demo=False)
+    _print_catalog(counts)
 
 
 DEMO_MARKER = "seed84:PENDING"
@@ -235,98 +251,92 @@ DEMO_ORDERS = (
 )
 
 
-def seed_demo_scenarios() -> bool:
-    """Install the optional demo dataset once, preserving subsequent user changes.
-
-    The pending order request key is the installation marker. All scenario rows
-    and the marker are committed together. An existing marker means no data is
-    refilled/reset, even if the user emptied a cart or processed a demo order.
-    """
-    init_db()
-    with Session(engine) as session:
-        if session.exec(select(Order.id).where(Order.request_key == DEMO_MARKER)).first():
-            return False
-        users = seed_users(session)
-        for entry in SEED_USERS:
-            if users[entry["email"]].role != entry["role"]:
-                raise RuntimeError(
-                    "A demo account exists with a different role; no scenarios added."
-                )
-        codes = [entry[0] for entry in DEMO_PRODUCTS]
-        if session.exec(select(Product.id).where(Product.code.in_(codes))).first():
-            raise RuntimeError(
-                "Demo product codes already exist without the marker; no scenarios added."
-            )
-        buyer = users[DEMO_BUYER_EMAIL]
-        products = {}
-        for code, name, seller_email, price, stock in DEMO_PRODUCTS:
-            product = make_product(
-                code, name, "Issue #84 demo fixture", price, stock, seller_id=users[seller_email].id
-            )
-            # Orders below already represent purchased units; stock is the final
-            # physical balance, not a second live checkout stock deduction.
-            if code in {"P-DEMO-PENDING", "P-DEMO-PROCESS", "P-DEMO-COMPLETE"}:
-                product.version = 2
-            elif code == "P-DEMO-CANCEL":
-                product.version = 3
-            session.add(product)
-            session.flush()
-            products[code] = product
+def _seed_demo_scenarios(session: Session) -> bool:
+    """Install scenarios and marker in the caller's transaction; preserve edits on rerun."""
+    if session.exec(select(Order.id).where(Order.request_key == DEMO_MARKER)).first():
+        return False
+    users = seed_users(session)
+    for entry in SEED_USERS:
+        if users[entry["email"]].role != entry["role"]:
+            raise RuntimeError("A demo account exists with a different role; no scenarios added.")
+    codes = [entry[0] for entry in DEMO_PRODUCTS]
+    if session.exec(select(Product.id).where(Product.code.in_(codes))).first():
+        raise RuntimeError(
+            "Demo product codes already exist without the marker; no scenarios added."
+        )
+    buyer = users[DEMO_BUYER_EMAIL]
+    products = {}
+    for code, name, seller_email, price, stock in DEMO_PRODUCTS:
+        product = make_product(
+            code, name, "Issue #84 demo fixture", price, stock, seller_id=users[seller_email].id
+        )
+        # Orders below already represent purchased units; stock is the final
+        # physical balance, not a second live checkout stock deduction.
+        if code in {"P-DEMO-PENDING", "P-DEMO-PROCESS", "P-DEMO-COMPLETE"}:
+            product.version = 2
+        elif code == "P-DEMO-CANCEL":
+            product.version = 3
+        session.add(product)
+        session.flush()
+        products[code] = product
+    session.add(
+        CartItem(
+            buyer_id=buyer.id,
+            product_id=products["P-DEMO-CART"].id,
+            quantity=2,
+            created_at=DEMO_DATE,
+        )
+    )
+    for status, code, quantity in DEMO_ORDERS:
+        product = products[code]
+        parent = Order(
+            buyer_id=buyer.id,
+            total_amount=product.price * quantity,
+            status=status,
+            recipient_name="Demo Buyer",
+            delivery_address="123 Demo Street",
+            phone_number="0900000000",
+            request_key=f"seed84:{status}",
+            created_at=DEMO_DATE,
+        )
+        session.add(parent)
+        session.flush()
+        child = SellerOrder(
+            order_id=parent.id,
+            seller_id=product.seller_id,
+            status=status,
+            created_at=DEMO_DATE,
+            completed_at=DEMO_DATE if status == "COMPLETED" else None,
+        )
+        session.add(child)
+        session.flush()
         session.add(
-            CartItem(
-                buyer_id=buyer.id,
-                product_id=products["P-DEMO-CART"].id,
-                quantity=2,
-                created_at=DEMO_DATE,
+            OrderItem(
+                seller_order_id=child.id,
+                product_id=product.id,
+                quantity=quantity,
+                unit_price=product.price,
             )
         )
-        for status, code, quantity in DEMO_ORDERS:
-            product = products[code]
-            parent = Order(
-                buyer_id=buyer.id,
-                total_amount=product.price * quantity,
-                status=status,
-                recipient_name="Demo Buyer",
-                delivery_address="123 Demo Street",
-                phone_number="0900000000",
-                request_key=f"seed84:{status}",
-                created_at=DEMO_DATE,
-            )
-            session.add(parent)
-            session.flush()
-            child = SellerOrder(
-                order_id=parent.id,
-                seller_id=product.seller_id,
-                status=status,
-                created_at=DEMO_DATE,
-                completed_at=DEMO_DATE if status == "COMPLETED" else None,
-            )
-            session.add(child)
-            session.flush()
-            session.add(
-                OrderItem(
-                    seller_order_id=child.id,
-                    product_id=product.id,
-                    quantity=quantity,
-                    unit_price=product.price,
-                )
-            )
-        session.commit()
-        return True
+    return True
+
+
+def seed_demo_scenarios() -> bool:
+    _, created, _ = _run_seed(catalog=False, demo=True)
+    return created
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed the catalog and optional P0 demo scenarios.")
     parser.add_argument("--demo", action="store_true", help="Add carts and sample orders once")
     args = parser.parse_args()
-    seed_products()
+    counts, created, total = _run_seed(catalog=True, demo=args.demo)
+    _print_catalog(counts)
     if args.demo:
-        created = seed_demo_scenarios()
         print(
             "Demo scenarios: added" if created else "Demo scenarios: already installed (unchanged)"
         )
-        with Session(engine) as session:
-            print(f"Products after demo seed: {len(session.exec(select(Product)).all())}")
+        print(f"Products after demo seed: {total}")
 
 
 if __name__ == "__main__":

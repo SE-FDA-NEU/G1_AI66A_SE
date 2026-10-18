@@ -191,3 +191,82 @@ def test_demo_accounts_cart_catalog_and_receipt_api(seeded):
         assert "P-DEMO-OUT" not in {row["code"] for row in catalog["data"]}
         detail = client.get("/api/v1/products/P-DEMO-OUT")
         assert detail.json()["stock_status"] == "out_of_stock"
+
+
+@pytest.mark.parametrize("demo", [False, True])
+def test_parallel_cli_seeding_on_fresh_database_is_idempotent(tmp_path, demo):
+    import sqlite3
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import closing
+
+    from tests.test_database import run_python
+
+    path = tmp_path / "parallel.db"
+    args = ["-m", "src.seed"] + (["--demo"] if demo else [])
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        outputs = list(pool.map(lambda _: run_python(args, path), range(3)))
+    assert len(outputs) == 3
+    if demo:
+        assert sum("Demo scenarios: added" in output for output in outputs) == 1
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 4
+        assert connection.execute("SELECT COUNT(*) FROM products").fetchone()[0] == (
+            51 if demo else 45
+        )
+        assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == (4 if demo else 0)
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_cli_demo_transaction_rolls_back_catalog_and_users_too(tmp_path, monkeypatch):
+    from sqlalchemy import text
+
+    value = create_engine(f"sqlite:///{(tmp_path / 'atomic.db').as_posix()}")
+    event.listen(value, "connect", enable_foreign_keys)
+    SQLModel.metadata.create_all(value)
+    monkeypatch.setattr(seed, "engine", value)
+    monkeypatch.setattr(seed, "init_db", lambda: None)
+    with value.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TRIGGER fail_demo BEFORE INSERT ON order_items "
+                "BEGIN SELECT RAISE(ABORT, 'test failure'); END"
+            )
+        )
+    before = snapshot(value)
+    try:
+        with pytest.raises(IntegrityError):
+            seed._run_seed(catalog=True, demo=True)
+        assert snapshot(value) == before
+        with value.begin() as connection:
+            connection.execute(text("DROP TRIGGER fail_demo"))
+        seed._run_seed(catalog=True, demo=True)
+        with Session(value) as session:
+            assert len(session.exec(select(Product)).all()) == 51
+            assert len(session.exec(select(Order)).all()) == 4
+    finally:
+        value.dispose()
+
+
+def test_fresh_nested_database_path_with_spaces_and_unicode(tmp_path):
+    import sqlite3
+    from contextlib import closing
+
+    from tests.test_database import run_python
+
+    path = tmp_path / "nested data" / "donn\u00e9es" / "demo.db"
+    assert not path.parent.exists()
+    output = run_python(["-m", "src.seed", "--demo"], path)
+    assert "Products after demo seed: 51" in output
+    assert path.is_file()
+    assert "already installed" in run_python(["-m", "src.seed", "--demo"], path)
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_explicit_migration_then_seed_on_fresh_database(tmp_path):
+    from tests.test_database import run_python
+
+    path = tmp_path / "migrated.db"
+    assert "initialization completed" in run_python(["-m", "src.database"], path)
+    assert "Products after demo seed: 51" in run_python(["-m", "src.seed", "--demo"], path)
+    assert "already installed" in run_python(["-m", "src.seed", "--demo"], path)

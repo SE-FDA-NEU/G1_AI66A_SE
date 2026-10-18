@@ -75,3 +75,40 @@ Tester confirmation and final result: pending.
 
 Do not close #84 or mark this record passed until the named independent tester
 has run the current instructions and provided their actual outcome.
+
+
+## Review follow-up: RC seed and fresh setup
+
+The earlier sequential CLI and foreign-key tests passed on fresh SQLite. No new
+required seed environment variables were introduced (DATABASE_URL and DEBUG were
+already in .env.example). The review nevertheless identified improvements worth
+making: conflict-safe inserts and serialization for concurrent runs, one data
+transaction across catalog/demo, explicit migration onboarding, and nested-path
+creation. The implementation now covers those cases without deleting existing data.
+
+- Users/products: ON CONFLICT DO NOTHING on email/code; retain changed passwords,
+  IDs, ownership and product edits. Same-key full demo reruns preserve scenarios.
+- Transaction: schema first; users -> products -> cart/order -> seller order ->
+  order items in one data transaction with BEGIN IMMEDIATE. Committing users before
+  children is not necessary: inserted/flushed parents are visible within the same
+  connection and foreign keys stay enabled. Failures roll back all inserted data.
+- First-run schema initialization also serializes SQLite writers, avoiding DDL
+  races when concurrent seed processes start on a completely empty database.
+- Config: .env.example documents the existing settings, portable URLs and CLI flag;
+  DEBUG=false is the template default. No extra seed variable was invented.
+- README/SETUP: dependencies -> explicit python -m src.database -> seed -> server.
+  Seed still initializes/migrates itself if invoked directly on a fresh database.
+- Path handling: pathlib creates missing SQLite parent folders; tests cover nested
+  paths with spaces and Unicode. Actual non-Windows runs remain independent work.
+
+Additional regressions: three simultaneous fresh CLI seed processes (both catalog
+and demo mode), rollback of catalog/users when a later demo insert fails, retry
+after the failure, explicit migration-before-seed, and nested missing directories.
+Final review-fix run on 2026-10-18: **322 pytest tests passed** (including 11
+seed-scenario cases); Ruff and git diff --check passed. One pre-existing
+Starlette/httpx deprecation warning remains. Command: DEBUG=false followed by
+python -m pytest -q --basetemp=.pytest_cache/review84-final. Changes remain local
+and uncommitted at the time of this record; the independent-machine gate is unchanged.
+
+Remaining evidence: non-author fresh-machine verification on Python 3.12+ and real
+macOS/Linux/WSL execution. No tester identity, run or screenshots are fabricated.

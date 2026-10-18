@@ -93,7 +93,7 @@ The template works as it is for local development; no value has to be changed.
 |---|---|---|
 | `APP_NAME` | `"Mini Marketplace"` | Application name in the API docs and in `GET /` |
 | `APP_ENV` | `development` | Environment name reported by `GET /` and `/health` |
-| `DEBUG` | `true` | `python -m src.main` reloads on code changes, and SQLAlchemy logs every SQL statement |
+| `DEBUG` | `false` | Set true explicitly for development reload and SQL logging |
 | `APP_HOST` | `127.0.0.1` | Host used by `python -m src.main` |
 | `APP_PORT` | `8000` | Port used by `python -m src.main` |
 | `DATABASE_URL` | `sqlite:///./marketplace.db` | Database location; `./` is the folder the command runs from |
@@ -109,10 +109,11 @@ Settings are read once at start-up, so restart the app after editing `.env`.
 
 ## 4. Database
 
-The app uses a SQLite file, so there is no database server to install. One
-command creates the database and loads the sample data:
+The app uses a SQLite file, so there is no database server to install. The
+initialize/migrate step prepares the schema before the seed loads sample data:
 
 ```bash
+python -m src.database
 python -m src.seed
 ```
 
@@ -129,7 +130,7 @@ Total products: 45
 Active products: 45
 ```
 
-With `DEBUG=true` (the template value), SQLAlchemy also prints every SQL
+If you explicitly enable `DEBUG=true`, SQLAlchemy also prints every SQL
 statement as `INFO sqlalchemy.engine.Engine ...` lines, including one
 `CREATE TABLE` per table on a new database, so the lines above appear among them.
 
@@ -205,9 +206,9 @@ and `APP_PORT`.
 |---|---|
 | PowerShell refuses `.\.venv\Scripts\Activate.ps1` with "running scripts is disabled on this system" | Skip activation and call the environment's Python directly: replace `python` with `.\.venv\Scripts\python.exe` in every later command, for example `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` and `.\.venv\Scripts\python.exe -m src.main`. |
 | `ModuleNotFoundError: No module named 'sqlmodel'` (or `fastapi`, or `src`) | The command ran outside the virtual environment or outside the repository root. `python -m pip --version` must show a path inside `.venv`. Activate the environment again (or use the direct path above), `cd` to the repository root and rerun `python -m pip install -r requirements.txt`. |
-| `[Errno 98] Address already in use` with the template `.env` (`DEBUG=true`), or `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` with `DEBUG=false`; on Windows the message starts with `[WinError 10048]` | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
+| `[Errno 98] Address already in use` when explicitly using `DEBUG=true`, or `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use` with `DEBUG=false`; on Windows the message starts with `[WinError 10048]` | Another server already uses port 8000. Stop it with `Ctrl+C` in its terminal, or set `APP_PORT=8001` in `.env`, restart `python -m src.main` and open http://127.0.0.1:8001/products. |
 | `/products` shows "No products available at the moment." or the API reports `"total": 0` | The server reads a database that was never seeded. Check that no `DATABASE_URL` is set in the shell (`echo $DATABASE_URL`, `echo %DATABASE_URL%` or `$env:DATABASE_URL`), run `python -m src.seed` from the repository root, then reload the page. |
-| `marketplace.db` was created before a schema change you pulled. A new column makes `python -m src.seed` fail with `sqlite3.OperationalError: no such column: ...` and `/products` show "Something went wrong. Please try again later." with Retry (the API returns `500`, while `/health` still reports `"database":"connected"`). A new constraint or foreign key gives no error at all. | The seed and the app create missing tables but never change existing ones. Stop the app, delete the file (it holds only sample data) with `rm marketplace.db` (macOS/Linux), `del marketplace.db` (Command Prompt) or `Remove-Item marketplace.db` (PowerShell), then run `python -m src.seed` again. |
+| Existing database fails after a schema change | Run `python -m src.database` to apply supported legacy column migrations. If the schema was manually altered beyond supported migrations, retain the file and choose a new unused DATABASE_URL as described in section 8.4. |
 
 ---
 
@@ -343,8 +344,8 @@ See [checkout verification](evidence/us04.md) for the buyer checkout/receipt flo
 
 `python -m src.seed` keeps the original 45-product catalog command and automated
 walking-skeleton contract. Use `python -m src.seed --demo` for the full P0 demo.
-The mode first ensures the catalog/accounts, then installs all scenario rows in
-one transaction. On a clean database: 4 users, 51 products (50 visible in catalog),
+The CLI applies schema initialization/migrations first, then inserts accounts,
+catalog and all requested demo scenarios in a single data transaction. On a clean database: 4 users, 51 products (50 visible in catalog),
 1 cart line, 4 orders, 4 seller orders, 4 order items. Active out-of-stock products
 are intentionally hidden from the catalog but accessible by their detail URL.
 
@@ -382,7 +383,12 @@ fixture identifiers, not keys for a live checkout replay. An existing marker mak
 order. Do not remove individual marker/product rows to reset the demo. Conflicting
 pre-existing demo product codes or account roles are rejected without partial
 scenario insertion. A failure before commit leaves no scenario marker or partial
-scenario rows. Catalog installation is a separate transaction.
+scenario rows. Failure in the demo stage also rolls back catalog/account changes
+made by the same CLI invocation. Schema initialization is a separate prior stage.
+Users/products use SQLite ON CONFLICT DO NOTHING keyed by email/code, preserving
+existing passwords, IDs, quantities and edits. BEGIN IMMEDIATE serializes seed
+writers before checking natural keys and marker; schema creation also serializes
+first-run DDL, so concurrent seed processes do not race missing-table creation.
 
 ### 8.2 Fresh Windows PowerShell run
 
@@ -402,6 +408,7 @@ python -m pip check
 Copy-Item .env.example .env
 $env:DEBUG = 'false'
 $env:DATABASE_URL = 'sqlite:///./marketplace-fresh84.db'
+python -m src.database
 python -m src.seed --demo
 python -m src.seed --demo
 python -m pytest
@@ -430,6 +437,7 @@ python -m pip check
 cp .env.example .env
 export DEBUG=false
 export DATABASE_URL=sqlite:///./marketplace-fresh84.db
+python -m src.database
 python -m src.seed --demo
 python -m src.seed --demo
 python -m pytest
@@ -470,3 +478,23 @@ seller and, after PR #96 merges, verify only their own demo orders and the fixed
 filter. Existing fixtures include completed/cancelled states; do not attempt to
 cancel a processing order. Save seed output from both runs, test output and browser
 screenshots. Record any missing US08 route honestly instead of marking it passed.
+
+
+### 8.6 Review follow-up: environment and portability
+
+No new environment variables are required by the seed. DATABASE_URL, DEBUG and
+application/auth configuration are all listed in .env.example with development
+defaults; --demo is a command-line flag. The template now defaults DEBUG=false so
+onboarding does not depend on reload mode or SQL logging. Existing .env files are
+not modified automatically. Clear or correct an inherited invalid DEBUG value if
+Pydantic rejects it; process environment variables override .env.
+
+The project's scripts run with `python -m src.database` and `python -m src.seed`
+on all platforms. Use forward-slash SQLite URLs, e.g.
+`sqlite:///./data/demo database.db`, from the repository root. Runtime directory
+creation uses pathlib; SQLAlchemy creates the SQLite file. Relative folders may
+contain spaces and Unicode. Windows activation vs Bash `source` is intentionally
+shown separately; do not paste a Windows drive path into WSL. macOS/Linux/WSL
+execution must still be recorded by a tester on those systems; a Windows test
+against a portable path is not proof of every OS. This repo does not use db:seed,
+PostgreSQL roles/categories or a separate SQL migration tool.
