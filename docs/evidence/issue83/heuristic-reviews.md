@@ -1,48 +1,13 @@
-# Independent heuristic review records (#83)
+# Heuristic-review evidence index (#83)
 
-All three slots below are NOT PERFORMED. These are recording forms, not evidence.
-Complete each independently before consolidating in findings.md. Suggested
-reviewers in plan.md are not counted as participants until they actually review.
+**Completed independent review records included: 0.**
 
-## HR01 ? NOT PERFORMED
+This PR delivers preparation, not the three completed reviews required by #83.
+No reviewer identities, dates, environments, confirmations or findings have been
+submitted as independent-review evidence. GitHub code review is not counted as
+an independent UI heuristic review.
 
-- Reviewer / role: pending
-- Date/time/timezone: pending
-- Commit, device/browser, viewport: pending
-- Routes inspected: pending
-- Review completed / reviewer confirmation: pending
-
-| Finding ID | Heuristic | Route | Reproduction and expected/actual | Severity 0-4 | Evidence |
-|---|---|---|---|---|---|
-| Not recorded | | | | | |
-
-Record "no findings" only if the reviewer actually completed and confirmed a review.
-
-## HR02 ? NOT PERFORMED
-
-- Reviewer / role: pending
-- Date/time/timezone: pending
-- Commit, device/browser, viewport: pending
-- Routes inspected: pending
-- Review completed / reviewer confirmation: pending
-
-| Finding ID | Heuristic | Route | Reproduction and expected/actual | Severity 0-4 | Evidence |
-|---|---|---|---|---|---|
-| Not recorded | | | | | |
-
-Record "no findings" only if the reviewer actually completed and confirmed a review.
-
-## HR03 ? NOT PERFORMED
-
-- Reviewer / role: pending
-- Date/time/timezone: pending
-- Commit, device/browser, viewport: pending
-- Routes inspected: pending
-- Review completed / reviewer confirmation: pending
-
-| Finding ID | Heuristic | Route | Reproduction and expected/actual | Severity 0-4 | Evidence |
-|---|---|---|---|---|---|
-| Not recorded | | | | | |
-
-Record "no findings" only if the reviewer actually completed and confirmed a review.
-
+The three previous unperformed slots were blank forms, not actual records. They
+are replaced by one clearly labelled [blank template](templates/heuristic-review.md).
+When actual reviews are conducted, add their completed records and artifact links
+here. Until then this acceptance criterion remains incomplete.

@@ -1,6 +1,7 @@
 # Issue #83: execution guide
 
-Status: prepared; human sessions not yet performed. Owner: @minhnm162.
+Scope: automated P0 verification and usability test preparation only.
+No completed independent reviews or external-user sessions are included. Owner: @minhnm162.
 The required evidence index is ../sprint3.md (section 4). This folder contains
 repeatable scripts/checklists and blank recording forms, not completed sessions.
 
@@ -78,7 +79,8 @@ or a finding rather than silently counting the navigation task as independent.
 
 Ask three separate people to inspect the UI independently before discussing findings.
 Suggested team reviewers: @leducminh290506-eng, @MinhQuangQu, @teddywristh; these are
-suggestions, not completed reviews. Each signs their own record in heuristic-reviews.md.
+suggestions, not completed reviews. Each fills templates/heuristic-review.md and links the completed record from
+heuristic-reviews.md.
 Inspect feedback/status, real-world wording, consistency, navigation/recovery,
 error prevention/messages, keyboard/focus and mobile readability. Record a zero-finding
 review explicitly; do not leave an empty table and call it reviewed.
@@ -119,3 +121,13 @@ Each finding needs an owner, steps, expected/actual, evidence and retest result.
 Severity 3-4 findings must be fixed and retested on the new commit. Do not mark
 #83 done while required sessions or these retests are missing. Upload real evidence
 and link it into ../sprint3.md; preserve anonymous notes and raw measurements.
+
+
+## Deliverable boundaries after PR review
+
+This PR's scope is the automated integration checks, browser-entry correction,
+traceability matrix, execution protocol and blank forms in templates/. The evidence
+indexes list only submitted completed records; currently neither human index has
+any. Do not describe this as completed usability testing or close #83. The interface
+screenshots already attached to PR #97 illustrate the application, not participant
+identities, session timing or independent heuristic-review results.

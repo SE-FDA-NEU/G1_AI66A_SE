@@ -129,6 +129,11 @@ Internal database details, tracebacks, and raw SQL queries are excluded from cli
 
 Owner: @minhnm162. Reviewer: @leducminh290506-eng. Status: IN PROGRESS.
 
+PR scope: automated P0 integration checks, traceability and usability test
+preparation. No completed heuristic reviews or external-user sessions are included.
+Blank templates are kept separately in issue83/templates/ and do not satisfy the
+human-testing acceptance criteria. PR #97 must use Refs #83, not a closing keyword.
+
 ### 4.1 Baseline and evidence search
 
 Checked on 2026-10-18: branch test/83-p0-flows-usability starts from main fac5740
@@ -197,16 +202,16 @@ in tests/test_health.py, added after the PR-snapshot run. The snapshot result re
 The warning is the existing Starlette/httpx deprecation. Automated checks are not
 browser screenshots, human task durations or independent heuristic reviews.
 
-### 4.4 Human verification and evidence index
+### 4.4 Outstanding human verification and preparatory templates
 
 | Required activity | Record | Status |
 |---|---|---|
-| Three independent heuristic reviews | [HR01-HR03 forms](issue83/heuristic-reviews.md) | NOT PERFORMED; reviewer names/dates/findings not supplied |
-| External user sessions | [Session and metric forms](issue83/user-sessions.md) | NOT PERFORMED; planned participant count needs confirmation |
+| Three independent heuristic reviews | [Evidence index](issue83/heuristic-reviews.md); [blank review template](issue83/templates/heuristic-review.md) | NOT PERFORMED; reviewer names/dates/findings not supplied |
+| External user sessions | [Evidence index](issue83/user-sessions.md); [blank session template](issue83/templates/user-session.md) | NOT PERFORMED; planned participant count needs confirmation |
 | Completion, seconds, misclicks, assistance and blockers | Same session records | NOT MEASURED; no invented zeros or success rates |
 | Findings severity 0-4 and owners | [Findings/retest register](issue83/findings.md) | Technical OBS01 recorded; human findings not yet collected |
 | Severity 3-4 fixes and retests | Same findings register | Must be checked after real sessions; browser retest of OBS01 pending |
-| Screenshots/notes | Link actual files here by case/session ID | No #83 human screenshots captured in this session |
+| Screenshots/notes | Link actual files here by case/session ID | Interface screenshots attached to PR #97; no completed human-session evidence included |
 
 ### 4.5 Issue acceptance checklist
 

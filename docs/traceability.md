@@ -367,3 +367,9 @@ matrix and acceptance status are in [Sprint 3 evidence, section 4](evidence/spri
 US08 integration) seller fulfilment/cancellation using authenticated HTTP calls and
 independent committed database checks. The tests do not constitute real-user
 sessions. Human forms, findings and retests are linked from the evidence index.
+
+
+PR #97 scope clarification: automated P0 checks and usability test templates only.
+The human evidence indexes contain no completed independent-review or external-user
+records. Blank forms live in docs/evidence/issue83/templates/ and are not evidence
+of completed testing. Issue #83 remains open for actual reviews/sessions and retests.
