@@ -224,3 +224,14 @@ def test_buyers_and_guests_cannot_use_seller_orders(api):
         }
     assert guest.status_code == 401
     assert guest.json()["error"]["code"] == "ERR_AUTH_REQUIRED"
+
+
+def test_readme_first_screen_lists_where_each_p0_story_starts():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    first_screen = readme[: readme.index("## Team & Roles")]
+
+    assert "## P0 stories and where each one starts" in first_screen
+    for story in sorted(P0_STORIES):
+        assert f"| {story} " in first_screen, f"{story} is not on the README first screen"
+    for account in ("user@example.com", "seller@example.com", "demo.seller@marketplace.local"):
+        assert account in first_screen
