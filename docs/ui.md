@@ -375,7 +375,7 @@ instead of a seller workspace.
 |---|---|
 | Loading | "Loading confirmation..." |
 | Data | "Order placed successfully." and the receipt lines |
-| Not found / error | "Confirmation unavailable.", the server message (for example "Order not found.") and **Retry** |
+| Not found / error | "Confirmation unavailable." with "We could not find this order in your account. Check the order link, or continue shopping." (or the server message for other errors) and **Retry** |
 
 **Changed from the initial wireframe:** no **View order details** (buyer order history
 is US05, P1, not built); item lines show the product id and an unformatted unit price
@@ -422,7 +422,7 @@ Each row is a case a user can meet. "UI message" is the exact text on the screen
 | UI-E09 | Checkout | Invalid phone number | none (checked in the page; the API answers `422 ERR_VALIDATION`) | — | `Phone number must contain 7 to 15 digits.` | Correct the field | `test_api_validation_does_not_write` |
 | UI-E10 | Checkout | Empty cart | `400 ERR_EMPTY_CART` | — | `Your cart is empty.` | **Continue shopping** | `test_auth_empty_cart_key_and_pages` |
 | UI-E11 | Checkout | Same Idempotency-Key with a different body | `409 ERR_IDEMPOTENCY_CONFLICT` | — | `Key was used for another request.` | Start a new checkout | `test_replay_before_empty_cart_check_and_payload_conflict` |
-| UI-E12 | Order confirmation | Another buyer's order id | `404 ERR_ORDER_NOT_FOUND` | BR4 | `Order not found.` | **Continue shopping** | `test_api_create_replay_and_ownership` |
+| UI-E12 | Order confirmation | Another buyer's order id | `404 ERR_ORDER_NOT_FOUND` | BR4 | `We could not find this order in your account. Check the order link, or continue shopping.` | **Continue shopping** | `test_api_create_replay_and_ownership` |
 | UI-E13 | Seller product form | Price 0 or negative | `422 ERR_VALIDATION`, `error.fields.price` | BR9 | `Price must be greater than 0 ₫.` | Values kept; fix the field | `test_invalid_field_is_reported_beside_that_field_and_nothing_is_written` |
 | UI-E14 | Seller product form | A buyer opens the form or calls the API | `403 ERR_SELLER_REQUIRED` | BR5 | `Only seller accounts can create product listings.` | **Log in as a seller** | `test_guests_buyers_and_invalid_tokens_cannot_create` |
 | UI-E15 | Seller product form | The request names a seller | `422 ERR_VALIDATION`, `error.fields._form` | BR5 | `{field} is set by the server and cannot be sent.` | None needed; the form never sends it | `test_the_owner_always_comes_from_the_token_never_the_body` |

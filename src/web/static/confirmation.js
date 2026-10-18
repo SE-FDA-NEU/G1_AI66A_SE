@@ -10,6 +10,7 @@ async function load() {
     const response = await fetch(`/api/v1/orders/${encodeURIComponent(id)}`, {headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(10000)});
     const payload = await response.json();
     if (response.status === 401) { localStorage.removeItem("access_token"); location.reload(); return; }
+    if (response.status === 404) throw new Error("We could not find this order in your account. Check the order link, or continue shopping.");
     if (!response.ok) throw new Error(payload.error?.message || "Unable to load confirmation.");
     const order = payload.data;
     document.getElementById("status").textContent = "Order placed successfully.";

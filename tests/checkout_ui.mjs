@@ -76,6 +76,11 @@ assert.equal(test.nodes.get("status").textContent,"Order placed successfully.");
 const receiptText=test.nodes.get("receipt").children.map(child=>child.textContent);
 assert.ok(receiptText.some(text=>/^Mouse \(P-100\) \u00d7 2 \u00b7 100\.000\s\u20ab each$/.test(text)),receiptText.join(" | "));
 assert.ok(receiptText.every(text=>!text.includes("Product #")));
+// Another buyer's order, or one that does not exist, explains what to do next.
+test=setup([{status:404,payload:{error:{code:"ERR_ORDER_NOT_FOUND",message:"Order not found."}}}],null,confirmationSource);
+await tick();
+assert.equal(test.nodes.get("status").textContent,"Confirmation unavailable.");
+assert.equal(test.nodes.get("error").textContent,"We could not find this order in your account. Check the order link, or continue shopping.");
 console.log("Checkout script checks passed: cart states, timeout/replay, validation, receipt retry.");
 
 // An account switch must block both the first POST and a pending-request retry.
