@@ -3,6 +3,7 @@
 from src.models.base import Base
 from src.models.cart_item import CartItem
 from src.models.order import Order
+from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.seller_order import SellerOrder
@@ -14,6 +15,7 @@ __all__ = [
     "Product",
     "CartItem",
     "Order",
+    "OrderHistory",
     "SellerOrder",
     "OrderItem",
 ]
