@@ -140,12 +140,26 @@ uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
 Open [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products): the page shows 20 product cards, starting with "Wireless Mouse" at 180.000 ₫.
 
 The application will be accessible at:
-- **Root Status:** [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+- **Root:** [http://127.0.0.1:8000/](http://127.0.0.1:8000/) opens the catalog in a browser; API clients get the JSON status
 - **Health Check:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 - **Interactive API Documentation:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Walking Skeleton Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
-- **Products Page (US01):** [http://127.0.0.1:8000/products](http://127.0.0.1:8000/products)
-- **Cart Page (US03):** [http://127.0.0.1:8000/cart](http://127.0.0.1:8000/cart) (log in as the buyer `user@example.com`)
+- **Products API:** [http://127.0.0.1:8000/api/v1/products](http://127.0.0.1:8000/api/v1/products)
+
+The P0 screens, with the account to use (password `password`):
+
+| Screen | URL | Account |
+|---|---|---|
+| Product catalog (US01) | [/products](http://127.0.0.1:8000/products) | None |
+| Product detail (US02) | [/products/P-100](http://127.0.0.1:8000/products/P-100) | None; Add to Cart needs a buyer |
+| Cart (US03) | [/cart](http://127.0.0.1:8000/cart) | Buyer `user@example.com` |
+| Checkout and confirmation (US04) | [/checkout](http://127.0.0.1:8000/checkout) | Buyer `user@example.com` |
+| Seller product creation (US06) | [/seller/products/new](http://127.0.0.1:8000/seller/products/new) | Seller `seller@example.com` |
+| Seller order management (US08) | [/seller/orders](http://127.0.0.1:8000/seller/orders) | Seller `demo.seller@marketplace.local` |
+| Login | [/login](http://127.0.0.1:8000/login) | Any |
+
+Every screen, its states and its error messages are documented in
+[docs/ui.md](docs/ui.md); screenshots are in the
+[Milestone 3 evidence](docs/evidence/milestone3.md).
 
 
 ### Checkout and confirmation (US04 / #80)
@@ -168,3 +182,14 @@ stock and the catalog leaves it out. Buyers and guests cannot create products. T
 page-script checks run with `node tests/checkout_ui.mjs` and
 `node tests/seller_products_ui.mjs` (Node is only needed for these checks). See
 [US06 verification](docs/evidence/us06.md).
+
+### Seller order management (US08 / #82)
+
+Log in as a seller and open [http://127.0.0.1:8000/seller/orders](http://127.0.0.1:8000/seller/orders)
+(there is no navigation link yet). The page lists only that seller's sub-orders,
+newest first, with status and date filters. Each card offers the next allowed step:
+**Start processing** or **Cancel** for PENDING, **Mark shipped** for PROCESSING and
+**Mark completed** for SHIPPED. Cancelling restores the stock once, and every change
+is recorded in `order_history`. With `python -m src.seed --demo`,
+`demo.seller@marketplace.local` sees PENDING and COMPLETED orders and
+`seller@example.com` sees PROCESSING and CANCELLED ones.
