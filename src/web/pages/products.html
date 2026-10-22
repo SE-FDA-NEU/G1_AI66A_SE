@@ -19,12 +19,75 @@
     </nav>
     <h1 class="catalog__title">Products</h1>
 
-    <form id="products-search" class="catalog-search" role="search">
-      <label for="product-search-input">Search products</label>
-      <div class="catalog-search__controls">
-        <input id="product-search-input" name="search" type="search"
-          autocomplete="off" placeholder="Search by product name">
-        <button class="button" type="submit">Search</button>
+    <form id="products-search" class="catalog-discovery" role="search">
+      <div class="discovery-search">
+        <label for="product-search-input">Search products</label>
+        <div class="catalog-search__controls">
+          <input id="product-search-input" name="search" type="search"
+            autocomplete="off" placeholder="Search by name or description">
+          <button class="button" type="submit">Search</button>
+        </div>
+      </div>
+
+      <div class="discovery-filters">
+        <div class="filter-group">
+          <label for="filter-category">Category</label>
+          <select id="filter-category" name="category_id">
+            <option value="">All categories</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-seller">Seller</label>
+          <select id="filter-seller" name="seller_id">
+            <option value="">All sellers</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-group--price">
+          <label for="filter-min-price">Price range (₫)</label>
+          <div class="price-inputs">
+            <input id="filter-min-price" name="min_price" type="number" min="0" step="1000" placeholder="Min">
+            <span class="price-separator">–</span>
+            <input id="filter-max-price" name="max_price" type="number" min="0" step="1000" placeholder="Max">
+          </div>
+          <span id="price-error" class="field-error" role="alert" hidden></span>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-rating">Min Rating</label>
+          <select id="filter-rating" name="min_rating">
+            <option value="">All ratings</option>
+            <option value="4.5">4.5★ and above</option>
+            <option value="4.0">4.0★ and above</option>
+            <option value="3.5">3.5★ and above</option>
+            <option value="3.0">3.0★ and above</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="catalog-sort">Sort by</label>
+          <select id="catalog-sort" name="sort">
+            <option value="">Default order</option>
+            <option value="newest">Newest arrivals</option>
+            <option value="bestselling">Bestselling</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="rating_desc">Highest rated</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-group--checkbox">
+          <label class="checkbox-label" for="filter-in-stock">
+            <input id="filter-in-stock" name="in_stock" type="checkbox" checked>
+            In stock only
+          </label>
+        </div>
+
+        <div class="filter-actions">
+          <button id="apply-filters" class="button" type="button">Apply</button>
+          <button id="reset-filters" class="button button--secondary" type="button">Clear</button>
+        </div>
       </div>
     </form>
 
@@ -50,7 +113,8 @@
     </nav>
 
     <section id="products-empty" class="state" hidden>
-      <p class="state__message">No products available at the moment.</p>
+      <p id="products-empty-message" class="state__message">No products available at the moment.</p>
+      <button id="products-reset-empty" class="button button--secondary" type="button" hidden>Reset filters</button>
     </section>
 
     <section id="products-error" class="state" hidden>
