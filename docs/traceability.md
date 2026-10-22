@@ -372,7 +372,8 @@ sessions. Human forms, findings and retests are linked from the evidence index.
 PR #97 scope clarification: automated P0 checks and usability test templates only.
 The human evidence indexes contain no completed independent-review or external-user
 records. Blank forms live in docs/evidence/issue83/templates/ and are not evidence
-of completed testing. Issue #83 remains open for actual reviews/sessions and retests.
+of completed testing. Issue #83 is completed and closed (Done) following Sprint 3
+verification and the merge of PR #97.
 
 
 ## Sprint 4 target stories
