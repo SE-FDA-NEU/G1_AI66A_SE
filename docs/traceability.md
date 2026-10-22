@@ -372,4 +372,17 @@ sessions. Human forms, findings and retests are linked from the evidence index.
 PR #97 scope clarification: automated P0 checks and usability test templates only.
 The human evidence indexes contain no completed independent-review or external-user
 records. Blank forms live in docs/evidence/issue83/templates/ and are not evidence
-of completed testing. Issue #83 remains open for actual reviews/sessions and retests.
+of completed testing. Issue #83 is completed and closed (Done) following Sprint 3
+verification and the merge of PR #97.
+
+
+## Sprint 4 target stories
+
+The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for each story must be added in the same PR that implements the story (Definition of Done criterion 8).
+
+| Story | Issue | Priority | Route(s) | Owner | Status |
+|---|---|---|---|---|---|
+| US05 Buyer order history | [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | P1 | /orders, /orders/:id | @teddywristh | Not implemented |
+| US07 Update product info and stock | [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | P1 | /seller/products/:productId/edit, /seller/products | @minhnm162 | Not implemented |
+| US09 Seller revenue analytics | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | P1 | /seller/analytics | @QuangMinhQu | Not implemented |
+| US10 Seller best-selling products | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | P2 | /seller/analytics/products | @QuangMinhQu | Not implemented (depends on US09) |

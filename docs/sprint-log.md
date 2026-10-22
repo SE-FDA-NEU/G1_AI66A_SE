@@ -521,3 +521,186 @@ Establish automated end-to-end regression test suites for P1 stories (US05 buyer
 | @QuangMinhQu | Yes | Yes | Yes |
 | @teddywristh | Yes | Yes | Yes |
 | @minhnm162 | Yes | Yes | Yes |
+
+---
+
+## Sprint 4 - 2026-10-19 to 2026-11-01
+
+### Sprint goal
+
+Complete all P1 user stories (US05 Buyer Order History, US07 Update Product, US09 Revenue Analytics) and deliver the P2 story (US10 Best-Selling Products) within team capacity, close all remaining open gaps from Sprint 3, and prepare a shippable Milestone 4 release.
+
+### Roles
+
+- Product Owner: `@leducminh290506-eng`
+- Scrum Master: `@QuangMinhQu`
+
+Sprint 4 Scrum Master (`@QuangMinhQu`) rotates from Sprint 3 Scrum Master (`@teddywristh`), adhering to team policy.
+
+### Two mandatory chore issues
+
+| Issue | Assignee | Status |
+|---|---|---|
+| [#103 [Chore] Refine backlog for Sprint 4](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/103) | @leducminh290506-eng (PO) | In Progress |
+| Sprint 4 wrap-up | @QuangMinhQu (SM) | To Do |
+
+### Committed
+
+| Issue | Task / Story | Type | Points / Est | Owner | Reviewer | Dependencies |
+|---|---|---|---:|---|---|---|
+| [#103](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/103) | Refine backlog for Sprint 4 | Chore | — | @leducminh290506-eng | @QuangMinhQu | None |
+| [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | US05 Buyer order history (`/orders`, `/orders/:id`) | Story | 3 | @teddywristh | @leducminh290506-eng | Auth (#75), checkout (#80) |
+| [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | US07 Update product info and stock (`/seller/products/:productId/edit`) | Story | 3 | @minhnm162 | @QuangMinhQu | Auth (#75), seller product creation (#81) |
+| [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | US09 Seller revenue analytics (`/seller/analytics`) | Story | 5 | @QuangMinhQu | @minhnm162 | Seller orders (#82) |
+| [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | US10 Seller best-selling products (`/seller/analytics/products`) | Story | 3 | @QuangMinhQu | @teddywristh | US09 (#21) |
+| Sprint 4 wrap-up | Sprint 4 wrap-up and Milestone 4 handoff | Chore | — | @QuangMinhQu | @leducminh290506-eng | All preceding issues |
+
+**Total committed story points: 14 points** (4 User Stories: 3 P1 + 1 P2).
+
+> **Capacity note:** Sprint 3 delivered all 6 P0 stories (35 points). Sprint 4 commits only 14 points across 4 developers (~3.5 points per member) to account for Milestone 4 documentation overhead and the increased complexity of the analytics stories.
+
+### Backlog Refinement Decisions (Issue #103)
+
+During Sprint 4 Backlog Refinement, the team reviewed all open Sprint 4 issues and confirmed the following:
+
+#### 1. Scope and Priority
+
+- **In scope (Sprint 4):** US05 (P1, 3 pts), US07 (P1, 3 pts), US09 (P1, 5 pts), US10 (P2, 3 pts).
+- **Out of scope / Product Backlog:** No issues moved out; all P1 stories fit within capacity.
+- **Removed duplicates:** No duplicate or overlapping issues found across Sprint 3 carry-overs and Sprint 4 entries.
+
+#### 2. Acceptance Criteria Verification (Given / When / Then)
+
+All four stories were verified to have acceptance criteria in GWT format:
+
+| Story | AC location | Status |
+|---|---|---|
+| US05 | `docs/us05-buyer-order-history.md` — Sections 4–7 | ✅ GWT format confirmed |
+| US07 | `docs/us07-update-product.md` — Scenarios 1–6 | ✅ GWT format confirmed |
+| US09 | `docs/us09-revenue-analytics.md` | ✅ GWT format confirmed |
+| US10 | `docs/us10-best-selling-products.md` — AC1–AC4 | ✅ GWT format confirmed |
+
+#### 3. Story Point Estimates, Estimated Hours and Assignees
+
+| Issue | Story | Points | Est hours | Assignee | Reviewer |
+|---|---:|---:|---:|---|---|
+| [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | US05 Buyer order history | 3 | 4h | @teddywristh | @leducminh290506-eng |
+| [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | US07 Update product | 3 | 5h | @minhnm162 | @QuangMinhQu |
+| [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | US09 Revenue analytics | 5 | 6h | @QuangMinhQu | @minhnm162 |
+| [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | US10 Best-selling products | 3 | 4h | @QuangMinhQu | @teddywristh |
+
+#### 4. Parent Story Linkage
+
+- All Sprint 4 tasks are direct implementations of their corresponding User Story issues (#17, #19, #21, #22) specified in Sprint 1.
+- No orphaned tasks exist.
+- US10 (#22) depends on US09 (#21) analytics infrastructure; US10 branch must not be created before US09 is merged.
+
+#### 5. Traceability and Route Verification
+
+Routes verified against `docs/traceability.md`:
+
+| Route | Story | Traceability status |
+|---|---|---|
+| `/orders` | US05 (#17) | ✅ Documented; runtime: Not implemented → Sprint 4 |
+| `/orders/:id` | US05 (#17) | ✅ Documented; runtime: Not implemented → Sprint 4 |
+| `/seller/products/:productId/edit` | US07 (#19) | ✅ Documented; runtime: Not implemented → Sprint 4 |
+| `/seller/products` | US07 (#19) | ⚠️ Gap G8 noted in traceability (no Milestone 1 spec PR); added as a seller inventory dashboard route in Sprint 4 scope |
+| `/seller/analytics` | US09 (#21) | ✅ Documented; runtime: Not implemented → Sprint 4 |
+| `/seller/analytics/products` | US10 (#22) | ✅ Documented; runtime: Not implemented → Sprint 4 |
+
+`docs/traceability.md` must be updated in the same PR that merges each Sprint 4 story, per Definition of Done criterion 8.
+
+#### 6. Technical Risks and Dependencies
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| US09/US10 analytics queries on SQLite aggregates may be slow for large datasets | Medium | Use indexed columns (`seller_id`, `completed_at`); add query unit tests before handler implementation |
+| US07 optimistic locking (`products.version`) — same mechanism as checkout | Medium | Reuse `ERR_CONCURRENCY_CONFLICT` error code pattern from `src/services/orders.py` |
+| US05 parent order status derivation from multiple `seller_orders` statuses | Low | Follow state-machine rules defined in Sprint 3 backlog (#74 section 4) |
+| US10 depends on US09 analytics infrastructure | Low | US09 must be merged to `main` before US10 branch is created |
+| Sprint 3 wrap-up (#86) still pending | Low | SM @teddywristh to close #86 by Sprint 4 day 3; unresolved blocks the Sprint 4 Review |
+
+#### 7. Sprint 3 Carry-overs Resolved
+
+The following Sprint 3 items were tracked and confirmed resolved before Sprint 4 start:
+
+| Issue | Title | Status |
+|---|---|---|
+| #74 | Refine backlog for Sprint 3 | ✅ Done |
+| #75 | Auth, navigation and shared API errors | ✅ Done |
+| #76 | P0 wireframes and UI docs | ✅ Done |
+| #77 | US01 Complete product catalog | ✅ Done |
+| #78 | US02 Product detail and cart entry | ✅ Done |
+| #79 | US03 Database-backed shopping cart | ✅ Done |
+| #80 | US04 Atomic checkout and order confirmation | ✅ Done |
+| #81 | US06 Seller product creation | ✅ Done |
+| #82 | US08 Seller-scoped order management | ✅ Done |
+| #83 | Usability testing | ✅ Done |
+| #84 | Seed and setup update | ✅ Done |
+| #85 | Milestone 3 evidence | ✅ Done |
+| #86 | Sprint 3 wrap-up | 🔲 Pending — must close before Sprint 4 Review |
+
+### Dependency Graph & Critical Path
+
+```text
+[#103 Refine Backlog Sprint 4]
+       │
+       ├──> [#17 US05 Buyer Order History]   Owner: @teddywristh
+       │              │
+       │              └──────────────────────┐
+       │                                     │
+       ├──> [#19 US07 Update Product]         │   Owner: @minhnm162
+       │              │                      │
+       │              └──────────────────────┤
+       │                                     │
+       └──> [#21 US09 Revenue Analytics]      │   Owner: @QuangMinhQu
+                      │                      │
+                      └──> [#22 US10 Best-   │   Owner: @QuangMinhQu
+                           Selling Products] │
+                                  │          │
+                                  └──────────┘
+                                             │
+                                             ▼
+                                   Sprint 4 wrap-up
+```
+
+### Result
+
+| Issue | Points / Est | Status | If not done, why |
+|---|---:|---|---|
+| [#103](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/103) | — | In Progress | |
+| [#17](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/17) | 3 | To Do | |
+| [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | 3 | To Do | |
+| [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | 5 | To Do | |
+| [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | 3 | To Do | |
+| Sprint 4 wrap-up | — | To Do | |
+
+**Completed: [EDIT] points. Velocity this sprint: [EDIT]**
+
+### Sprint Planning Evidence
+
+- **Planning Meeting Date:** 2026-10-22
+- **Location:** Online (Team Discord / Google Meet)
+- **Attendance:**
+  - `@leducminh290506-eng` (Product Owner): Present
+  - `@QuangMinhQu` (Scrum Master): Present
+  - `@minhnm162` (Developer): Present
+  - `@teddywristh` (Developer): Present
+- **Velocity & Capacity Assessment:**
+  - Sprint 1 velocity: 39 story points (spec only).
+  - Sprint 2 velocity: Walking skeleton + system design.
+  - Sprint 3 velocity: 35 story points (all 6 P0 stories delivered).
+  - Sprint 4 commitment: 14 story points across 4 developers (~3.5 pts/member), conservative due to Milestone 4 documentation overhead.
+- **Identified Risks & Mitigations:**
+  - *Risk 1 (Analytics SQL complexity):* Revenue and ranking queries aggregate across `order_items`, `seller_orders`, and `orders`. *Mitigation:* Write query unit tests in `tests/test_analytics.py` before implementing API handlers.
+  - *Risk 2 (US07 IDOR):* Product edit endpoints must enforce seller ownership. *Mitigation:* Reuse `SellerUser` dependency from `src/auth.py` and add ownership assertion identical to `src/api/seller_products.py`.
+  - *Risk 3 (Sprint 3 carry-over #86):* Sprint 3 wrap-up is not yet closed. *Mitigation:* SM `@teddywristh` closes #86 by Sprint 4 day 3; blocks Sprint 4 Review if still open.
+
+### Attendance
+
+| Member | Planning | Review | Retro |
+|---|---|---|---|
+| @leducminh290506-eng | Yes | Pending | Pending |
+| @QuangMinhQu | Yes | Pending | Pending |
+| @teddywristh | Yes | Pending | Pending |
+| @minhnm162 | Yes | Pending | Pending |
