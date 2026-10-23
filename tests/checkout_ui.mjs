@@ -101,3 +101,25 @@ for (const isRetry of [false,true]) {
   assert.deepEqual(test.navigations,["reload"]);
 }
 console.log("Account-switch checks passed for initial submit and retry.");
+
+// US12: the confirmation form shows only selected items at current prices.
+const partialCart = {payload:{data:{cart_total:420,selected_total:120,supports_partial_checkout:true,
+  items:[{name:"Selected mouse",quantity:1,line_total:120,unit_price:120,price_at_add:100,
+    price_changed:true,is_selected:true,availability:"available"},
+  {name:"Unselected keyboard",quantity:1,line_total:300,is_selected:false,availability:"unavailable"}]}}};
+test=setup([user,partialCart]); await tick();
+assert.equal(test.nodes.get("checkout-form").hidden,false);
+const selectedSummary=test.nodes.get("summary").children.map(child=>child.textContent).join(" | ");
+assert.match(selectedSummary,/Selected mouse/);
+assert.ok(!selectedSummary.includes("Unselected keyboard"));
+assert.match(selectedSummary,/Price changed:/);
+assert.match(selectedSummary,/100/);
+assert.match(selectedSummary,/120/);
+assert.equal(test.nodes.get("summary").children.at(-1).textContent,
+  `Total: ${new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND"}).format(120)}`);
+const noSelection={payload:{data:{cart_total:100,selected_total:0,
+  items:[{name:"Mouse",quantity:1,line_total:100,is_selected:false,availability:"available"}]}}};
+test=setup([user,noSelection]); await tick();
+assert.equal(test.nodes.get("checkout-form").hidden,true);
+assert.equal(test.nodes.get("status").textContent,"Select at least one item in your cart.");
+console.log("US12 checkout checks passed: selected-only summary, changed price, empty selection.");
