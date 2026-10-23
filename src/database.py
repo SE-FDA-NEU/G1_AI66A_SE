@@ -71,6 +71,26 @@ def migrate_db(connection: Connection | None = None) -> None:
                     )
                 )
 
+        if "cart_items" in tables:
+            columns = {c["name"] for c in inspector.get_columns("cart_items")}
+            if "is_selected" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE cart_items ADD COLUMN "
+                        "is_selected BOOLEAN NOT NULL DEFAULT TRUE"
+                    )
+                )
+            if "price_at_add" not in columns:
+                connection.execute(text("ALTER TABLE cart_items ADD COLUMN price_at_add INTEGER"))
+            if "products" in tables:
+                connection.execute(
+                    text(
+                        "UPDATE cart_items SET price_at_add = "
+                        "(SELECT price FROM products WHERE products.id = cart_items.product_id) "
+                        "WHERE price_at_add IS NULL"
+                    )
+                )
+
         if "orders" in tables:
             columns = {c["name"] for c in inspector.get_columns("orders")}
             for name in ("request_key", "request_hash"):

@@ -33,6 +33,8 @@ class CartItem(SQLModel, table=True):
 
     quantity: int = Field(gt=0)
 
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC)
-    )
+    is_selected: bool = Field(default=True)
+    # Nullable only for legacy/imported rows; migration/read initializes their baseline.
+    price_at_add: int | None = Field(default=None, gt=0)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
