@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, update
+from sqlalchemy import case, func, update
 from sqlmodel import select
 
 from src.auth import SellerUser
@@ -15,6 +15,7 @@ from src.models.order import Order
 from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
@@ -234,6 +235,17 @@ def update_seller_order_status(
                 .values(
                     stock_quantity=Product.stock_quantity + item.quantity,
                     version=Product.version + 1,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            session.exec(
+                update(ProductMetadata)
+                .where(ProductMetadata.product_id == product.id)
+                .values(
+                    sales_count=case(
+                        (ProductMetadata.sales_count - item.quantity < 0, 0),
+                        else_=ProductMetadata.sales_count - item.quantity,
+                    )
                 )
                 .execution_options(synchronize_session=False)
             )

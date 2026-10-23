@@ -353,3 +353,128 @@ body {
   display: grid;
   gap: 0.35rem;
 }
+
+/* US11: Product discovery controls (search, filter, sort) */
+.catalog-discovery {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.discovery-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.discovery-search label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.discovery-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+  flex: 1 1 140px;
+}
+
+.filter-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.filter-group select,
+.filter-group input[type="number"],
+.filter-group input[type="search"] {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.filter-group select:focus-visible,
+.filter-group input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.filter-group--price {
+  min-width: 180px;
+  flex: 1.5 1 200px;
+}
+
+.price-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.price-inputs input {
+  width: 100%;
+  min-width: 0;
+}
+
+.price-separator {
+  color: var(--color-muted);
+}
+
+.filter-group--checkbox {
+  flex-direction: row;
+  align-items: center;
+  min-width: auto;
+  flex: 0 0 auto;
+  padding-bottom: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 2px;
+}
+
+.filter-actions .button {
+  margin-top: 0;
+  padding: 8px 16px;
+}
+
+.field-error {
+  color: #dc2626;
+  font-size: 0.8rem;
+  margin-top: 4px;
+  display: block;
+}
+
+.product-card__rating {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #d97706;
+}

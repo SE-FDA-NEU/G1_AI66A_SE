@@ -4,12 +4,15 @@ The caller passes the request session and the authenticated seller id; this modu
 tokens or HTTP requests. It commits or rolls back on its own, so a router must not commit again.
 """
 
+from datetime import UTC, datetime
 import secrets
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from src.models.category import Category
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.schemas.seller_products import ProductCreate, SellerProduct
 
 CODE_PREFIX = "P-"
@@ -49,18 +52,34 @@ def create_product(session: Session, seller_id: int, data: ProductCreate) -> Sel
     Only a confirmed product-code collision runs the insert again with a new code, at most
     MAX_CODE_ATTEMPTS times. Any other failure is rolled back and raised unchanged.
     """
+    category_id = data.category_id
+    if category_id is not None:
+        category = session.get(Category, category_id)
+        if category is None:
+            raise SellerProductError("ERR_VALIDATION", "Category not found.", status=422)
+
+    product_data = data.model_dump(exclude={"category_id"})
     for _attempt in range(MAX_CODE_ATTEMPTS):
         code = generate_product_code()
         product = Product(
             code=code,
             seller_id=seller_id,
-            **data.model_dump(),
+            **product_data,
             reserved_stock=0,
             version=1,
             is_active=True,
         )
         try:
             session.add(product)
+            session.flush()
+            meta = ProductMetadata(
+                product_id=product.id,
+                category_id=category_id,
+                rating=0.0,
+                sales_count=0,
+                created_at=datetime.now(UTC),
+            )
+            session.add(meta)
             session.flush()
             # Built before commit: committing expires the row and would reload it.
             created = SellerProduct.model_validate(product, from_attributes=True)

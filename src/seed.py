@@ -1,5 +1,5 @@
 import argparse
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text, update
 from sqlalchemy.dialects.sqlite import insert
@@ -8,15 +8,27 @@ from sqlmodel import Session, select
 from src.auth import hash_password
 from src.database import engine, init_db
 from src.models.cart_item import CartItem
+from src.models.category import Category
 from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 
 DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
 DEMO_BUYER_EMAIL = "user@example.com"
 DEFAULT_DEV_PASSWORD = "password"
+
+SEED_CATEGORIES = [
+    {"id": 1, "name": "Electronics", "slug": "electronics", "parent_id": None},
+    {"id": 2, "name": "Computer Peripherals", "slug": "peripherals", "parent_id": 1},
+    {"id": 3, "name": "Keyboards & Mice", "slug": "keyboards-mice", "parent_id": 2},
+    {"id": 4, "name": "Cables & Hubs", "slug": "cables-hubs", "parent_id": 2},
+    {"id": 5, "name": "Audio & Video", "slug": "audio-video", "parent_id": 1},
+    {"id": 6, "name": "Office & Desk", "slug": "office-desk", "parent_id": None},
+    {"id": 7, "name": "Stands & Ergonomics", "slug": "stands-ergonomics", "parent_id": 6},
+]
 
 SEED_USERS: list[dict[str, str]] = [
     {
@@ -44,6 +56,17 @@ SEED_USERS: list[dict[str, str]] = [
         "password": DEFAULT_DEV_PASSWORD,
     },
 ]
+
+
+def seed_categories(session: Session) -> dict[str, Category]:
+    """Upsert standard category hierarchy by unique slug."""
+    for item in SEED_CATEGORIES:
+        session.exec(
+            insert(Category)
+            .values(**item)
+            .on_conflict_do_nothing(index_elements=["slug"])
+        )
+    return {cat.slug: cat for cat in session.exec(select(Category)).all()}
 
 
 def make_product(
@@ -160,6 +183,51 @@ def build_products(seller_id: int = 1) -> list[Product]:
     return products
 
 
+def seed_product_metadata(session: Session, products: list[Product]) -> None:
+    """Populate discovery metadata, categories, ratings and sales for sample products.
+
+    Synthetic ratings, sales counts, and demo timestamps are ONLY assigned to the sample
+    catalog products. Any non-sample product without metadata receives clean default
+    metadata (0.0 rating, 0 sales, current UTC timestamp).
+    """
+    category_keyword_map = [
+        (("Mouse", "Keyboard", "Keypad", "Wrist Rest"), 3),
+        (("Cable", "Hub", "Adapter", "Flash Drive", "Memory Card", "Case", "Organizer"), 4),
+        (("Webcam", "Speaker", "Earbuds", "Headphone", "Microphone", "Sound Card", "Light"), 5),
+        (("Stand", "Cooling Pad", "Tripod"), 7),
+        (("Power Bank", "Charging Pad"), 1),
+    ]
+
+    def resolve_category(pname: str) -> int:
+        for keywords, cat_id in category_keyword_map:
+            if any(kw.lower() in pname.lower() for kw in keywords):
+                return cat_id
+        return 6  # Office & Desk default
+
+    sample_codes = {f"P-{100 + i}" for i in range(45)}
+
+    for index, product in enumerate(products):
+        if product.id is None:
+            continue
+        is_sample = product.code in sample_codes
+        cat_id = resolve_category(product.name) if is_sample else None
+        rating_val = round(3.5 + ((index * 3) % 15) * 0.1, 1) if is_sample else 0.0
+        sales_val = (((index * 23 + 17) % 350) + 5) if is_sample else 0
+        created_dt = (DEMO_DATE - timedelta(hours=index * 6)) if is_sample else datetime.now(UTC)
+
+        session.exec(
+            insert(ProductMetadata)
+            .values(
+                product_id=product.id,
+                category_id=cat_id,
+                rating=rating_val,
+                sales_count=sales_val,
+                created_at=created_dt,
+            )
+            .on_conflict_do_nothing(index_elements=["product_id"])
+        )
+
+
 def seed_users(session: Session) -> dict[str, User]:
     """Upsert by email without resetting passwords or account ownership."""
     users = {}
@@ -195,17 +263,45 @@ def get_or_create_demo_seller(session: Session) -> User:
 
 
 def _seed_catalog(session: Session) -> tuple[int, int, int]:
+    seed_categories(session)
     seller = get_or_create_demo_seller(session)
+    sample_products = build_products(seller_id=seller.id)
     added = 0
-    for product in build_products(seller_id=seller.id):
+    for product in sample_products:
         result = session.exec(
             insert(Product)
             .values(**product.model_dump(exclude={"id"}))
             .on_conflict_do_nothing(index_elements=["code"])
         )
         added += result.rowcount
-    products = session.exec(select(Product)).all()
-    return added, len(products), sum(product.is_active for product in products)
+
+    sample_codes = [p.code for p in sample_products]
+    seeded_products = session.exec(
+        select(Product).where(Product.code.in_(sample_codes)).order_by(Product.id.asc())
+    ).all()
+    seed_product_metadata(session, seeded_products)
+
+    # Initialize clean default metadata for any existing products without metadata
+    existing_without_metadata = session.exec(
+        select(Product)
+        .outerjoin(ProductMetadata, Product.id == ProductMetadata.product_id)
+        .where(ProductMetadata.product_id.is_(None))
+    ).all()
+    for prod in existing_without_metadata:
+        session.exec(
+            insert(ProductMetadata)
+            .values(
+                product_id=prod.id,
+                category_id=None,
+                rating=0.0,
+                sales_count=0,
+                created_at=datetime.now(UTC),
+            )
+            .on_conflict_do_nothing(index_elements=["product_id"])
+        )
+
+    all_products = session.exec(select(Product)).all()
+    return added, len(all_products), sum(product.is_active for product in all_products)
 
 
 def _run_seed(catalog: bool, demo: bool):
@@ -318,6 +414,28 @@ def _seed_demo_scenarios(session: Session) -> bool:
                 unit_price=product.price,
             )
         )
+    seed_categories(session)
+    demo_sales_map = {
+        "P-DEMO-PENDING": 1,
+        "P-DEMO-PROCESS": 2,
+        "P-DEMO-COMPLETE": 3,
+        "P-DEMO-CANCEL": 0,
+        "P-DEMO-CART": 0,
+        "P-DEMO-OUT": 0,
+    }
+    for code, product in products.items():
+        if product.id is not None:
+            existing_meta = session.get(ProductMetadata, product.id)
+            if not existing_meta:
+                session.add(
+                    ProductMetadata(
+                        product_id=product.id,
+                        category_id=6,
+                        rating=4.0,
+                        sales_count=demo_sales_map.get(code, 0),
+                        created_at=DEMO_DATE,
+                    )
+                )
     return True
 
 

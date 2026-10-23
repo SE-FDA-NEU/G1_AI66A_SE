@@ -7,6 +7,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
+import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 import src.database as database
@@ -117,3 +118,127 @@ def test_legacy_database_migration_adds_password_hash(tmp_path: Path) -> None:
         assert seller[0] == "demo.seller@marketplace.local"
         assert seller[1].startswith("scrypt$")
         assert seller[2] == "seller"
+
+
+def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: Path) -> None:
+    """Databases with pre-existing product_metadata lacking foreign keys are safely migrated and foreign keys enforced."""
+    db_path = tmp_path / "legacy_metadata.db"
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                role VARCHAR(20) NOT NULL,
+                password_hash VARCHAR(255) NOT NULL DEFAULT '',
+                created_at DATETIME NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                parent_id INTEGER
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code VARCHAR(20) NOT NULL UNIQUE,
+                seller_id INTEGER NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description VARCHAR(500) NOT NULL,
+                price INTEGER NOT NULL,
+                stock_quantity INTEGER NOT NULL,
+                reserved_stock INTEGER NOT NULL DEFAULT 0,
+                image_url VARCHAR(255) NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                version INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        # Create pre-existing product_metadata without foreign key constraints (like before PR #102 fix)
+        connection.execute(
+            """
+            CREATE TABLE product_metadata (
+                product_id INTEGER NOT NULL PRIMARY KEY,
+                category_id INTEGER,
+                rating FLOAT NOT NULL DEFAULT 0.0,
+                sales_count INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL
+            )
+            """
+        )
+        # Insert a user, category, and product
+        connection.execute(
+            "INSERT INTO users (id, name, email, role, created_at) VALUES (1, 'Seller', 's@test.local', 'seller', '2026-10-01')"
+        )
+        connection.execute(
+            "INSERT INTO categories (id, name, slug) VALUES (1, 'Peripherals', 'peripherals')"
+        )
+        connection.execute(
+            "INSERT INTO products (id, code, seller_id, name, description, price, stock_quantity, image_url) "
+            "VALUES (1, 'P-LEGACY-1', 1, 'Legacy Mouse', 'Desc', 100000, 10, 'http://test/mouse.jpg')"
+        )
+        connection.execute(
+            "INSERT INTO products (id, code, seller_id, name, description, price, stock_quantity, image_url) "
+            "VALUES (2, 'P-LEGACY-2', 1, 'Legacy Keyboard', 'Desc', 200000, 5, 'http://test/keyb.jpg')"
+        )
+        # Metadata for product 1
+        connection.execute(
+            "INSERT INTO product_metadata (product_id, category_id, rating, sales_count, created_at) "
+            "VALUES (1, 1, 4.2, 35, '2026-10-01 10:00:00')"
+        )
+        # Orphan metadata row (product_id 999 does not exist)
+        connection.execute(
+            "INSERT INTO product_metadata (product_id, category_id, rating, sales_count, created_at) "
+            "VALUES (999, 1, 3.0, 10, '2026-10-01 10:00:00')"
+        )
+        connection.commit()
+
+        # Before migration, no foreign keys on product_metadata
+        fks_before = connection.execute("PRAGMA foreign_key_list(product_metadata)").fetchall()
+        assert len(fks_before) == 0
+
+    # Run database migration
+    run_python(["-m", "src.database"], db_path)
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        fks_after = connection.execute("PRAGMA foreign_key_list(product_metadata)").fetchall()
+        # Should have foreign keys referencing products and categories
+        referred_tables = {fk[2] for fk in fks_after}
+        assert "products" in referred_tables
+        assert "categories" in referred_tables
+
+        # Check orphan row was purged
+        orphan = connection.execute("SELECT * FROM product_metadata WHERE product_id = 999").fetchone()
+        assert orphan is None
+
+        # Check existing valid data was preserved
+        valid = connection.execute("SELECT product_id, category_id, rating, sales_count FROM product_metadata WHERE product_id = 1").fetchone()
+        assert valid == (1, 1, 4.2, 35)
+
+        # Check existing product 2 without metadata was backfilled with defaults
+        p2_meta = connection.execute("SELECT product_id, category_id, rating, sales_count FROM product_metadata WHERE product_id = 2").fetchone()
+        assert p2_meta is not None
+        assert p2_meta[0] == 2
+        assert p2_meta[2] == 0.0
+        assert p2_meta[3] == 0
+
+        # Foreign key constraint must now be enforced by SQLite
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO product_metadata (product_id, category_id, rating, sales_count, created_at) "
+                "VALUES (8888, 1, 0.0, 0, '2026-10-23 00:00:00')"
+            )
+            connection.commit()
+

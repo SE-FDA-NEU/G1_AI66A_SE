@@ -88,6 +88,7 @@ class ProductCreate(BaseModel):
     price: StrictInt = Field(gt=0, le=PRICE_MAX)
     stock_quantity: StrictInt = Field(ge=0, le=STOCK_MAX)
     image_url: StrictStr = Field(min_length=1, max_length=IMAGE_URL_MAX_LENGTH)
+    category_id: StrictInt | None = Field(default=None, ge=1)
 
     @field_validator("name", "description")
     @classmethod
