@@ -48,9 +48,15 @@ async function request(url, options = {}) {
 function login() { location.replace("/login?return_to=%2Fcheckout"); }
 function lock(value) { busy = value; for (const field of form.elements) field.disabled = value; }
 function renderCartSummary(cart) {
+  if (!cart || !Array.isArray(cart.items) || !Number.isSafeInteger(cart.selected_total) ||
+      cart.selected_total < 0 || !cart.items.every(item => item && typeof item.is_selected === "boolean" &&
+        Number.isSafeInteger(item.line_total) && item.line_total >= 0 &&
+        ["available", "insufficient_stock", "unavailable"].includes(item.availability))) {
+    throw new Error("Cart response does not include valid selection details.");
+  }
   const summary = document.getElementById("summary");
   summary.replaceChildren();
-  const selected = cart.items.filter(item => item.is_selected !== false);
+  const selected = cart.items.filter(item => item.is_selected === true);
   for (const item of selected) {
     const line = document.createElement("p");
     line.textContent = `${item.name} × ${item.quantity}: ${money(item.line_total)}`;
@@ -62,7 +68,11 @@ function renderCartSummary(cart) {
     }
   }
   const total = document.createElement("strong");
-  total.textContent = `Total: ${money(cart.selected_total ?? cart.cart_total)}`;
+  const calculatedTotal = selected.reduce((sum, item) => sum + item.line_total, 0);
+  if (calculatedTotal !== cart.selected_total) {
+    throw new Error("Cart selected total does not match its selected items.");
+  }
+  total.textContent = `Total: ${money(calculatedTotal)}`;
   summary.append(total);
   if (!cart.items.length) return "Your cart is empty.";
   if (!selected.length) return "Select at least one item in your cart.";

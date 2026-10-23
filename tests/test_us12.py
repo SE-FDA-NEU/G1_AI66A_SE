@@ -109,6 +109,37 @@ def test_selection_and_shop_metadata_survive_reload(api, engine):
     assert response.json()["data"]["selected_total"] == 300
 
 
+def test_select_shop_rolls_back_all_rows_when_an_update_fails(engine, monkeypatch):
+    from src.services import cart as cart_service
+
+    with Session(engine) as session:
+        first_product = session.exec(select(Product).where(Product.code == "P-100")).one()
+        second_product = session.exec(select(Product).where(Product.code == "P-200")).one()
+        session.add_all([
+            CartItem(buyer_id=2, product_id=first_product.id, quantity=1, is_selected=False, price_at_add=100),
+            CartItem(buyer_id=2, product_id=second_product.id, quantity=1, is_selected=False, price_at_add=200),
+        ])
+        session.commit()
+
+    original = cart_service.update_line_fields
+    calls = 0
+
+    def fail_second_update(session, line, **values):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("simulated database update failure")
+        return original(session, line, **values)
+
+    monkeypatch.setattr(cart_service, "update_line_fields", fail_second_update)
+    with Session(engine) as session:
+        with pytest.raises(RuntimeError, match="simulated"):
+            cart_service.CartService(session).select_shop(2, 1, True)
+    with Session(engine) as session:
+        rows = session.exec(select(CartItem).where(CartItem.buyer_id == 2).order_by(CartItem.id)).all()
+        assert [row.is_selected for row in rows] == [False, False]
+
+
 def test_selection_is_owned_by_buyer(api, engine):
     own = add(api)
     other = add(api, buyer=3)
@@ -176,10 +207,14 @@ def test_mixed_shop_checkout_preserves_unselected_rows_and_idempotent_replay(api
     assert select_item(api, unselected, False).status_code == 200
     # Unavailable unselected rows must not block the selected order.
     change_product(engine, "P-200", stock_quantity=0)
+    change_product(engine, "P-100", price=150)
+    current_cart = cart(api)
+    assert current_cart["selected_total"] == 450
     response = api.post("/api/v1/orders", headers=auth(), json=DELIVERY)
     assert response.status_code == 201
     order = response.json()["data"]
-    assert order["total_amount"] == 400
+    assert order["total_amount"] == current_cart["selected_total"] == 450
+    assert order["total_amount"] == sum(line["line_total"] for line in order["items"])
     assert {line["product_code"] for line in order["items"]} == {"P-100", "P-300"}
     assert order_counts(engine) == [1, 2, 2]
     with Session(engine) as session:

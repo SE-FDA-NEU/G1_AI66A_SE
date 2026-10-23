@@ -122,4 +122,13 @@ const noSelection={payload:{data:{cart_total:100,selected_total:0,
 test=setup([user,noSelection]); await tick();
 assert.equal(test.nodes.get("checkout-form").hidden,true);
 assert.equal(test.nodes.get("status").textContent,"Select at least one item in your cart.");
+// Partial checkout fails closed when selection is omitted or its total disagrees with the lines.
+for (const malformed of [
+  {payload:{data:{cart_total:100,selected_total:100,items:[{name:"Mouse",line_total:100,availability:"available"}]}}},
+  {payload:{data:{cart_total:100,selected_total:99,items:[{name:"Mouse",line_total:100,is_selected:true,availability:"available"}]}}},
+]) {
+  test=setup([user,malformed]); await tick();
+  assert.equal(test.nodes.get("checkout-form").hidden,true);
+  assert.match(test.nodes.get("error").textContent,/Cart (response|selected total)/);
+}
 console.log("US12 checkout checks passed: selected-only summary, changed price, empty selection.");
