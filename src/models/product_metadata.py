@@ -10,10 +10,13 @@ class ProductMetadata(SQLModel, table=True):
 
     product_id: int = Field(
         primary_key=True,
+        foreign_key="products.id",
+        ondelete="CASCADE",
     )
 
     category_id: int | None = Field(
         default=None,
+        foreign_key="categories.id",
         nullable=True,
         index=True,
     )

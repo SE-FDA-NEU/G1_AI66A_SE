@@ -212,8 +212,7 @@ def list_products(
         # Stock availability filter
         if in_stock is True:
             filters.append(Product.stock_quantity > Product.reserved_stock)
-        elif in_stock is False:
-            filters.append(Product.stock_quantity <= Product.reserved_stock)
+        # When in_stock is False (or None), all active products are returned (both in-stock and out-of-stock)
 
         # AC1: Keyword search across product name OR description
         if search and search.strip():
@@ -245,7 +244,7 @@ def list_products(
 
         # AC2: Minimum rating filter
         if min_rating is not None:
-            filters.append(ProductMetadata.rating >= min_rating)
+            filters.append(func.coalesce(ProductMetadata.rating, 0.0) >= min_rating)
 
         # AC3: Sorting order clauses
         if sort == "newest":

@@ -15,6 +15,7 @@ from src.models.order import Order
 from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
@@ -237,6 +238,10 @@ def update_seller_order_status(
                 )
                 .execution_options(synchronize_session=False)
             )
+            meta = session.get(ProductMetadata, product.id)
+            if meta is not None:
+                meta.sales_count = max(0, meta.sales_count - item.quantity)
+                session.add(meta)
 
     session.add(
         OrderHistory(

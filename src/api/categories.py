@@ -2,18 +2,21 @@
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 
 from src.database import SessionDep
+from src.errors import error_detail
 from src.models.category import Category
 from src.models.user import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
+
+CATEGORIES_ERROR_MESSAGE = "Unable to load categories right now. Please try again later."
 
 
 class CategoryResponse(BaseModel):
@@ -47,6 +50,9 @@ def list_categories(session: SessionDep) -> list[CategoryResponse]:
             for cat in categories
             if cat.id is not None
         ]
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         logger.exception("Failed to query categories")
-        return []
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail("ERR_DATABASE_FAILURE", CATEGORIES_ERROR_MESSAGE),
+        ) from exc

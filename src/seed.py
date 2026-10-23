@@ -380,6 +380,28 @@ def _seed_demo_scenarios(session: Session) -> bool:
                 unit_price=product.price,
             )
         )
+    seed_categories(session)
+    demo_sales_map = {
+        "P-DEMO-PENDING": 1,
+        "P-DEMO-PROCESS": 2,
+        "P-DEMO-COMPLETE": 3,
+        "P-DEMO-CANCEL": 0,
+        "P-DEMO-CART": 0,
+        "P-DEMO-OUT": 0,
+    }
+    for code, product in products.items():
+        if product.id is not None:
+            existing_meta = session.get(ProductMetadata, product.id)
+            if not existing_meta:
+                session.add(
+                    ProductMetadata(
+                        product_id=product.id,
+                        category_id=6,
+                        rating=4.0,
+                        sales_count=demo_sales_map.get(code, 0),
+                        created_at=DEMO_DATE,
+                    )
+                )
     return True
 
 

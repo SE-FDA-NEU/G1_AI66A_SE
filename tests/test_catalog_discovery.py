@@ -12,37 +12,56 @@ Acceptance criteria covered:
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session, delete
+from unittest.mock import patch
 
-from src.database import engine
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlmodel import Session, SQLModel, delete, select
+
+from src.auth import create_access_token
+from src.database import get_session
+from src.main import create_app
+from src.models.cart_item import CartItem
 from src.models.category import Category
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.seller_order import SellerOrder
 from src.models.user import User
-
-
-@pytest.fixture(autouse=True)
-def clean_database():
-    """Ensure a clean database state for each test."""
-    with Session(engine) as session:
-        session.exec(delete(ProductMetadata))
-        session.exec(delete(Product))
-        session.exec(delete(Category))
-        session.commit()
-    yield
-    with Session(engine) as session:
-        session.exec(delete(ProductMetadata))
-        session.exec(delete(Product))
-        session.exec(delete(Category))
-        session.commit()
+from src.schemas.orders import CheckoutRequest
+from src.services.orders import checkout
+from tests.cart_db import enable_foreign_keys
 
 
 @pytest.fixture
-def sample_catalog():
+def discovery_engine(tmp_path):
+    """Isolated database engine with SQLite foreign key enforcement enabled."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'catalog_discovery.db'}")
+    event.listen(engine, "connect", enable_foreign_keys)
+    SQLModel.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def client(discovery_engine) -> TestClient:
+    """FastAPI test client overriding get_session with the isolated discovery engine."""
+    app = create_app()
+
+    def sessions():
+        with Session(discovery_engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = sessions
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def sample_catalog(discovery_engine):
     """Populate a structured category tree, multiple sellers, and distinct products."""
     now = datetime(2026, 10, 20, 12, tzinfo=UTC)
-    with Session(engine) as session:
+    with Session(discovery_engine) as session:
         # Category tree:
         # 1. Electronics (Root)
         #    └── 2. Computers (Child)
@@ -284,14 +303,15 @@ def test_min_rating_filter(client: TestClient, sample_catalog):
 
 
 def test_stock_filter_active_and_out_of_stock(client: TestClient, sample_catalog):
-    """In-stock defaults to true; explicit false surfaces out-of-stock products."""
+    """In-stock=true returns only in-stock products; in-stock=false returns all active products."""
     res_in_stock = client.get("/api/v1/products?category_id=5&in_stock=true")
     assert res_in_stock.status_code == 200
     assert [p["code"] for p in res_in_stock.json()["data"]] == ["P-OFF-CHAIR"]
 
-    res_out_of_stock = client.get("/api/v1/products?category_id=5&in_stock=false")
-    assert res_out_of_stock.status_code == 200
-    assert [p["code"] for p in res_out_of_stock.json()["data"]] == ["P-OFF-OUT"]
+    res_all_stock = client.get("/api/v1/products?category_id=5&in_stock=false")
+    assert res_all_stock.status_code == 200
+    codes = {p["code"] for p in res_all_stock.json()["data"]}
+    assert codes == {"P-OFF-CHAIR", "P-OFF-OUT"}
 
 
 # ==============================================================================
@@ -437,3 +457,195 @@ def test_products_page_contains_all_discovery_controls(client: TestClient):
     assert 'id="apply-filters"' in html
     assert 'id="reset-filters"' in html
     assert 'id="products-reset-empty"' in html
+
+
+# ==============================================================================
+# Regression tests for code review change requests
+# ==============================================================================
+
+
+def test_stock_filter_false_returns_all_active_products(client: TestClient, sample_catalog):
+    """Setting in_stock=false returns all active products (both in-stock and out-of-stock)."""
+    # Under Office Supplies (cat 5), we have P-OFF-CHAIR (stock=2) and P-OFF-OUT (stock=0)
+    res_in_stock = client.get("/api/v1/products?category_id=5&in_stock=true")
+    assert res_in_stock.status_code == 200
+    assert [p["code"] for p in res_in_stock.json()["data"]] == ["P-OFF-CHAIR"]
+
+    res_all = client.get("/api/v1/products?category_id=5&in_stock=false")
+    assert res_all.status_code == 200
+    codes = {p["code"] for p in res_all.json()["data"]}
+    assert codes == {"P-OFF-CHAIR", "P-OFF-OUT"}
+
+
+def test_seller_product_creation_creates_metadata_and_integrates_discovery(
+    client: TestClient, discovery_engine, sample_catalog
+):
+    """Newly created products through seller API receive ProductMetadata and integrate with filters."""
+    with Session(discovery_engine) as session:
+        seller = session.get(User, 1)
+        token = create_access_token(seller)
+
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "name": "Mechanical Keyboard RGB",
+        "description": "Ergonomic gaming mechanical keyboard with per-key RGB",
+        "price": 1250000,
+        "stock_quantity": 15,
+        "image_url": "https://example.com/keyboard.jpg",
+        "category_id": 4,  # Accessories
+    }
+
+    create_res = client.post("/api/v1/seller/products", json=payload, headers=headers)
+    assert create_res.status_code == 201
+    created_product = create_res.json()["data"]
+    code = created_product["code"]
+
+    # Verify ProductMetadata row was created in DB
+    with Session(discovery_engine) as session:
+        meta = session.get(ProductMetadata, created_product["id"])
+        assert meta is not None
+        assert meta.category_id == 4
+        assert meta.sales_count == 0
+        assert meta.rating == 0.0
+        assert meta.created_at is not None
+
+    # Verify discovery catalog filters include the new seller product
+    cat_res = client.get("/api/v1/products?category_id=4")
+    assert cat_res.status_code == 200
+    cat_codes = {p["code"] for p in cat_res.json()["data"]}
+    assert code in cat_codes
+
+    # Rating filter (min_rating=0.0) must include the new product
+    rating_res = client.get("/api/v1/products?min_rating=0.0&category_id=4")
+    assert rating_res.status_code == 200
+    rating_codes = {p["code"] for p in rating_res.json()["data"]}
+    assert code in rating_codes
+
+    # Refuse invalid non-existent category_id
+    invalid_payload = {
+        "name": "Invalid Category Product",
+        "description": "Valid description for testing",
+        "price": 500000,
+        "stock_quantity": 5,
+        "image_url": "https://example.com/invalid.jpg",
+        "category_id": 99999,
+    }
+    invalid_res = client.post("/api/v1/seller/products", json=invalid_payload, headers=headers)
+    assert invalid_res.status_code == 422
+
+
+def test_product_metadata_foreign_key_constraints(discovery_engine, sample_catalog):
+    """ProductMetadata enforces foreign key constraints on product_id and category_id."""
+    # Invalid product_id
+    with pytest.raises(IntegrityError):
+        with Session(discovery_engine) as session:
+            bad_meta = ProductMetadata(
+                product_id=999999,
+                category_id=1,
+                rating=4.5,
+                sales_count=10,
+            )
+            session.add(bad_meta)
+            session.commit()
+
+    # Invalid category_id
+    with pytest.raises(IntegrityError):
+        with Session(discovery_engine) as session:
+            bad_meta = ProductMetadata(
+                product_id=1,
+                category_id=999999,
+                rating=4.5,
+                sales_count=10,
+            )
+            session.add(bad_meta)
+            session.commit()
+
+
+def test_metadata_consistency_order_checkout_and_cancellation(
+    client: TestClient, discovery_engine, sample_catalog
+):
+    """Order checkout increments ProductMetadata.sales_count, cancellation restores it."""
+    with Session(discovery_engine) as session:
+        buyer = User(id=10, name="Discovery Buyer", email="buyer@test.local", role="buyer")
+        session.add(buyer)
+        # Create a test product with 0 sales
+        product = Product(
+            id=50,
+            code="P-TEST-SALES",
+            seller_id=1,
+            name="Sales Test Device",
+            description="Testing sales synchronization",
+            price=100000,
+            stock_quantity=20,
+            reserved_stock=0,
+            is_active=True,
+        )
+        session.add(product)
+        session.commit()
+
+        # Add cart item for buyer
+        cart_item = CartItem(id=1, buyer_id=buyer.id, product_id=product.id, quantity=3)
+        session.add(cart_item)
+        session.commit()
+
+        # Execute checkout
+        checkout_req = CheckoutRequest(
+            recipient_name="Discovery Buyer",
+            delivery_address="123 Discovery Road",
+            phone_number="0912345678",
+        )
+        receipt_data, _ = checkout(session, buyer.id, checkout_req, key="disc-checkout-key-1")
+        session.commit()
+
+        # Check metadata sales_count incremented
+        meta = session.get(ProductMetadata, product.id)
+        assert meta is not None
+        assert meta.sales_count == 3
+
+        # Seller cancels order
+        seller = session.get(User, 1)
+        seller_token = create_access_token(seller)
+
+        seller_order = session.exec(
+            select(SellerOrder).where(SellerOrder.seller_id == 1)
+        ).first()
+        assert seller_order is not None
+        seller_order_id = seller_order.id
+
+    seller_headers = {"Authorization": f"Bearer {seller_token}"}
+    patch_res = client.patch(
+        f"/api/v1/seller/orders/{seller_order_id}/status",
+        json={"status": "CANCELLED"},
+        headers=seller_headers,
+    )
+    assert patch_res.status_code == 200
+
+    # Check sales_count restored/decremented
+    with Session(discovery_engine) as session:
+        meta = session.get(ProductMetadata, product.id)
+        assert meta is not None
+        assert meta.sales_count == 0
+
+
+def test_categories_and_sellers_error_handling_contracts(client: TestClient):
+    """Categories and sellers endpoints return 500 with ERR_DATABASE_FAILURE upon database failure."""
+    with patch("sqlmodel.Session.exec", side_effect=SQLAlchemyError("Simulated DB down")):
+        cat_res = client.get("/api/v1/categories")
+        assert cat_res.status_code == 500
+        assert cat_res.json()["error"]["code"] == "ERR_DATABASE_FAILURE"
+        assert "categories" in cat_res.json()["error"]["message"].lower()
+
+        seller_res = client.get("/api/v1/sellers")
+        assert seller_res.status_code == 500
+        assert seller_res.json()["error"]["code"] == "ERR_DATABASE_FAILURE"
+        assert "sellers" in seller_res.json()["error"]["message"].lower()
+
+
+def test_frontend_products_js_race_condition_handling(client: TestClient):
+    """Frontend products.js uses AbortController and request ID sequence tracking for rapid filter changes."""
+    script = client.get("/static/products.js").text
+    assert "activeAbortController" in script
+    assert "currentRequestId" in script
+    assert "activeAbortController.abort()" in script
+    assert "requestId !== currentRequestId" in script
+    assert "AbortError" in script

@@ -2,7 +2,7 @@
 
 import hashlib
 import time
-from datetime import UTC
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, update
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -12,6 +12,7 @@ from src.models.cart_item import CartItem
 from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutRequest, OrderData, OrderLine
 
@@ -122,6 +123,19 @@ def checkout(
                         unit_price=product.price,
                     )
                 )
+                meta = session.get(ProductMetadata, product.id)
+                if meta is not None:
+                    meta.sales_count += line.quantity
+                    session.add(meta)
+                else:
+                    meta = ProductMetadata(
+                        product_id=product.id,
+                        category_id=None,
+                        rating=0.0,
+                        sales_count=line.quantity,
+                        created_at=datetime.now(UTC),
+                    )
+                    session.add(meta)
                 order.total_amount += product.price * line.quantity
                 removed = session.exec(
                     delete(CartItem)

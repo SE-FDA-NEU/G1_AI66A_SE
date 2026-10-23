@@ -2,17 +2,20 @@
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 
 from src.database import SessionDep
+from src.errors import error_detail
 from src.models.user import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sellers", tags=["Sellers"])
+
+SELLERS_ERROR_MESSAGE = "Unable to load sellers right now. Please try again later."
 
 
 class SellerSummary(BaseModel):
@@ -34,6 +37,9 @@ def list_sellers(session: SessionDep) -> list[SellerSummary]:
             for seller in sellers
             if seller.id is not None
         ]
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         logger.exception("Failed to query sellers")
-        return []
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail("ERR_DATABASE_FAILURE", SELLERS_ERROR_MESSAGE),
+        ) from exc

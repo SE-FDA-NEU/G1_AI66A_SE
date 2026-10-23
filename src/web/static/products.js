@@ -157,9 +157,10 @@ function createProductCard(product) {
   return card;
 }
 
-async function fetchProducts(page, search) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+let activeAbortController = null;
+let currentRequestId = 0;
+
+async function fetchProducts(page, search, signal) {
   const params = new URLSearchParams({
     page: String(page),
     limit: String(PAGE_LIMIT),
@@ -189,23 +190,19 @@ async function fetchProducts(page, search) {
     params.set("sort", currentSort);
   }
 
-  try {
-    const response = await fetch(`${PRODUCTS_URL}?${params}`, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.error?.message || "Unable to load products.");
-    }
-    const payload = await response.json();
-    if (!isValidPayload(payload)) {
-      throw new Error("Products response does not match the expected contract");
-    }
-    return payload;
-  } finally {
-    clearTimeout(timeoutId);
+  const response = await fetch(`${PRODUCTS_URL}?${params}`, {
+    headers: { Accept: "application/json" },
+    signal: signal,
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error?.message || "Unable to load products.");
   }
+  const payload = await response.json();
+  if (!isValidPayload(payload)) {
+    throw new Error("Products response does not match the expected contract");
+  }
+  return payload;
 }
 
 function updatePagination(meta) {
@@ -231,10 +228,27 @@ function hasActiveFilters() {
 
 async function loadProducts(page = currentPage) {
   currentPage = page;
+
+  if (activeAbortController) {
+    activeAbortController.abort();
+  }
+  activeAbortController = new AbortController();
+  const requestId = ++currentRequestId;
+  const timeoutId = setTimeout(() => {
+    activeAbortController.abort();
+  }, REQUEST_TIMEOUT_MS);
+
   elements.retry.disabled = true;
   showState("loading", "Loading products…");
   try {
-    const { data, meta } = await fetchProducts(currentPage, currentSearch);
+    const { data, meta } = await fetchProducts(currentPage, currentSearch, activeAbortController.signal);
+    clearTimeout(timeoutId);
+
+    // Guard against outdated responses from overlapping requests
+    if (requestId !== currentRequestId) {
+      return;
+    }
+
     if (data.length === 0) {
       if (hasActiveFilters()) {
         elements.emptyMessage.textContent = "No products match your search or filter criteria. Try adjusting or clearing your filters.";
@@ -250,9 +264,15 @@ async function loadProducts(page = currentPage) {
       updatePagination(meta);
     }
   } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError" || requestId !== currentRequestId) {
+      return;
+    }
     showState("error", "We could not load the products. Check your connection, then select Retry.");
   } finally {
-    elements.retry.disabled = false;
+    if (requestId === currentRequestId) {
+      elements.retry.disabled = false;
+    }
   }
 }
 
