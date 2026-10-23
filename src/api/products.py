@@ -249,7 +249,7 @@ def list_products(
         # AC3: Sorting order clauses
         if sort == "newest":
             order_clauses = [
-                func.coalesce(ProductMetadata.created_at, Product.id).desc(),
+                ProductMetadata.created_at.desc(),
                 Product.id.desc(),
             ]
         elif sort == "bestselling":

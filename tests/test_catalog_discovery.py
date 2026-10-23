@@ -649,3 +649,100 @@ def test_frontend_products_js_race_condition_handling(client: TestClient):
     assert "activeAbortController.abort()" in script
     assert "requestId !== currentRequestId" in script
     assert "AbortError" in script
+
+
+def test_frontend_products_js_request_scoped_abort_timeout(client: TestClient):
+    """Frontend products.js timeout aborts the request-scoped controller, not the shared activeAbortController."""
+    script = client.get("/static/products.js").text
+    assert "const controller = new AbortController();" in script
+    assert "activeAbortController = controller;" in script
+    assert "controller.abort()" in script
+    assert "activeAbortController.abort()" in script  # only called to abort prior in-flight request
+    # Timeout closure must call controller.abort(), not activeAbortController.abort()
+    assert "setTimeout(() => {\n    controller.abort();\n  }, REQUEST_TIMEOUT_MS);" in script
+
+
+def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(discovery_engine):
+    """Existing products without metadata must not be assigned synthetic ratings, sales, or timestamps."""
+    from src.seed import seed_categories, seed_product_metadata, DEMO_DATE
+
+    with Session(discovery_engine) as session:
+        seed_categories(session)
+        # Create seller and an existing pre-discovery product
+        seller = User(id=101, name="Existing Seller", email="seller101@test.local", role="seller")
+        session.add(seller)
+        session.flush()
+
+        existing_prod = Product(
+            id=101,
+            code="P-REAL-EXISTING",
+            seller_id=seller.id,
+            name="Existing Real Product",
+            description="Existing business product created before discovery metadata",
+            price=500000,
+            stock_quantity=10,
+            reserved_stock=0,
+            is_active=True,
+        )
+        sample_prod = Product(
+            id=102,
+            code="P-100",  # Seed catalog sample code
+            seller_id=seller.id,
+            name="Wireless Mouse",
+            description="Sample catalog wireless mouse",
+            price=180000,
+            stock_quantity=15,
+            reserved_stock=0,
+            is_active=True,
+        )
+        session.add_all([existing_prod, sample_prod])
+        session.commit()
+
+        # Run seed_product_metadata on both
+        seed_product_metadata(session, [existing_prod, sample_prod])
+        session.commit()
+
+        meta_existing = session.get(ProductMetadata, existing_prod.id)
+        meta_sample = session.get(ProductMetadata, sample_prod.id)
+
+        assert meta_existing is not None
+        assert meta_sample is not None
+
+        # Existing real product must receive clean defaults, NOT synthetic values
+        assert meta_existing.rating == 0.0
+        assert meta_existing.sales_count == 0
+        assert meta_existing.category_id is None
+        sample_created_utc = meta_sample.created_at.replace(tzinfo=UTC) if meta_sample.created_at.tzinfo is None else meta_sample.created_at
+        assert sample_created_utc <= DEMO_DATE
+
+
+def test_sort_newest_handles_null_timestamps_and_fallback_by_id(client: TestClient, discovery_engine):
+    """Sort newest orders by created_at DESC with Product.id DESC fallback without mixing types."""
+    now = datetime(2026, 10, 23, 12, tzinfo=UTC)
+    with Session(discovery_engine) as session:
+        seller = User(id=201, name="Sort Seller", email="sort_seller@test.local", role="seller")
+        session.add(seller)
+        session.flush()
+
+        # Product 1: Newer timestamp
+        p1 = Product(id=201, code="P-SORT-NEW", seller_id=seller.id, name="New Product", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        # Product 2: Older timestamp
+        p2 = Product(id=202, code="P-SORT-OLD", seller_id=seller.id, name="Old Product", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        # Product 3: No metadata (smaller id)
+        p3 = Product(id=203, code="P-SORT-NO-META-A", seller_id=seller.id, name="No Meta A", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        # Product 4: No metadata (larger id)
+        p4 = Product(id=204, code="P-SORT-NO-META-B", seller_id=seller.id, name="No Meta B", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        session.add_all([p1, p2, p3, p4])
+        session.flush()
+
+        m1 = ProductMetadata(product_id=p1.id, rating=4.0, sales_count=10, created_at=now)
+        m2 = ProductMetadata(product_id=p2.id, rating=4.0, sales_count=10, created_at=now - timedelta(days=5))
+        session.add_all([m1, m2])
+        session.commit()
+
+    res = client.get("/api/v1/products?seller_id=201&sort=newest")
+    assert res.status_code == 200
+    returned_codes = [p["code"] for p in res.json()["data"]]
+    # Products with created_at come first (newest to oldest), then items without created_at by ID desc
+    assert returned_codes == ["P-SORT-NEW", "P-SORT-OLD", "P-SORT-NO-META-B", "P-SORT-NO-META-A"]
+

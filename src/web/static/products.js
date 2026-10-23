@@ -232,16 +232,17 @@ async function loadProducts(page = currentPage) {
   if (activeAbortController) {
     activeAbortController.abort();
   }
-  activeAbortController = new AbortController();
+  const controller = new AbortController();
+  activeAbortController = controller;
   const requestId = ++currentRequestId;
   const timeoutId = setTimeout(() => {
-    activeAbortController.abort();
+    controller.abort();
   }, REQUEST_TIMEOUT_MS);
 
   elements.retry.disabled = true;
   showState("loading", "Loading products…");
   try {
-    const { data, meta } = await fetchProducts(currentPage, currentSearch, activeAbortController.signal);
+    const { data, meta } = await fetchProducts(currentPage, currentSearch, controller.signal);
     clearTimeout(timeoutId);
 
     // Guard against outdated responses from overlapping requests
@@ -270,6 +271,10 @@ async function loadProducts(page = currentPage) {
     }
     showState("error", "We could not load the products. Check your connection, then select Retry.");
   } finally {
+    clearTimeout(timeoutId);
+    if (activeAbortController === controller) {
+      activeAbortController = null;
+    }
     if (requestId === currentRequestId) {
       elements.retry.disabled = false;
     }

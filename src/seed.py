@@ -184,7 +184,12 @@ def build_products(seller_id: int = 1) -> list[Product]:
 
 
 def seed_product_metadata(session: Session, products: list[Product]) -> None:
-    """Populate discovery metadata, categories, ratings and sales for products."""
+    """Populate discovery metadata, categories, ratings and sales for sample products.
+
+    Synthetic ratings, sales counts, and demo timestamps are ONLY assigned to the sample
+    catalog products. Any non-sample product without metadata receives clean default
+    metadata (0.0 rating, 0 sales, current UTC timestamp).
+    """
     category_keyword_map = [
         (("Mouse", "Keyboard", "Keypad", "Wrist Rest"), 3),
         (("Cable", "Hub", "Adapter", "Flash Drive", "Memory Card", "Case", "Organizer"), 4),
@@ -199,13 +204,16 @@ def seed_product_metadata(session: Session, products: list[Product]) -> None:
                 return cat_id
         return 6  # Office & Desk default
 
+    sample_codes = {f"P-{100 + i}" for i in range(45)}
+
     for index, product in enumerate(products):
         if product.id is None:
             continue
-        cat_id = resolve_category(product.name)
-        rating_val = round(3.5 + ((index * 3) % 15) * 0.1, 1)
-        sales_val = ((index * 23 + 17) % 350) + 5
-        created_dt = DEMO_DATE - timedelta(hours=index * 6)
+        is_sample = product.code in sample_codes
+        cat_id = resolve_category(product.name) if is_sample else None
+        rating_val = round(3.5 + ((index * 3) % 15) * 0.1, 1) if is_sample else 0.0
+        sales_val = (((index * 23 + 17) % 350) + 5) if is_sample else 0
+        created_dt = (DEMO_DATE - timedelta(hours=index * 6)) if is_sample else datetime.now(UTC)
 
         session.exec(
             insert(ProductMetadata)
@@ -257,17 +265,43 @@ def get_or_create_demo_seller(session: Session) -> User:
 def _seed_catalog(session: Session) -> tuple[int, int, int]:
     seed_categories(session)
     seller = get_or_create_demo_seller(session)
+    sample_products = build_products(seller_id=seller.id)
     added = 0
-    for product in build_products(seller_id=seller.id):
+    for product in sample_products:
         result = session.exec(
             insert(Product)
             .values(**product.model_dump(exclude={"id"}))
             .on_conflict_do_nothing(index_elements=["code"])
         )
         added += result.rowcount
-    products = session.exec(select(Product)).all()
-    seed_product_metadata(session, products)
-    return added, len(products), sum(product.is_active for product in products)
+
+    sample_codes = [p.code for p in sample_products]
+    seeded_products = session.exec(
+        select(Product).where(Product.code.in_(sample_codes)).order_by(Product.id.asc())
+    ).all()
+    seed_product_metadata(session, seeded_products)
+
+    # Initialize clean default metadata for any existing products without metadata
+    existing_without_metadata = session.exec(
+        select(Product)
+        .outerjoin(ProductMetadata, Product.id == ProductMetadata.product_id)
+        .where(ProductMetadata.product_id.is_(None))
+    ).all()
+    for prod in existing_without_metadata:
+        session.exec(
+            insert(ProductMetadata)
+            .values(
+                product_id=prod.id,
+                category_id=None,
+                rating=0.0,
+                sales_count=0,
+                created_at=datetime.now(UTC),
+            )
+            .on_conflict_do_nothing(index_elements=["product_id"])
+        )
+
+    all_products = session.exec(select(Product)).all()
+    return added, len(all_products), sum(product.is_active for product in all_products)
 
 
 def _run_seed(catalog: bool, demo: bool):

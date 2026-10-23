@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
@@ -123,19 +124,28 @@ def checkout(
                         unit_price=product.price,
                     )
                 )
-                meta = session.get(ProductMetadata, product.id)
-                if meta is not None:
-                    meta.sales_count += line.quantity
-                    session.add(meta)
-                else:
-                    meta = ProductMetadata(
-                        product_id=product.id,
-                        category_id=None,
-                        rating=0.0,
-                        sales_count=line.quantity,
-                        created_at=datetime.now(UTC),
+                # Atomic sales_count increment avoiding ORM read-modify-write lost updates
+                updated = session.exec(
+                    update(ProductMetadata)
+                    .where(ProductMetadata.product_id == product.id)
+                    .values(sales_count=ProductMetadata.sales_count + line.quantity)
+                    .execution_options(synchronize_session=False)
+                )
+                if updated.rowcount == 0:
+                    session.exec(
+                        sqlite_insert(ProductMetadata)
+                        .values(
+                            product_id=product.id,
+                            category_id=None,
+                            rating=0.0,
+                            sales_count=line.quantity,
+                            created_at=datetime.now(UTC),
+                        )
+                        .on_conflict_do_update(
+                            index_elements=["product_id"],
+                            set_={"sales_count": ProductMetadata.sales_count + line.quantity},
+                        )
                     )
-                    session.add(meta)
                 order.total_amount += product.price * line.quantity
                 removed = session.exec(
                     delete(CartItem)
