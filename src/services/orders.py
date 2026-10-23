@@ -66,9 +66,18 @@ def checkout(
                     )
                 return receipt(session, buyer_id, existing.id), False
             lines = session.exec(
-                select(CartItem).where(CartItem.buyer_id == buyer_id).order_by(CartItem.product_id)
+                select(CartItem)
+                .where(CartItem.buyer_id == buyer_id, CartItem.is_selected.is_(True))
+                .order_by(CartItem.product_id)
             ).all()
             if not lines:
+                has_cart = session.exec(
+                    select(CartItem.id).where(CartItem.buyer_id == buyer_id)
+                ).first()
+                if has_cart is not None:
+                    raise CheckoutError(
+                        "ERR_EMPTY_CART", "Select at least one item for checkout.", 400
+                    )
                 raise CheckoutError("ERR_EMPTY_CART", "Your cart is empty.", 400)
             order = Order(
                 buyer_id=buyer_id,
@@ -130,6 +139,7 @@ def checkout(
                         CartItem.buyer_id == buyer_id,
                         CartItem.product_id == line.product_id,
                         CartItem.quantity == line.quantity,
+                        CartItem.is_selected.is_(True),
                     )
                     .execution_options(synchronize_session=False)
                 )

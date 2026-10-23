@@ -47,6 +47,30 @@ async function request(url, options = {}) {
 }
 function login() { location.replace("/login?return_to=%2Fcheckout"); }
 function lock(value) { busy = value; for (const field of form.elements) field.disabled = value; }
+function renderCartSummary(cart) {
+  const summary = document.getElementById("summary");
+  summary.replaceChildren();
+  const selected = cart.items.filter(item => item.is_selected !== false);
+  for (const item of selected) {
+    const line = document.createElement("p");
+    line.textContent = `${item.name} × ${item.quantity}: ${money(item.line_total)}`;
+    summary.append(line);
+    if (item.price_changed) {
+      const warning = document.createElement("p");
+      warning.textContent = `Price changed: ${money(item.price_at_add)} when added → ${money(item.unit_price)} now.`;
+      summary.append(warning);
+    }
+  }
+  const total = document.createElement("strong");
+  total.textContent = `Total: ${money(cart.selected_total ?? cart.cart_total)}`;
+  summary.append(total);
+  if (!cart.items.length) return "Your cart is empty.";
+  if (!selected.length) return "Select at least one item in your cart.";
+  if (selected.some(item => item.availability !== "available")) {
+    return "Update unavailable items in your cart first.";
+  }
+  return "";
+}
 async function init() {
   if (contextChanged) { location.reload(); return; }
   contextToken = localStorage.getItem("access_token");
@@ -63,15 +87,9 @@ async function init() {
       return;
     }
     const {data:cart} = await request("/api/v1/cart");
-    const summary = document.getElementById("summary"); summary.replaceChildren();
-    for (const item of cart.items) {
-      const p = document.createElement("p");
-      p.textContent = `${item.name} \u00d7 ${item.quantity}: ${money(item.line_total)}`; summary.append(p);
-    }
-    const total = document.createElement("strong"); total.textContent = `Total: ${money(cart.cart_total)}`; summary.append(total);
-    const valid = cart.items.length && cart.items.every(i => i.availability === "available");
-    form.hidden = !valid;
-    statusText.textContent = !cart.items.length ? "Your cart is empty." : valid ? "Enter delivery information." : "Update unavailable items in your cart first.";
+    const blocked = renderCartSummary(cart);
+    form.hidden = Boolean(blocked);
+    statusText.textContent = blocked || "Enter delivery information.";
   } catch (e) { if (e.accountChanged) return; message(e.message); retry.hidden = false; }
 }
 let sending = false;
