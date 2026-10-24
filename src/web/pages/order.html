@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Order Tracker — Mini Marketplace</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link rel="stylesheet" href="/static/order.css">
+  <script src="/static/order.js" defer></script>
+</head>
+<body class="ios-theme">
+  <!-- Minimalist iOS Navigation Bar -->
+  <header class="ios-header">
+    <div class="ios-header-inner">
+      <div class="header-brand-group">
+        <a href="/products" class="ios-brand">Mini Marketplace</a>
+        <span class="ios-header-sep">/</span>
+        <span class="ios-page-label">Order Tracker</span>
+      </div>
+      <nav class="ios-nav-links">
+        <a href="/products" class="ios-nav-item">Products</a>
+        <a id="cart-link" href="/cart" class="ios-nav-item">Cart</a>
+        <a id="my-orders-link" href="/orders" class="ios-nav-item" hidden>My orders</a>
+        <a id="seller-orders-link" href="/seller/orders" class="ios-nav-item" hidden>Seller orders</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="ios-container">
+    <!-- Top Centered Header from Photo -->
+    <section class="tracking-title-section">
+      <div class="tracking-title-wrap">
+        <h1 id="order-title" class="tracking-main-title">ORDER TRACKING PAGE</h1>
+        <div class="title-divider"></div>
+        <p class="tracking-subtitle">
+          Please note that these are accurate but not guaranteed estimates. Delivery date is subject to change without advanced notice.
+        </p>
+      </div>
+      <div class="live-pill-wrap">
+        <span id="live-indicator" class="live-indicator" hidden>
+          <span class="live-dot"></span> Live updating
+        </span>
+        <span id="order-status-badge" class="badge">Loading...</span>
+      </div>
+      <p id="order-meta" class="text-muted" style="display:none;"></p>
+    </section>
+
+    <!-- Global Alerts -->
+    <div id="status-message" role="status" class="ios-alert ios-alert--info" hidden></div>
+    <div id="error-message" role="alert" class="ios-alert ios-alert--error" hidden></div>
+
+    <!-- 4-Column Key Metric Summary Bar (Exact from reference image) -->
+    <section id="summary-metrics-bar" class="metrics-bar" hidden>
+      <div class="metric-col">
+        <span class="metric-label">ORDER PLACED</span>
+        <span id="order-placed-val" class="metric-val">—</span>
+      </div>
+      <div class="metric-col">
+        <span class="metric-label">TOTAL</span>
+        <span id="order-total-val" class="metric-val">—</span>
+      </div>
+      <div class="metric-col">
+        <span class="metric-label">SHIP TO</span>
+        <span id="order-ship-to-val" class="metric-val">—</span>
+      </div>
+      <div class="metric-col">
+        <span class="metric-label">ORDER</span>
+        <span id="order-id-val" class="metric-val">—</span>
+      </div>
+    </section>
+
+    <!-- Main Stepper Card (Exact layout & icons from reference image) -->
+    <section id="milestones-card" class="ios-card tracking-stepper-card" hidden>
+      <div class="status-headline-wrap">
+        <h2 class="status-headline">
+          Order Status: <span id="status-headline-name" class="status-green">In Transit</span>
+        </h2>
+        <p id="status-est-delivery" class="status-est-delivery">
+          Estimated Delivery Date: <strong id="est-delivery-val">In 2 - 4 business days</strong>
+        </p>
+      </div>
+
+      <!-- Modern iOS Progress Stepper -->
+      <div class="stepper-track-wrap">
+        <div class="stepper-progress-bg">
+          <div id="stepper-progress-bar" class="stepper-progress-fill"></div>
+        </div>
+        <div class="stepper" id="stepper">
+          <!-- Step 1: Order Placed -->
+          <div class="step" id="step-ordered">
+            <div class="step-icon-circle">
+              <svg class="step-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+              </svg>
+            </div>
+            <div class="step-label">Order Placed</div>
+            <div class="step-date" id="step-ordered-date">—</div>
+          </div>
+
+          <div class="step-line" style="display:none;"></div>
+
+          <!-- Step 2: Confirmed / In Production -->
+          <div class="step" id="step-confirmed">
+            <div class="step-icon-circle">
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+            </div>
+            <div class="step-label">In Production</div>
+            <div class="step-date" id="step-confirmed-date">—</div>
+          </div>
+
+          <div class="step-line" style="display:none;"></div>
+
+          <!-- Step 3: Shipped / Ocean Transit -->
+          <div class="step" id="step-shipped">
+            <div class="step-icon-circle">
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 17h20v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2zM4 17l2-10h12l2 10M12 7V3M9 3h6"/>
+              </svg>
+            </div>
+            <div class="step-label">Ocean Transit</div>
+            <div class="step-date" id="step-shipped-date">—</div>
+          </div>
+
+          <div class="step-line" style="display:none;"></div>
+
+          <!-- Step 4: Final Mile -->
+          <div class="step" id="step-delivered">
+            <div class="step-icon-circle">
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="3" width="14" height="13"></rect>
+                <polygon points="15 8 19 8 22 11 22 16 15 16 15 8"></polygon>
+                <circle cx="5" cy="19" r="2.5"></circle>
+                <circle cx="18" cy="19" r="2.5"></circle>
+              </svg>
+            </div>
+            <div class="step-label">Shipping Final Mile</div>
+            <div class="step-date" id="step-delivered-date">—</div>
+          </div>
+
+          <div class="step-line" style="display:none;"></div>
+
+          <!-- Step 5: Delivered / Completed -->
+          <div class="step" id="step-completed">
+            <div class="step-icon-circle">
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 12 20 22 4 22 4 12"/>
+                <rect x="2" y="7" width="20" height="5"/>
+                <line x1="12" y1="22" x2="12" y2="7"/>
+                <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
+                <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+              </svg>
+            </div>
+            <div class="step-label">Delivered</div>
+            <div class="step-date" id="step-completed-date">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tracking-info" class="tracking-banner" hidden>
+        <div class="tracking-banner-inner">
+          <span class="tracking-label">Carrier Tracking Number:</span>
+          <span id="tracking-number-val" class="tracking-value"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Two-Column Grid: Shipping Information & Map (Exact from reference image) -->
+    <section id="details-card" class="shipping-and-map-grid" hidden>
+      <!-- Left: Shipping Information -->
+      <div class="shipping-info-card">
+        <h3 class="section-subheading">SHIPPING INFORMATION</h3>
+        <div class="shipping-person-details">
+          <p id="recipient-name" class="recipient-highlight"></p>
+          <p id="delivery-address" class="address-highlight"></p>
+          <p class="phone-highlight">Phone: <span id="phone-number"></span></p>
+        </div>
+        <div class="shipping-delivery-perks">
+          <div class="perk-item">
+            <svg class="perk-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            <span>Doorstep contactless delivery</span>
+          </div>
+          <div class="perk-item">
+            <svg class="perk-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+            </svg>
+            <span>Verified carrier tracking & package protection</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Apple Maps Interactive Delivery Preview -->
+      <div class="map-preview-card">
+        <div class="map-controls-header">
+          <div class="map-view-toggle">
+            <button id="map-btn-vector" type="button" class="map-toggle-btn active">Map</button>
+            <button id="map-btn-sat" type="button" class="map-toggle-btn">Satellite</button>
+          </div>
+          <button id="map-expand-btn" type="button" class="map-expand-btn" title="Expand map" aria-label="Expand map">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Stylized Map Canvas / SVG -->
+        <div id="delivery-map-viewport" class="map-viewport mode-vector">
+          <!-- Real Leaflet Interactive Map Container -->
+          <div id="leaflet-map" class="real-map-layer"></div>
+          <!-- Vector Map Layers Fallback -->
+          <svg class="map-vector-graphic" viewBox="0 0 400 220" preserveAspectRatio="none">
+            <rect width="400" height="220" fill="#f4f3f0"/>
+            <!-- Terrain / Land shapes -->
+            <path d="M0,0 L180,0 L200,80 L160,220 L0,220 Z" fill="#ebe9e4"/>
+            <path d="M220,0 L400,0 L400,140 L340,220 L220,220 Z" fill="#f0eee8"/>
+            <!-- Rivers / Water -->
+            <path d="M-10,90 Q90,130 180,95 T340,110 T410,80" fill="none" stroke="#c4e2f7" stroke-width="8"/>
+            <!-- Highways / Road Network -->
+            <path d="M-10,50 L410,130" fill="none" stroke="#ffffff" stroke-width="6"/>
+            <path d="M-10,50 L410,130" fill="none" stroke="#f6c043" stroke-width="3"/>
+            <path d="M120,-10 L160,230" fill="none" stroke="#ffffff" stroke-width="5"/>
+            <path d="M120,-10 L160,230" fill="none" stroke="#e08f52" stroke-width="2.5"/>
+            <path d="M250,-10 L270,230" fill="none" stroke="#ffffff" stroke-width="4"/>
+            <path d="M60,180 L350,30" fill="none" stroke="#ffffff" stroke-width="3"/>
+            <!-- Local streets -->
+            <path d="M140,80 L300,150" fill="none" stroke="#ffffff" stroke-width="2"/>
+            <path d="M200,40 L280,180" fill="none" stroke="#ffffff" stroke-width="2"/>
+            <!-- Cities labels -->
+            <text x="50" y="70" font-family="-apple-system, sans-serif" font-size="9" font-weight="600" fill="#7d8590">Ogden</text>
+            <text x="40" y="145" font-family="-apple-system, sans-serif" font-size="9" font-weight="600" fill="#7d8590">Salt Lake City</text>
+            <text x="310" y="90" font-family="-apple-system, sans-serif" font-size="10" font-weight="700" fill="#656f7d" letter-spacing="1">NEBRASKA</text>
+            <text x="360" y="140" font-family="-apple-system, sans-serif" font-size="8" font-weight="600" fill="#7d8590">Lincoln</text>
+            <text id="map-target-label" x="220" y="130" font-family="-apple-system, sans-serif" font-size="11" font-weight="700" fill="#1f2937">Fort Collins</text>
+          </svg>
+          <!-- Pin Drop -->
+          <div class="map-pin-marker">
+            <div class="map-pin-pulse"></div>
+            <svg class="map-pin-icon" viewBox="0 0 24 24" fill="#ef4444">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Order Items (Apple Store iOS Grouped List Style) -->
+    <section id="items-card" class="ios-card items-card" hidden>
+      <div class="card-header-row">
+        <h3 class="section-subheading">ITEMS IN THIS ORDER</h3>
+      </div>
+      <div id="items-list" class="items-table-wrapper"></div>
+      <div class="total-row">
+        <span class="total-label">Total Amount:</span>
+        <span id="order-total" class="total-price"></span>
+      </div>
+    </section>
+
+    <!-- Order Actions (Simplified iOS Pill Buttons) -->
+    <section id="actions-card" class="ios-card actions-card" hidden>
+      <h3 class="section-subheading">ORDER ACTIONS</h3>
+      <p id="action-hint" class="action-hint"></p>
+      <div class="action-buttons">
+        <!-- Buyer actions -->
+        <button id="cancel-btn" type="button" class="ios-btn ios-btn-danger" hidden>Cancel Order</button>
+        <button id="req-cancel-btn" type="button" class="ios-btn ios-btn-warning" hidden>Request Cancellation</button>
+        <button id="confirm-delivery-btn" type="button" class="ios-btn ios-btn-primary" hidden>Confirm Receipt</button>
+        <!-- Seller actions -->
+        <button id="seller-confirm-btn" type="button" class="ios-btn ios-btn-primary" hidden>Confirm Order</button>
+        <button id="seller-ship-btn" type="button" class="ios-btn ios-btn-primary" hidden>Ship Order</button>
+        <button id="seller-deliver-btn" type="button" class="ios-btn ios-btn-primary" hidden>Mark Delivered</button>
+        <button id="seller-approve-cancel-btn" type="button" class="ios-btn ios-btn-danger" hidden>Approve Cancellation</button>
+        <button id="seller-reject-cancel-btn" type="button" class="ios-btn ios-btn-secondary" hidden>Reject Cancellation</button>
+        <button id="seller-cancel-btn" type="button" class="ios-btn ios-btn-danger" hidden>Cancel Order</button>
+      </div>
+    </section>
+
+    <div class="nav-footer">
+      <button id="retry-btn" type="button" class="ios-btn ios-btn-secondary" hidden>Retry</button>
+      <a href="/products" class="ios-btn ios-btn-ghost">← Continue Shopping</a>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,921 @@
+/* ==========================================================================
+   Order Tracker — Minimalist Luxury iOS Theme
+   Inspired by Apple design language & high-end e-commerce order tracking
+   ========================================================================== */
+
+:root {
+  --ios-bg: #f5f6f8;
+  --ios-card-bg: #ffffff;
+  --ios-text-primary: #111827;
+  --ios-text-secondary: #4b5563;
+  --ios-text-muted: #6b7280;
+  --ios-border: #e5e7eb;
+  --ios-border-strong: #d1d5db;
+  --ios-green: #16a34a;
+  --ios-green-light: #dcfce7;
+  --ios-blue: #0071e3;
+  --ios-blue-hover: #0077ed;
+  --ios-orange: #ea580c;
+  --ios-red: #dc2626;
+  --ios-radius: 16px;
+  --ios-radius-sm: 10px;
+  --ios-shadow-subtle: 0 2px 10px rgba(0, 0, 0, 0.03);
+  --ios-shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Roboto, sans-serif;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body.ios-theme {
+  background-color: var(--ios-bg);
+  color: var(--ios-text-primary);
+  font-family: var(--font-stack);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: 4rem;
+}
+
+/* ==========================================================================
+   Navigation Bar
+   ========================================================================== */
+.ios-header {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.ios-header-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0.9rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ios-brand {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--ios-text-primary);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.ios-brand:hover {
+  color: var(--ios-blue);
+}
+
+.ios-header-sep {
+  color: #cbd5e1;
+  font-weight: 400;
+}
+
+.ios-page-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ios-text-muted);
+}
+
+.ios-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.ios-nav-item {
+  color: var(--ios-text-secondary);
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.ios-nav-item:hover {
+  color: var(--ios-blue);
+}
+
+/* ==========================================================================
+   Main Container & Title Header
+   ========================================================================== */
+.ios-container {
+  max-width: 960px;
+  margin: 2.25rem auto;
+  padding: 0 1.25rem;
+}
+
+.tracking-title-section {
+  text-align: center;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.tracking-main-title {
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #374151;
+}
+
+.title-divider {
+  width: 52px;
+  height: 2px;
+  background-color: #9ca3af;
+  margin: 0.85rem auto 1rem auto;
+  border-radius: 2px;
+}
+
+.tracking-subtitle {
+  font-size: 0.88rem;
+  color: var(--ios-text-muted);
+  max-width: 680px;
+  margin: 0 auto;
+  line-height: 1.55;
+}
+
+.live-pill-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid #bbf7d0;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  background-color: var(--ios-green);
+  border-radius: 50%;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.85); opacity: 0.5; }
+  50% { transform: scale(1.35); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.5; }
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.badge.pending { background-color: #fef3c7; color: #92400e; }
+.badge.confirmed, .badge.processing { background-color: #e0f2fe; color: #0369a1; }
+.badge.shipped { background-color: #dbeafe; color: #1d4ed8; }
+.badge.delivered { background-color: #dcfce7; color: #15803d; }
+.badge.completed { background-color: #bbf7d0; color: #166534; }
+.badge.cancelled { background-color: #fee2e2; color: #b91c1c; }
+
+/* ==========================================================================
+   4-Column Summary Metrics Bar (Reference Photo match)
+   ========================================================================== */
+.metrics-bar {
+  background: var(--ios-card-bg);
+  border: 1.5px solid var(--ios-border-strong);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 1.25rem 1rem;
+  margin-bottom: 2.25rem;
+  box-shadow: var(--ios-shadow-subtle);
+}
+
+.metric-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+}
+
+.metric-col:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 15%;
+  height: 70%;
+  width: 1px;
+  background-color: #f0f0f0;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #475467;
+  margin-bottom: 0.35rem;
+}
+
+.metric-val {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ios-text-primary);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   iOS Card General Styles
+   ========================================================================== */
+.ios-card {
+  background: var(--ios-card-bg);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: var(--ios-radius);
+  padding: 2rem 2.25rem;
+  margin-bottom: 1.75rem;
+  box-shadow: var(--ios-shadow-card);
+}
+
+.section-subheading {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #475467;
+  margin-bottom: 1rem;
+}
+
+/* ==========================================================================
+   Order Stepper Section (Exact Match to Reference Photo)
+   ========================================================================== */
+.tracking-stepper-card {
+  padding-top: 2.25rem;
+  padding-bottom: 2.5rem;
+}
+
+.status-headline-wrap {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.status-headline {
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--ios-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.status-green {
+  color: var(--ios-green);
+  font-weight: 700;
+}
+
+.status-est-delivery {
+  font-size: 0.95rem;
+  color: #4b5563;
+  margin-top: 0.4rem;
+}
+
+.status-est-delivery strong {
+  color: var(--ios-text-primary);
+  font-weight: 600;
+}
+
+/* Continuous Progress Bar */
+.stepper-track-wrap {
+  position: relative;
+  margin: 1.5rem 0 1.25rem 0;
+  padding: 0 1.5rem;
+}
+
+.stepper-progress-bg {
+  position: absolute;
+  top: 22px;
+  left: 7%;
+  right: 7%;
+  height: 6px;
+  background-color: #e5e7eb;
+  border-radius: 9999px;
+  z-index: 1;
+}
+
+.stepper-progress-fill {
+  width: 0%;
+  height: 100%;
+  background-color: var(--ios-green);
+  border-radius: 9999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stepper {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  z-index: 2;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 140px;
+}
+
+.step-icon-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 3px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.step-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s ease;
+}
+
+.step.done .step-icon-circle,
+.step.active .step-icon-circle {
+  background-color: var(--ios-green);
+  border-color: var(--ios-green);
+  color: #ffffff;
+  box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.18);
+}
+
+.step.active .step-icon {
+  transform: scale(1.1);
+}
+
+.step-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #374151;
+  margin-top: 0.85rem;
+  letter-spacing: -0.01em;
+}
+
+.step.active .step-label,
+.step.done .step-label {
+  color: #111827;
+  font-weight: 700;
+}
+
+.step-date {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.tracking-banner {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--ios-radius-sm);
+  padding: 0.85rem 1.25rem;
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.tracking-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ios-text-secondary);
+  margin-right: 0.5rem;
+}
+
+.tracking-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ios-blue);
+  letter-spacing: 0.05em;
+}
+
+/* ==========================================================================
+   Two-Column Grid: Shipping Info + Apple Maps Style Preview
+   ========================================================================== */
+.shipping-and-map-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.shipping-info-card {
+  background: var(--ios-card-bg);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: var(--ios-radius);
+  padding: 1.75rem;
+  box-shadow: var(--ios-shadow-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.shipping-person-details {
+  margin-bottom: 1.5rem;
+}
+
+.recipient-highlight {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ios-text-primary);
+  margin-bottom: 0.4rem;
+}
+
+.address-highlight {
+  font-size: 0.95rem;
+  color: #374151;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.phone-highlight {
+  font-size: 0.88rem;
+  color: var(--ios-text-muted);
+}
+
+.phone-highlight span {
+  color: var(--ios-text-secondary);
+  font-weight: 600;
+}
+
+.shipping-delivery-perks {
+  border-top: 1px solid var(--ios-border);
+  padding-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.perk-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.perk-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--ios-green);
+  flex-shrink: 0;
+}
+
+/* Map Preview Card */
+.map-preview-card {
+  background: var(--ios-card-bg);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: var(--ios-radius);
+  overflow: hidden;
+  box-shadow: var(--ios-shadow-card);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.map-controls-header {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.map-view-toggle {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 3px;
+  display: flex;
+  pointer-events: auto;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.map-toggle-btn {
+  background: none;
+  border: none;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.map-toggle-btn.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.map-expand-btn {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.map-expand-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.map-viewport {
+  height: 100%;
+  min-height: 230px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f4f3f0;
+}
+
+.real-map-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+
+.map-viewport.leaflet-loaded .map-vector-graphic,
+.map-viewport.leaflet-loaded .map-pin-marker {
+  display: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12) !important;
+  font-size: 0.88rem !important;
+  color: #111827 !important;
+  padding: 0.25rem 0.5rem !important;
+}
+
+.leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+.leaflet-control-zoom {
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+
+.leaflet-control-zoom-in, .leaflet-control-zoom-out {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #374151 !important;
+  font-size: 15px !important;
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+}
+
+.shipping-and-map-grid.map-expanded {
+  grid-template-columns: 1fr;
+}
+
+.shipping-and-map-grid.map-expanded .map-preview-card {
+  min-height: 380px;
+}
+
+/* Pin Drop */
+.map-pin-marker {
+  position: absolute;
+  top: 55%;
+  left: 62%;
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+.map-pin-icon {
+  width: 28px;
+  height: 28px;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+}
+
+.map-pin-pulse {
+  position: absolute;
+  bottom: 0;
+  width: 16px;
+  height: 6px;
+  background: rgba(239, 68, 68, 0.4);
+  border-radius: 50%;
+  animation: pin-pulse 1.8s infinite;
+}
+
+@keyframes pin-pulse {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* ==========================================================================
+   Order Items Table (Apple Store Grouped Card Style)
+   ========================================================================== */
+.items-card {
+  padding-bottom: 1.75rem;
+}
+
+.items-table-wrapper {
+  overflow-x: auto;
+  margin: 0.5rem 0 1.25rem 0;
+}
+
+.items-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.95rem;
+}
+
+.items-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ios-text-muted);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--ios-border);
+}
+
+.items-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.items-table td strong {
+  color: var(--ios-text-primary);
+  font-weight: 600;
+}
+
+.items-table td code {
+  background: #f1f5f9;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.items-table td.money {
+  text-align: right;
+  font-weight: 600;
+  color: var(--ios-text-primary);
+}
+
+.total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 1rem 0 1rem;
+  border-top: 1px solid var(--ios-border);
+}
+
+.total-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ios-text-secondary);
+}
+
+.total-price {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ios-text-primary);
+  letter-spacing: -0.02em;
+}
+
+/* ==========================================================================
+   iOS Action Buttons
+   ========================================================================== */
+.actions-card {
+  border-left: 4px solid var(--ios-blue);
+}
+
+.action-hint {
+  font-size: 0.92rem;
+  color: var(--ios-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ios-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1.4rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease-in-out;
+  font-family: inherit;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.ios-btn:active {
+  transform: scale(0.98);
+}
+
+.ios-btn-primary {
+  background-color: var(--ios-blue);
+  color: #ffffff;
+}
+
+.ios-btn-primary:hover {
+  background-color: var(--ios-blue-hover);
+}
+
+.ios-btn-danger {
+  background-color: var(--ios-red);
+  color: #ffffff;
+}
+
+.ios-btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+.ios-btn-warning {
+  background-color: var(--ios-orange);
+  color: #ffffff;
+}
+
+.ios-btn-warning:hover {
+  background-color: #c2410c;
+}
+
+.ios-btn-secondary {
+  background-color: #475569;
+  color: #ffffff;
+}
+
+.ios-btn-secondary:hover {
+  background-color: #334155;
+}
+
+.ios-btn-ghost {
+  background-color: #ffffff;
+  border: 1px solid var(--ios-border-strong);
+  color: var(--ios-text-primary);
+}
+
+.ios-btn-ghost:hover {
+  background-color: #f9fafb;
+}
+
+/* Legacy .btn compatibility alias */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1.4rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.btn-primary { background: var(--ios-blue); color: #fff; }
+.btn-primary:hover { background: var(--ios-blue-hover); }
+.btn-danger { background: var(--ios-red); color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-warning { background: var(--ios-orange); color: #fff; }
+.btn-warning:hover { background: #c2410c; }
+.btn-secondary { background: #475569; color: #fff; }
+.btn-secondary:hover { background: #334155; }
+.btn-outline { background: #fff; border: 1px solid var(--ios-border-strong); color: var(--ios-text-primary); }
+.btn-outline:hover { background: #f9fafb; }
+
+/* Alerts */
+.ios-alert {
+  padding: 1rem 1.25rem;
+  border-radius: var(--ios-radius-sm);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.ios-alert--info {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.ios-alert--error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.nav-footer {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+@media (max-width: 768px) {
+  .metrics-bar {
+    grid-template-columns: repeat(2, 1fr);
+    row-gap: 1.25rem;
+  }
+  .metric-col:nth-child(2)::after {
+    display: none;
+  }
+  .shipping-and-map-grid {
+    grid-template-columns: 1fr;
+  }
+  .map-viewport {
+    min-height: 200px;
+  }
+  .stepper {
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+  }
+  .stepper-progress-bg {
+    display: none;
+  }
+  .step {
+    width: 90px;
+  }
+  .status-headline {
+    font-size: 1.3rem;
+  }
+}

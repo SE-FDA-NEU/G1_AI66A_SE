@@ -33,4 +33,10 @@ class SellerOrder(SQLModel, table=True):
         default_factory=lambda: datetime.now(UTC)
     )
 
+    tracking_number: str | None = Field(default=None, max_length=100)
+
+    shipped_at: datetime | None = None
+
+    delivered_at: datetime | None = None
+
     completed_at: datetime | None = None

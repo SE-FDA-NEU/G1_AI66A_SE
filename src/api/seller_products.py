@@ -8,8 +8,20 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.auth import SellerUser
 from src.database import SessionDep
 from src.errors import error_detail
-from src.schemas.seller_products import ProductCreate, SellerProductResponse
+from pydantic import BaseModel
+from src.models.product import Product
+from src.schemas.seller_products import ProductCreate, SellerProduct, SellerProductResponse
 from src.services.seller_products import SellerProductError, create_product
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    price: int | None = None
+    stock_quantity: int | None = None
+    image_url: str | None = None
+    is_active: bool | None = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,3 +63,52 @@ def create_seller_product(
             detail=error_detail("ERR_DATABASE_FAILURE", CREATE_DATABASE_ERROR_MESSAGE),
         ) from error
     return SellerProductResponse(data=product)
+
+
+@router.patch("/{product_id}", response_model=SellerProductResponse)
+@router.put("/{product_id}", response_model=SellerProductResponse)
+def update_seller_product(
+    product_id: int,
+    body: ProductUpdate,
+    seller: SellerUser,
+    session: SessionDep,
+) -> SellerProductResponse:
+    """Update a seller-owned product listing; unauthorized owners are rejected."""
+    product = session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_detail("ERR_PRODUCT_NOT_FOUND", "Product not found."),
+        )
+    if product.seller_id != seller.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_RESOURCE_OWNER", "You do not own this product."),
+        )
+    if body.name is not None:
+        product.name = body.name
+    if body.description is not None:
+        product.description = body.description
+    if body.price is not None:
+        if body.price <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_detail("ERR_VALIDATION", "Price must be positive."),
+            )
+        product.price = body.price
+    if body.stock_quantity is not None:
+        if body.stock_quantity < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_detail("ERR_VALIDATION", "Stock quantity must be non-negative."),
+            )
+        product.stock_quantity = body.stock_quantity
+    if body.image_url is not None:
+        product.image_url = body.image_url
+    if body.is_active is not None:
+        product.is_active = body.is_active
+    product.version += 1
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return SellerProductResponse(data=SellerProduct.model_validate(product, from_attributes=True))

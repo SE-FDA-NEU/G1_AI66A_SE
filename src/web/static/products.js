@@ -36,6 +36,9 @@ const elements = {
   page: document.getElementById("products-page"),
   loginLink: document.getElementById("login-link"),
   logoutButton: document.getElementById("logout-button"),
+  buyerOrdersLink: document.getElementById("buyer-orders-link"),
+  sellerNewProductLink: document.getElementById("seller-new-product-link"),
+  sellerOrdersLink: document.getElementById("seller-orders-link"),
 };
 
 let currentPage = 1;
@@ -48,8 +51,20 @@ let currentRating = "";
 let currentInStock = true;
 let currentSort = "";
 
+function getUserFromToken() {
+  const token = localStorage.getItem("access_token");
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return { id: Number(payload.sub), role: payload.role };
+  } catch {
+    return null;
+  }
+}
+
 function configureNavigation() {
-  const hasToken = Boolean(localStorage.getItem("access_token"));
+  const user = getUserFromToken();
+  const hasToken = Boolean(user);
   if (elements.loginLink) elements.loginLink.hidden = hasToken;
   if (elements.logoutButton) elements.logoutButton.hidden = !hasToken;
   if (!hasToken && elements.loginLink) {
@@ -57,6 +72,19 @@ function configureNavigation() {
     if (currentPath && currentPath !== "/login") {
       elements.loginLink.href = `/login?return_to=${encodeURIComponent(currentPath)}`;
     }
+  }
+
+  const isSeller = Boolean(user && user.role === "seller");
+  const isBuyer = Boolean(user && user.role === "buyer");
+
+  if (elements.buyerOrdersLink) {
+    elements.buyerOrdersLink.hidden = !isBuyer;
+  }
+  if (elements.sellerNewProductLink) {
+    elements.sellerNewProductLink.hidden = !isSeller;
+  }
+  if (elements.sellerOrdersLink) {
+    elements.sellerOrdersLink.hidden = !isSeller;
   }
 }
 

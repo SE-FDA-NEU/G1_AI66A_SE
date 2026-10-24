@@ -18,6 +18,13 @@ async function load() {
     const rows = [`Order #${order.id} \u00b7 ${order.status}`, `Total: ${money(order.total_amount)}`, `${order.recipient_name} \u00b7 ${order.delivery_address} \u00b7 ${order.phone_number}`,
       ...order.items.map(i => `${i.product_name} (${i.product_code}) \u00d7 ${i.quantity} \u00b7 ${money(i.unit_price)} each`)];
     for (const text of rows) { const p = document.createElement("p"); p.textContent = text; receipt.append(p); }
+    const trackerAction = document.getElementById("tracker-action");
+    const trackOrderButton = document.getElementById("track-order-button");
+    if (trackerAction && trackOrderButton) {
+      trackOrderButton.href = `/order/${order.id}`;
+      trackOrderButton.textContent = `📦 Track Order (#${order.id})`;
+      trackerAction.hidden = false;
+    }
   } catch(e) { document.getElementById("status").textContent = "Confirmation unavailable."; document.getElementById("error").textContent = e.message; retry.hidden = false; }
 }
 retry.addEventListener("click", load); load();
