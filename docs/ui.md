@@ -142,7 +142,8 @@ Screenshots: [in stock](images/ui/detail-in-stock.png),
 *The user comes here to check what they are buying and change quantities before
 checkout.*
 Calls: `GET /api/v1/cart`, `PATCH /api/v1/cart/items/{productCode}`,
-`DELETE /api/v1/cart/items/{productCode}`
+`DELETE /api/v1/cart/items/{productCode}`,
+`PATCH /api/v1/cart/items/{item_id}/select`, `PATCH /api/v1/cart/select-shop/{seller_id}`
 
 ```text
 +- Empty -----------------------------+  +- Loading ---------------------------+
@@ -169,8 +170,9 @@ Inside the data state:
 - A typed quantity that is not a whole number of at least 1 shows "Enter a whole
   number of at least 1."
 - A line whose product was withdrawn or ran out is kept and flagged ("This product is
-  no longer available." or "This product is out of stock."); **Checkout** is disabled
-  until it is changed.
+  no longer available." or "This product is out of stock.") and deselected.
+  **Checkout** requires at least one selected available item; unselected unavailable
+  rows do not block it.
 - A seller who opens the cart sees "The cart is for buyer accounts. Log in with a
   buyer account to shop." A guest goes to login and back.
 
@@ -393,3 +395,12 @@ could not name the product. `OrderLine` now also carries `product_code` and
 `product_name`, read from `products` when the receipt is built; `unit_price` stays the
 price stored at checkout. The change adds fields only, so existing clients keep
 working; it is recorded in design.md section 3.3 and in the section 6.4 table.
+
+
+### US12 grouped cart selection (#104)
+
+The cart groups rows by seller, supports persisted item/shop selection, displays
+shop and selected totals, separates unavailable rows and discloses price changes.
+Checkout shows and orders only selected items; unselected rows remain after success.
+See [runtime contract, migration and acceptance checks](us12-cart-selection.md).
+The earlier screenshots show Sprint 3; new US12 browser screenshots remain pending.

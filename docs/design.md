@@ -220,6 +220,8 @@ The current implementation already uses these fields in the `Product` SQLModel. 
 | `buyer_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
 | `product_id` | INTEGER | NOT NULL, Foreign Key → `products.id` |
 | `quantity` | INTEGER | NOT NULL, CHECK `quantity > 0` |
+| `is_selected` | BOOLEAN | NOT NULL, defaults to true |
+| `price_at_add` | INTEGER | Initial unit price; nullable only for legacy/imported rows |
 | `created_at` | DATETIME | NOT NULL |
 
 Additional constraint:
@@ -637,6 +639,8 @@ model; this contract does not assume that every identifier is a UUID.
 | `POST /api/v1/cart/items` | U (buyer) | JSON: `{ "product_code": "P-100", "quantity": 1 }` | `201 Created` for a new line, or `200 OK` when an existing line is increased; returns the updated cart in the same shape as `GET` | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer, such as `true`, `1.5` or `"2"`; `401 Unauthorized`; `404 Not Found` (`ERR_PRODUCT_NOT_FOUND`) for an unknown product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`), when the quantity after adding exceeds available stock (`ERR_STOCK_EXCEEDED`), or when concurrent requests on the same line still collide after five attempts (`ERR_CONCURRENCY_CONFLICT`) | US03 Cart management |
 | `PATCH /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; JSON: `{ "quantity": 2 }` | `200 OK`: updated cart with recalculated line and cart totals | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity, because a line is removed with `DELETE`; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer; `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`) or the new quantity exceeds available stock (`ERR_STOCK_EXCEEDED`) | US03 Cart management |
 | `DELETE /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; no body | `200 OK`: updated cart after removing the line | `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code | US03 Cart management |
+| `PATCH /api/v1/cart/items/{item_id}/select` | U (buyer) | Cart row ID; strict boolean `is_selected` | `200 OK`: full cart and selected total | 401/403; 404 missing/other buyer; 409 unavailable; 422 invalid input | US12 item selection |
+| `PATCH /api/v1/cart/select-shop/{seller_id}` | U (buyer) | Seller ID; strict boolean `is_selected` | `200 OK`: atomic shop selection, unavailable rows deselected | 401/403; 404 no rows in this buyer's shop; 422 invalid input | US12 shop selection |
 | `POST /api/v1/orders` | U (buyer) | Header `Idempotency-Key` (1-64 characters); JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, items (`product_id`, `product_code`, `product_name`, `quantity`, purchase-time `unit_price`, `line_total`), total, status, and delivery information; `200 OK` with the same order when the same key and body are replayed | `400 Bad Request` for an empty cart (`ERR_EMPTY_CART`) or a key with surrounding spaces (`ERR_INVALID_KEY`); `422` (`ERR_VALIDATION`) for invalid delivery fields or a missing key; `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `409 Conflict` when a product is unavailable (`ERR_PRODUCT_UNAVAILABLE`), stock changed (`ERR_STOCK_EXCEEDED`), the cart changed (`ERR_CONCURRENCY_CONFLICT`) or the key was used with another body (`ERR_IDEMPOTENCY_CONFLICT`); `500` (`ERR_DATABASE_FAILURE`) | US04 Checkout and order placement |
 | `GET /api/v1/orders/{orderId}` | U (buyer) | Path: integer `orderId` | `200 OK`: the same order shape as checkout, so the confirmation page names each product | `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `404 Not Found` (`ERR_ORDER_NOT_FOUND`) for a missing order or another buyer's order; `422` for a non-integer id | US04 Order confirmation |
 | `POST /api/v1/seller/products` | S | JSON product body: `name`, `description`, `price` (integer VND), `stock_quantity`, and `image_url` (absolute http(s) URL); seller, code and status come from the server (#81) | `201 Created`: `{ "data": ... }` with the new listing, its generated `code`, seller ownership and `is_active` status | `422 Unprocessable Entity` (`ERR_VALIDATION`) with messages per field in `error.fields` for empty, invalid or out-of-range values; `401 Unauthorized`; `403 Forbidden` for a non-seller account; `409 Conflict` when no unique product code could be assigned; `500` on database failure | US06 Create product listing |
@@ -647,7 +651,7 @@ model; this contract does not assume that every identifier is a UUID.
 
 `subOrderId` is `seller_orders.id` from section 2. Fulfilment status is stored per seller order, so a seller changes the status of their whole part of a marketplace order, not of a single order item.
 
-#### Cart response and rules (US03)
+#### Cart response and rules (US03, US12)
 
 Every cart endpoint, read or mutation, returns the whole cart in one shape
 (`CartResponse` in `src/schemas/cart.py`), so the `/cart` page always renders
@@ -658,6 +662,12 @@ the server's answer instead of keeping its own copy of the rules:
   "data": {
     "items": [
       {
+        "cart_item_id": 1,
+        "seller_id": 1,
+        "seller_name": "Demo Seller",
+        "is_selected": true,
+        "price_at_add": 180000,
+        "price_changed": false,
         "product_id": 1,
         "product_code": "P-100",
         "name": "Wireless Mouse",
@@ -669,7 +679,9 @@ the server's answer instead of keeping its own copy of the rules:
         "availability": "available"
       }
     ],
-    "cart_total": 360000
+    "cart_total": 360000,
+    "selected_total": 360000,
+    "supports_partial_checkout": true
   }
 }
 ```
@@ -694,7 +706,7 @@ token itself:
 - When stock drops or a product is withdrawn after it was added, `GET` keeps
   the line and its quantity and flags it through `availability`. Nothing is
   removed or reduced without the buyer. Flagged lines still count in
-  `cart_total`.
+  `cart_total`, but are deselected and excluded from `selected_total`.
 - A refused change leaves the cart exactly as it was. Each mutation commits or
   rolls back inside the service; the router does not commit again.
 - The database allows one line per buyer and product:
@@ -1178,3 +1190,12 @@ status response. No authentication is required at entry; protected APIs continue
 to enforce roles. This addresses technical observation OBS01 from #83. The
 integration test follows the root contract then verifies catalog through receipt;
 existing root metadata tests continue to check the non-browser response.
+
+
+## US12 selected checkout implementation (#104)
+
+The cart persists selection and price-at-add, groups by seller in the UI, and
+checks out only selected rows. The runtime contract, migration behavior,
+transaction boundaries and acceptance checks are documented in
+[US12 cart selection](us12-cart-selection.md). This implementation completes the
+story scope, including persistence, selected checkout and regression coverage.

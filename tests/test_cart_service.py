@@ -72,6 +72,12 @@ def test_first_add_stores_one_line(engine: Engine) -> None:
     assert result.created is True
     assert result.cart.items == [
         CartLine(
+            cart_item_id=1,
+            seller_id=1,
+            seller_name="Seller",
+            is_selected=True,
+            price_at_add=150_000,
+            price_changed=False,
             product_id=product_id,
             product_code="P-100",
             name="Product P-100",

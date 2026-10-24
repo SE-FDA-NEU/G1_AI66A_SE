@@ -380,6 +380,7 @@ def _seed_demo_scenarios(session: Session) -> bool:
             buyer_id=buyer.id,
             product_id=products["P-DEMO-CART"].id,
             quantity=2,
+            price_at_add=products["P-DEMO-CART"].price,
             created_at=DEMO_DATE,
         )
     )

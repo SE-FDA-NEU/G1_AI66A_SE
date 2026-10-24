@@ -246,3 +246,83 @@
   color: var(--color-accent);
   font-weight: 600;
 }
+
+/* US12 adds selection within the existing cart layout and shared colour tokens. */
+.cart-shop {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.cart-shop__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-bottom: 12px;
+}
+
+.cart-shop__name {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+
+.cart-shop__subtotal {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cart-shop__unavailable h3 {
+  margin: 16px 0 8px;
+  font-size: 1rem;
+}
+
+.cart-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.cart-selection input {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.cart-selection input:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.cart-selection:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.cart-line__selection {
+  grid-area: selection;
+}
+
+.cart-line--selectable {
+  grid-template-areas:
+    "selection selection selection"
+    "image info info"
+    "quantity quantity quantity"
+    "remove . total";
+}
+
+@media (min-width: 720px) {
+  .cart-line--selectable {
+    grid-template-areas:
+      "selection selection selection selection selection"
+      "image info quantity total remove";
+  }
+}

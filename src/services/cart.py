@@ -17,6 +17,7 @@ from sqlmodel import Session, select
 
 from src.models.cart_item import CartItem
 from src.models.product import Product
+from src.models.user import User
 from src.schemas.cart import Cart, CartLine, CartLineAvailability
 
 INVALID_QUANTITY_MESSAGE = "Quantity must be a whole number of at least 1."
@@ -111,9 +112,7 @@ def find_product(session: Session, product_code: str) -> Product:
     return product
 
 
-def find_cart_item_for_product(
-    session: Session, buyer_id: int, product_id: int
-) -> CartItem | None:
+def find_cart_item_for_product(session: Session, buyer_id: int, product_id: int) -> CartItem | None:
     """Return the buyer's line for a product, or None when the product is not in the cart."""
     return session.exec(
         select(CartItem).where(CartItem.buyer_id == buyer_id, CartItem.product_id == product_id)
@@ -165,9 +164,17 @@ def is_lost_race(error: Exception) -> bool:
     return code is not None and code & 0xFF in (SQLITE_BUSY, SQLITE_LOCKED)
 
 
-def to_cart_line(cart_item: CartItem, product: Product) -> CartLine:
+def to_cart_line(cart_item: CartItem, product: Product, seller: User) -> CartLine:
     """Price one line from the current product row."""
+    availability = get_line_availability(product, cart_item.quantity)
+    baseline = cart_item.price_at_add if cart_item.price_at_add is not None else product.price
     return CartLine(
+        cart_item_id=cart_item.id,
+        seller_id=seller.id,
+        seller_name=seller.name,
+        is_selected=cart_item.is_selected and availability == CartLineAvailability.AVAILABLE,
+        price_at_add=baseline,
+        price_changed=baseline != product.price,
         product_id=product.id,
         product_code=product.code,
         name=product.name,
@@ -180,6 +187,24 @@ def to_cart_line(cart_item: CartItem, product: Product) -> CartLine:
     )
 
 
+def update_line_fields(session: Session, line: CartItem, **values: object) -> None:
+    """Do not update a replacement row if SQLite reused a removed line's ID."""
+    changed = session.exec(
+        update(CartItem)
+        .where(
+            CartItem.id == line.id,
+            CartItem.buyer_id == line.buyer_id,
+            CartItem.product_id == line.product_id,
+            CartItem.quantity == line.quantity,
+        )
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    if changed.rowcount != 1:
+        raise StaleCartLine
+    session.expire(line)
+
+
 def build_cart_snapshot(session: Session, buyer_id: int) -> Cart:
     """Read the buyer's cart with current prices and stock, in the order lines were added.
 
@@ -187,13 +212,30 @@ def build_cart_snapshot(session: Session, buyer_id: int) -> Cart:
     `availability`; they are never removed or shrunk silently.
     """
     rows = session.exec(
-        select(CartItem, Product)
+        select(CartItem, Product, User)
         .join(Product, Product.id == CartItem.product_id)
+        .join(User, User.id == Product.seller_id)
         .where(CartItem.buyer_id == buyer_id)
         .order_by(CartItem.id)
     ).all()
-    lines = [to_cart_line(cart_item, product) for cart_item, product in rows]
-    return Cart(items=lines, cart_total=sum(line.line_total for line in lines))
+    lines = []
+    for cart_item, product, seller in rows:
+        changes = {}
+        if cart_item.price_at_add is None:
+            changes["price_at_add"] = product.price
+        if cart_item.is_selected and (
+            get_line_availability(product, cart_item.quantity) != CartLineAvailability.AVAILABLE
+        ):
+            changes["is_selected"] = False
+        if changes:
+            update_line_fields(session, cart_item, **changes)
+        line = to_cart_line(cart_item, product, seller)
+        lines.append(line)
+    return Cart(
+        items=lines,
+        cart_total=sum(line.line_total for line in lines),
+        selected_total=sum(line.line_total for line in lines if line.is_selected),
+    )
 
 
 class CartService:
@@ -203,8 +245,12 @@ class CartService:
         self.session = session
 
     def get_cart(self, buyer_id: int) -> Cart:
-        """Return the cart; a buyer without lines gets an empty cart with total 0."""
-        return build_cart_snapshot(self.session, buyer_id)
+        """Return current totals and persist deselection of rows that cannot be bought.
+
+        Selection does not reserve stock. Once a row becomes unavailable it stays
+        deselected even if the seller replenishes stock before the next cart visit.
+        """
+        return self._run_mutation(lambda: build_cart_snapshot(self.session, buyer_id))
 
     def add_item(self, buyer_id: int, product_code: str, quantity: int) -> AddItemResult:
         """Add a new line, or increase the existing one; the resulting quantity must fit stock."""
@@ -216,7 +262,13 @@ class CartService:
             if cart_item is None:
                 validate_purchasable_quantity(product, quantity)
                 self.session.add(
-                    CartItem(buyer_id=buyer_id, product_id=product.id, quantity=quantity)
+                    CartItem(
+                        buyer_id=buyer_id,
+                        product_id=product.id,
+                        quantity=quantity,
+                        price_at_add=product.price,
+                        is_selected=True,
+                    )
                 )
                 return AddItemResult(cart=self._flush_and_snapshot(buyer_id), created=True)
             validate_purchasable_quantity(product, cart_item.quantity + quantity)
@@ -244,6 +296,45 @@ class CartService:
         def change() -> Cart:
             cart_item, _product = find_buyer_cart_item(self.session, buyer_id, product_code)
             self.session.delete(cart_item)
+            return self._flush_and_snapshot(buyer_id)
+
+        return self._run_mutation(change)
+
+    def select_item(self, buyer_id: int, item_id: int, selected: bool) -> Cart:
+        """Change one owned row; selecting an unavailable quantity is refused."""
+
+        def change() -> Cart:
+            row = self.session.exec(
+                select(CartItem, Product)
+                .join(Product, Product.id == CartItem.product_id)
+                .where(CartItem.id == item_id, CartItem.buyer_id == buyer_id)
+            ).first()
+            if row is None:
+                raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
+            line, product = row
+            if selected:
+                validate_purchasable_quantity(product, line.quantity)
+            update_line_fields(self.session, line, is_selected=selected)
+            return self._flush_and_snapshot(buyer_id)
+
+        return self._run_mutation(change)
+
+    def select_shop(self, buyer_id: int, seller_id: int, selected: bool) -> Cart:
+        """Change a shop atomically, keeping its unavailable rows deselected."""
+
+        def change() -> Cart:
+            rows = self.session.exec(
+                select(CartItem, Product)
+                .join(Product, Product.id == CartItem.product_id)
+                .where(CartItem.buyer_id == buyer_id, Product.seller_id == seller_id)
+            ).all()
+            if not rows:
+                raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
+            for line, product in rows:
+                available = (
+                    get_line_availability(product, line.quantity) == CartLineAvailability.AVAILABLE
+                )
+                update_line_fields(self.session, line, is_selected=selected and available)
             return self._flush_and_snapshot(buyer_id)
 
         return self._run_mutation(change)
