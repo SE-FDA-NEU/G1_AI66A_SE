@@ -22,9 +22,28 @@ const elements = {
 };
 
 const transitions = {
-  PENDING: [{ status: "PROCESSING", label: "Start processing" }, { status: "CANCELLED", label: "Cancel" }],
-  PROCESSING: [{ status: "SHIPPED", label: "Mark shipped" }],
-  SHIPPED: [{ status: "COMPLETED", label: "Mark completed" }],
+  PENDING: [
+    { status: "CONFIRMED", label: "Confirm order" },
+    { status: "PROCESSING", label: "Start processing" },
+    { status: "CANCELLED", label: "Cancel" },
+  ],
+  CONFIRMED: [
+    { status: "SHIPPED", label: "Mark shipped" },
+    { status: "CANCELLED", label: "Cancel" },
+  ],
+  PROCESSING: [
+    { status: "SHIPPED", label: "Mark shipped" },
+    { status: "CANCELLED", label: "Cancel" },
+  ],
+  CANCELLATION_REQUESTED: [
+    { status: "CANCELLED", label: "Approve cancellation" },
+    { status: "CONFIRMED", label: "Reject cancellation" },
+  ],
+  SHIPPED: [
+    { status: "DELIVERED", label: "Mark delivered" },
+    { status: "COMPLETED", label: "Mark completed" },
+  ],
+  DELIVERED: [{ status: "COMPLETED", label: "Mark completed" }],
   COMPLETED: [],
   CANCELLED: [],
 };
@@ -95,8 +114,18 @@ function createOrderCard(order) {
     line.textContent = `${item.product_name} × ${item.quantity} (${item.total_price.toLocaleString("vi-VN")} ₫)`;
     items.append(line);
   });
-  card.append(items);
-  transitions[order.status].forEach((transition) => {
+  if (order.tracking_number) {
+    const tracking = document.createElement("p");
+    tracking.className = "order-card__tracking";
+    tracking.textContent = `Tracking: ${order.tracking_number}`;
+    card.append(tracking);
+  }
+  const trackLink = document.createElement("a");
+  trackLink.href = `/order/${order.order_id}`;
+  trackLink.textContent = `Track Order (parent #${order.order_id})`;
+  trackLink.className = "order-card__tracker-link";
+  card.append(trackLink);
+  transitions[order.status]?.forEach((transition) => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = transition.label;
@@ -136,12 +165,17 @@ async function loadOrders(page = currentPage) {
 
 async function updateStatus(id, status) {
   if (status === "CANCELLED" && !window.confirm("Cancel this order and restore stock?")) return;
+  const body = { status };
+  if (status === "SHIPPED" && typeof window.prompt === "function") {
+    const tracking = window.prompt("Enter tracking number (optional):");
+    if (tracking && tracking.trim()) body.tracking_number = tracking.trim();
+  }
   let payload;
   try {
     payload = await request(`/api/v1/seller/orders/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
   } catch (error) {
     // Keep the list on screen; only this order failed to change.

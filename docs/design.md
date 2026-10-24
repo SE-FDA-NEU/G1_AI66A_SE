@@ -725,6 +725,7 @@ implementation"). This table lists every code the code raises, checked by
 | `400 Bad Request` | `ERR_INVALID_QUANTITY` | A cart quantity is 0 or negative | Cart |
 | `400 Bad Request` | `ERR_EMPTY_CART` | Checkout with no cart lines | Orders |
 | `400 Bad Request` | `ERR_INVALID_KEY` | The `Idempotency-Key` has surrounding spaces | Orders |
+| `400 Bad Request` | `ERR_SELF_PURCHASE` | A seller attempts to add or checkout their own product | Cart, orders |
 | `400 Bad Request` | `ERR_INVALID_TRANSITION` | A seller order status change that the state machine does not allow (section 3.6) | Seller orders |
 | `400 Bad Request` | `ERR_INVALID_STATUS` | The seller order `status` filter is not a known status | Seller orders |
 | `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders |

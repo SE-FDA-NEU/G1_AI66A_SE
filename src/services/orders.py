@@ -24,10 +24,28 @@ class CheckoutError(Exception):
         self.code, self.message, self.status = code, message, status
 
 
-def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
-    order = session.exec(
-        select(Order).where(Order.id == order_id, Order.buyer_id == buyer_id)
-    ).first()
+def receipt(
+    session: Session,
+    buyer_id: int | None,
+    order_id: int,
+    seller_id: int | None = None,
+) -> OrderData:
+    if seller_id is not None:
+        sub_order = session.exec(
+            select(SellerOrder).where(
+                SellerOrder.order_id == order_id,
+                SellerOrder.seller_id == seller_id,
+            )
+        ).first()
+        if sub_order is None:
+            raise CheckoutError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
+        order = session.get(Order, order_id)
+    elif buyer_id is not None:
+        order = session.exec(
+            select(Order).where(Order.id == order_id, Order.buyer_id == buyer_id)
+        ).first()
+    else:
+        order = session.get(Order, order_id)
     if order is None:
         raise CheckoutError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
     rows = session.exec(
@@ -39,6 +57,12 @@ def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
     ).all()
     values = order.model_dump(exclude={"buyer_id", "request_key", "request_hash"})
     values["created_at"] = order.created_at.replace(tzinfo=UTC)
+    if order.shipped_at:
+        values["shipped_at"] = order.shipped_at.replace(tzinfo=UTC)
+    if order.delivered_at:
+        values["delivered_at"] = order.delivered_at.replace(tzinfo=UTC)
+    if order.completed_at:
+        values["completed_at"] = order.completed_at.replace(tzinfo=UTC)
     return OrderData(
         **values,
         items=[
@@ -89,6 +113,12 @@ def checkout(
                     raise CheckoutError(
                         "ERR_PRODUCT_UNAVAILABLE",
                         f"Product {line.product_id} is no longer available.",
+                    )
+                if product.seller_id == buyer_id:
+                    raise CheckoutError(
+                        "ERR_SELF_PURCHASE",
+                        "Sellers cannot purchase their own products.",
+                        status=400,
                     )
                 changed = session.exec(
                     update(Product)
