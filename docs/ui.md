@@ -70,6 +70,15 @@ UI-G2 to UI-G6, found while writing the first version of this document, were fix
 navigation, sends guests to login, explains network failures and keeps the list when
 a status change fails.
 
+US13 (#105) extends `/checkout` with an address book, available even when the cart is
+empty. Buyers can add/edit six required fields, delete with confirmation and set a
+default. The selector uses the default or smallest ID; manual entry is explicit.
+Address and checkout forms are independent. Required fields show *, inline errors
+have aria-invalid/aria-describedby and focus, and mobile cards wrap long addresses.
+Pending checkout freezes changes and replays its stored body/key before loading
+addresses. Stale versions require another selection after reviewing the refreshed book.
+See [US13 verification](us13-addresses.md).
+
 ## 2. Wireframes
 
 One wireframe per P0 screen, plus login. Each says why the user comes and which API

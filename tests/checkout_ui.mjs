@@ -7,15 +7,28 @@ import vm from "node:vm";
 const checkoutSource = await readFile(new URL("../src/web/static/checkout.js", import.meta.url), "utf8");
 const confirmationSource = await readFile(new URL("../src/web/static/confirmation.js", import.meta.url), "utf8");
 const body = {recipient_name:"Buyer", delivery_address:"123 Main", phone_number:"0912345678"};
-function setup(responses, saved = null, script = checkoutSource) {
+export function setup(responses, saved = null, script = checkoutSource, addressResponses = []) {
   const nodes = new Map();
   const element = () => ({hidden:false, disabled:false, textContent:"", children:[],
     handlers:{}, append(child) {this.children.push(child);}, replaceChildren() {this.children=[];},
-    addEventListener(name, handler) {this.handlers[name]=handler;}, focus() {}});
-  const fields = Object.keys(body).map(name => ({name,value:body[name],disabled:false,focus(){}}));
+    querySelectorAll() {return [];}, setAttribute(name,value){this[name]=value;}, removeAttribute(name){delete this[name];},
+    addEventListener(name, handler) {this.handlers[name]=handler;}, focus() {if (!this.disabled) this.focused=true;}});
+  const fields = Object.keys(body).map(name => ({...element(),name,value:body[name],disabled:false}));
   for (const field of fields) fields[field.name] = field;
   const form = element(); form.elements=fields; form.reportValidity=()=>true;
+  form.hidden = true;
   nodes.set("checkout-form",form);
+  const addressForm=element(); addressForm.hidden=true;
+  addressForm.elements=["recipient_name","phone_number","province","district","ward","detailed_address","is_default"].map(name=>({...element(),name,value:"",checked:false}));
+  for (const field of addressForm.elements) addressForm.elements[field.name]=field;
+  addressForm.reportValidity=()=>true; nodes.set("address-form",addressForm);
+  const choice=element();choice.value="";nodes.set("address-choice",choice);
+  const book=element();book.hidden=true;
+  book.querySelectorAll=()=>[choice,...addressForm.elements,
+    ...["add-address","reload-addresses","confirm-delete","cancel-delete","cancel-address"].map(id=>nodes.get(id)),
+    ...(nodes.get("address-list")?.children || []).flatMap(card=>card.children.slice(1))].filter(Boolean);
+  nodes.set("address-book",book);
+
   const storage = new Map(saved ? [["checkout:2",JSON.stringify(saved)]] : []);
   const calls=[], navigations=[];
   const auth = {token:"token"};
@@ -28,18 +41,18 @@ function setup(responses, saved = null, script = checkoutSource) {
     FormData:class { constructor() {return Object.entries(body)[Symbol.iterator]();} },
     fetch:async(url,options)=> {
       calls.push({url,options});
-      const result=responses.shift();
+      const result=await (url.startsWith("/api/v1/addresses") ? (addressResponses.shift() || {payload:{data:[]}}) : responses.shift());
       if (result instanceof Error) throw result;
       assert.ok(result,`Unexpected request: ${url}`);
-      return {status:result.status??200,ok:(result.status??200)<400,json:async()=>result.payload};
+      return {status:result.status??200,ok:(result.status??200)<400,json:async()=>{assert.notEqual(result.status,204,"DELETE 204 has no JSON body");return result.payload;}};
     }, Intl, console,
   });
   vm.runInContext(script,context);
   return {context,nodes,storage,calls,navigations,auth};
 }
 const user={payload:{id:2,role:"buyer"}};
-const cart={payload:{data:{items:[{name:"Mouse",quantity:1,line_total:100,availability:"available"}],cart_total:100}}};
-const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const cart={payload:{data:{items:[{name:"Mouse",quantity:1,line_total:100,availability:"available",is_selected:true}],selected_total:100,cart_total:100}}};
+export const tick=()=>new Promise(resolve=>setImmediate(resolve));
 let test=setup([user,cart]); await tick();
 assert.equal(test.nodes.get("checkout-form").hidden,false);
 assert.match(test.nodes.get("summary").children[0].textContent,/Mouse/);
@@ -60,8 +73,8 @@ assert.equal(test.nodes.get("checkout-form").elements.phone_number.value,body.ph
 assert.equal(test.nodes.get("checkout-form").elements.phone_number.disabled,false);
 assert.equal(test.storage.size,0);
 // Empty and unavailable carts cannot submit.
-for (const items of [[],[{name:"Mouse",quantity:1,line_total:100,availability:"unavailable"}]]) {
-  test=setup([user,{payload:{data:{items,cart_total:0}}}]); await tick();
+for (const items of [[],[{name:"Mouse",quantity:1,line_total:100,is_selected:true,availability:"unavailable"}]]) {
+  test=setup([user,{payload:{data:{items,selected_total:items.reduce((n,item)=>n+item.line_total,0),cart_total:0}}}]); await tick();
   assert.equal(test.nodes.get("checkout-form").hidden,true);
 }
 // Receipt retries are GET-only and do not create another order.
