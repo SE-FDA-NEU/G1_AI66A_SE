@@ -10,14 +10,13 @@ Acceptance criteria covered:
 """
 
 from datetime import UTC, datetime, timedelta
-
-import pytest
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlmodel import Session, SQLModel, delete, select
+from sqlmodel import Session, SQLModel, select
 
 from src.auth import create_access_token
 from src.database import get_session
@@ -82,7 +81,9 @@ def sample_catalog(discovery_engine):
             session.add(seller1)
         seller2 = session.get(User, 2)
         if seller2 is None:
-            seller2 = User(id=2, name="Secondary Seller", email="seller2@example.com", role="seller")
+            seller2 = User(
+                id=2, name="Secondary Seller", email="seller2@example.com", role="seller"
+            )
             session.add(seller2)
         session.commit()
 
@@ -359,7 +360,10 @@ def test_sort_rating_desc(client: TestClient, sample_catalog):
 def test_pagination_returns_total_items_total_pages_current_page(
     client: TestClient, sample_catalog
 ):
-    """API metadata conforms to US11 specification containing total_items, total_pages, current_page."""
+    """
+    API metadata conforms to US11 specification containing total_items, total_pages,
+    current_page.
+    """
     res = client.get("/api/v1/products?limit=2&page=2&sort=price_asc")
     assert res.status_code == 200
     meta = res.json()["meta"]
@@ -442,7 +446,10 @@ def test_sellers_endpoint_lists_sellers(client: TestClient, sample_catalog):
 
 
 def test_products_page_contains_all_discovery_controls(client: TestClient):
-    """Frontend HTML includes all discovery inputs, filters, sort dropdown, and empty state reset button."""
+    """
+    Frontend HTML includes all discovery inputs, filters, sort dropdown, and empty state reset
+    button.
+    """
     html = client.get("/products").text
     assert 'id="products-search"' in html
     assert 'id="product-search-input"' in html
@@ -480,7 +487,10 @@ def test_stock_filter_false_returns_all_active_products(client: TestClient, samp
 def test_seller_product_creation_creates_metadata_and_integrates_discovery(
     client: TestClient, discovery_engine, sample_catalog
 ):
-    """Newly created products through seller API receive ProductMetadata and integrate with filters."""
+    """
+    Newly created products through seller API receive ProductMetadata and integrate with
+    filters.
+    """
     with Session(discovery_engine) as session:
         seller = session.get(User, 1)
         token = create_access_token(seller)
@@ -628,7 +638,9 @@ def test_metadata_consistency_order_checkout_and_cancellation(
 
 
 def test_categories_and_sellers_error_handling_contracts(client: TestClient):
-    """Categories and sellers endpoints return 500 with ERR_DATABASE_FAILURE upon database failure."""
+    """
+    Categories and sellers endpoints return 500 with ERR_DATABASE_FAILURE upon database failure.
+    """
     with patch("sqlmodel.Session.exec", side_effect=SQLAlchemyError("Simulated DB down")):
         cat_res = client.get("/api/v1/categories")
         assert cat_res.status_code == 500
@@ -642,7 +654,10 @@ def test_categories_and_sellers_error_handling_contracts(client: TestClient):
 
 
 def test_frontend_products_js_race_condition_handling(client: TestClient):
-    """Frontend products.js uses AbortController and request ID sequence tracking for rapid filter changes."""
+    """
+    Frontend products.js uses AbortController and request ID sequence tracking for rapid filter
+    changes.
+    """
     script = client.get("/static/products.js").text.replace("\r\n", "\n")
     assert "activeAbortController" in script
     assert "currentRequestId" in script
@@ -652,7 +667,10 @@ def test_frontend_products_js_race_condition_handling(client: TestClient):
 
 
 def test_frontend_products_js_request_scoped_abort_timeout(client: TestClient):
-    """Frontend products.js timeout aborts the request-scoped controller, not the shared activeAbortController."""
+    """
+    Frontend products.js timeout aborts the request-scoped controller, not the shared
+    activeAbortController.
+    """
     script = client.get("/static/products.js").text.replace("\r\n", "\n")
     assert "const controller = new AbortController();" in script
     assert "activeAbortController = controller;" in script
@@ -663,8 +681,11 @@ def test_frontend_products_js_request_scoped_abort_timeout(client: TestClient):
 
 
 def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(discovery_engine):
-    """Existing products without metadata must not be assigned synthetic ratings, sales, or timestamps."""
-    from src.seed import seed_categories, seed_product_metadata, DEMO_DATE
+    """
+    Existing products without metadata must not be assigned synthetic ratings, sales, or
+    timestamps.
+    """
+    from src.seed import DEMO_DATE, seed_categories, seed_product_metadata
 
     with Session(discovery_engine) as session:
         seed_categories(session)
@@ -712,11 +733,17 @@ def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(dis
         assert meta_existing.rating == 0.0
         assert meta_existing.sales_count == 0
         assert meta_existing.category_id is None
-        sample_created_utc = meta_sample.created_at.replace(tzinfo=UTC) if meta_sample.created_at.tzinfo is None else meta_sample.created_at
+        sample_created_utc = (
+            meta_sample.created_at.replace(tzinfo=UTC)
+            if meta_sample.created_at.tzinfo is None
+            else meta_sample.created_at
+        )
         assert sample_created_utc <= DEMO_DATE
 
 
-def test_sort_newest_handles_null_timestamps_and_fallback_by_id(client: TestClient, discovery_engine):
+def test_sort_newest_handles_null_timestamps_and_fallback_by_id(
+    client: TestClient, discovery_engine
+):
     """Sort newest orders by created_at DESC with Product.id DESC fallback without mixing types."""
     now = datetime(2026, 10, 23, 12, tzinfo=UTC)
     with Session(discovery_engine) as session:
@@ -725,23 +752,66 @@ def test_sort_newest_handles_null_timestamps_and_fallback_by_id(client: TestClie
         session.flush()
 
         # Product 1: Newer timestamp
-        p1 = Product(id=201, code="P-SORT-NEW", seller_id=seller.id, name="New Product", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        p1 = Product(
+            id=201,
+            code="P-SORT-NEW",
+            seller_id=seller.id,
+            name="New Product",
+            description="d",
+            price=1000,
+            stock_quantity=5,
+            reserved_stock=0,
+            is_active=True,
+        )
         # Product 2: Older timestamp
-        p2 = Product(id=202, code="P-SORT-OLD", seller_id=seller.id, name="Old Product", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        p2 = Product(
+            id=202,
+            code="P-SORT-OLD",
+            seller_id=seller.id,
+            name="Old Product",
+            description="d",
+            price=1000,
+            stock_quantity=5,
+            reserved_stock=0,
+            is_active=True,
+        )
         # Product 3: No metadata (smaller id)
-        p3 = Product(id=203, code="P-SORT-NO-META-A", seller_id=seller.id, name="No Meta A", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        p3 = Product(
+            id=203,
+            code="P-SORT-NO-META-A",
+            seller_id=seller.id,
+            name="No Meta A",
+            description="d",
+            price=1000,
+            stock_quantity=5,
+            reserved_stock=0,
+            is_active=True,
+        )
         # Product 4: No metadata (larger id)
-        p4 = Product(id=204, code="P-SORT-NO-META-B", seller_id=seller.id, name="No Meta B", description="d", price=1000, stock_quantity=5, reserved_stock=0, is_active=True)
+        p4 = Product(
+            id=204,
+            code="P-SORT-NO-META-B",
+            seller_id=seller.id,
+            name="No Meta B",
+            description="d",
+            price=1000,
+            stock_quantity=5,
+            reserved_stock=0,
+            is_active=True,
+        )
         session.add_all([p1, p2, p3, p4])
         session.flush()
 
         m1 = ProductMetadata(product_id=p1.id, rating=4.0, sales_count=10, created_at=now)
-        m2 = ProductMetadata(product_id=p2.id, rating=4.0, sales_count=10, created_at=now - timedelta(days=5))
+        m2 = ProductMetadata(
+            product_id=p2.id, rating=4.0, sales_count=10, created_at=now - timedelta(days=5)
+        )
         session.add_all([m1, m2])
         session.commit()
 
     res = client.get("/api/v1/products?seller_id=201&sort=newest")
     assert res.status_code == 200
     returned_codes = [p["code"] for p in res.json()["data"]]
-    # Products with created_at come first (newest to oldest), then items without created_at by ID desc
+    # Products with created_at come first (newest to oldest), then items without created_at by
+    # ID desc
     assert returned_codes == ["P-SORT-NEW", "P-SORT-OLD", "P-SORT-NO-META-B", "P-SORT-NO-META-A"]
