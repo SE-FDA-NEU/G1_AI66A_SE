@@ -103,7 +103,25 @@ def migrate_db(connection: Connection | None = None) -> None:
                 )
             )
 
+        if "notifications" in tables:
+            columns = {c["name"] for c in inspector.get_columns("notifications")}
+            if "target_path" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE notifications ADD COLUMN "
+                        "target_path VARCHAR(512) NOT NULL DEFAULT '/notifications'"
+                    )
+                )
+
         if "product_metadata" in tables:
+            columns = {c["name"] for c in inspector.get_columns("product_metadata")}
+            if "review_count" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE product_metadata ADD COLUMN "
+                        "review_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
             fks = inspector.get_foreign_keys("product_metadata")
             fk_tables = {fk.get("referred_table") for fk in fks}
             if "products" not in fk_tables or "categories" not in fk_tables:
@@ -112,12 +130,16 @@ def migrate_db(connection: Connection | None = None) -> None:
                     # Table rebuild migration procedure:
                     # 1. Clean orphan references before enforcing foreign keys
                     connection.execute(
-                        text("DELETE FROM product_metadata WHERE product_id NOT IN (SELECT id FROM products)")
+                        text(
+                            "DELETE FROM product_metadata "
+                            "WHERE product_id NOT IN (SELECT id FROM products)"
+                        )
                     )
                     connection.execute(
                         text(
                             "UPDATE product_metadata SET category_id = NULL "
-                            "WHERE category_id IS NOT NULL AND category_id NOT IN (SELECT id FROM categories)"
+                            "WHERE category_id IS NOT NULL "
+                            "AND category_id NOT IN (SELECT id FROM categories)"
                         )
                     )
                     # 2. Create replacement table with new foreign key constraints
@@ -127,6 +149,7 @@ def migrate_db(connection: Connection | None = None) -> None:
                             "product_id INTEGER NOT NULL PRIMARY KEY, "
                             "category_id INTEGER, "
                             "rating FLOAT NOT NULL DEFAULT 0.0, "
+                            "review_count INTEGER NOT NULL DEFAULT 0, "
                             "sales_count INTEGER NOT NULL DEFAULT 0, "
                             "created_at DATETIME NOT NULL, "
                             "FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE, "
@@ -137,13 +160,22 @@ def migrate_db(connection: Connection | None = None) -> None:
                     # 3. Copy existing valid data
                     connection.execute(
                         text(
-                            "INSERT INTO product_metadata__migration (product_id, category_id, rating, sales_count, created_at) "
-                            "SELECT product_id, category_id, rating, sales_count, created_at FROM product_metadata"
+                            "INSERT INTO product_metadata__migration "
+                            "(product_id, category_id, rating, review_count, "
+                            "sales_count, created_at) "
+                            "SELECT product_id, category_id, rating, review_count, "
+                            "sales_count, created_at "
+                            "FROM product_metadata"
                         )
                     )
                     # 4. Swap tables and recreate index
                     connection.execute(text("DROP TABLE product_metadata"))
-                    connection.execute(text("ALTER TABLE product_metadata__migration RENAME TO product_metadata"))
+                    connection.execute(
+                        text(
+                            "ALTER TABLE product_metadata__migration "
+                            "RENAME TO product_metadata"
+                        )
+                    )
                     connection.execute(
                         text(
                             "CREATE INDEX IF NOT EXISTS ix_product_metadata_category_id "
@@ -155,8 +187,9 @@ def migrate_db(connection: Connection | None = None) -> None:
         if "products" in tables and "product_metadata" in tables:
             connection.execute(
                 text(
-                    "INSERT INTO product_metadata (product_id, category_id, rating, sales_count, created_at) "
-                    "SELECT p.id, NULL, 0.0, 0, CURRENT_TIMESTAMP "
+                    "INSERT INTO product_metadata "
+                    "(product_id, category_id, rating, review_count, sales_count, created_at) "
+                    "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
                     "FROM products p "
                     "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
                 )
