@@ -93,10 +93,14 @@ def migrate_db(connection: Connection | None = None) -> None:
             columns = {c["name"] for c in inspector.get_columns("seller_orders")}
             for name in ("tracking_number",):
                 if name not in columns:
-                    connection.execute(text(f"ALTER TABLE seller_orders ADD COLUMN {name} VARCHAR(100)"))
+                    connection.execute(
+                        text(f"ALTER TABLE seller_orders ADD COLUMN {name} VARCHAR(100)")
+                    )
             for name in ("shipped_at", "delivered_at"):
                 if name not in columns:
-                    connection.execute(text(f"ALTER TABLE seller_orders ADD COLUMN {name} DATETIME"))
+                    connection.execute(
+                        text(f"ALTER TABLE seller_orders ADD COLUMN {name} DATETIME")
+                    )
 
         if "product_metadata" in tables:
             fks = inspector.get_foreign_keys("product_metadata")
@@ -107,12 +111,16 @@ def migrate_db(connection: Connection | None = None) -> None:
                     # Table rebuild migration procedure:
                     # 1. Clean orphan references before enforcing foreign keys
                     connection.execute(
-                        text("DELETE FROM product_metadata WHERE product_id NOT IN (SELECT id FROM products)")
+                        text(
+                            "DELETE FROM product_metadata "
+                            "WHERE product_id NOT IN (SELECT id FROM products)"
+                        )
                     )
                     connection.execute(
                         text(
                             "UPDATE product_metadata SET category_id = NULL "
-                            "WHERE category_id IS NOT NULL AND category_id NOT IN (SELECT id FROM categories)"
+                            "WHERE category_id IS NOT NULL "
+                            "AND category_id NOT IN (SELECT id FROM categories)"
                         )
                     )
                     # 2. Create replacement table with new foreign key constraints
@@ -132,13 +140,17 @@ def migrate_db(connection: Connection | None = None) -> None:
                     # 3. Copy existing valid data
                     connection.execute(
                         text(
-                            "INSERT INTO product_metadata__migration (product_id, category_id, rating, sales_count, created_at) "
-                            "SELECT product_id, category_id, rating, sales_count, created_at FROM product_metadata"
+                            "INSERT INTO product_metadata__migration "
+                            "(product_id, category_id, rating, sales_count, created_at) "
+                            "SELECT product_id, category_id, rating, sales_count, created_at "
+                            "FROM product_metadata"
                         )
                     )
                     # 4. Swap tables and recreate index
                     connection.execute(text("DROP TABLE product_metadata"))
-                    connection.execute(text("ALTER TABLE product_metadata__migration RENAME TO product_metadata"))
+                    connection.execute(
+                        text("ALTER TABLE product_metadata__migration RENAME TO product_metadata")
+                    )
                     connection.execute(
                         text(
                             "CREATE INDEX IF NOT EXISTS ix_product_metadata_category_id "
@@ -150,7 +162,8 @@ def migrate_db(connection: Connection | None = None) -> None:
         if "products" in tables and "product_metadata" in tables:
             connection.execute(
                 text(
-                    "INSERT INTO product_metadata (product_id, category_id, rating, sales_count, created_at) "
+                    "INSERT INTO product_metadata "
+                    "(product_id, category_id, rating, sales_count, created_at) "
                     "SELECT p.id, NULL, 0.0, 0, CURRENT_TIMESTAMP "
                     "FROM products p "
                     "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"

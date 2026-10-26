@@ -348,35 +348,62 @@ function renderOrder(order) {
     elements.mapTargetLabel.textContent = parts[parts.length - 1] || "Destination";
   }
 
-  // Table of items (Apple Store Grouped Card)
+  // Table of items (DOM APIs + textContent to prevent stored XSS)
   const table = document.createElement("table");
   table.className = "items-table";
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Product</th>
-        <th>Code</th>
-        <th>Unit Price</th>
-        <th>Quantity</th>
-        <th style="text-align: right">Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${order.items
-        .map(
-          (item) => `
-        <tr>
-          <td><strong>${item.product_name}</strong></td>
-          <td><code>${item.product_code}</code></td>
-          <td>${money(item.unit_price)}</td>
-          <td>${item.quantity}</td>
-          <td class="money">${money(item.line_total)}</td>
-        </tr>
-      `
-        )
-        .join("")}
-    </tbody>
-  `;
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  const columns = [
+    { title: "Product", align: "left" },
+    { title: "Code", align: "left" },
+    { title: "Unit Price", align: "left" },
+    { title: "Quantity", align: "left" },
+    { title: "Total", align: "right" },
+  ];
+  columns.forEach((col) => {
+    const th = document.createElement("th");
+    th.textContent = col.title;
+    if (col.align === "right") {
+      th.style.textAlign = "right";
+    }
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  (order.items || []).forEach((item) => {
+    const tr = document.createElement("tr");
+
+    const tdName = document.createElement("td");
+    const strongName = document.createElement("strong");
+    strongName.textContent = item.product_name ?? "";
+    tdName.appendChild(strongName);
+    tr.appendChild(tdName);
+
+    const tdCode = document.createElement("td");
+    const codeEl = document.createElement("code");
+    codeEl.textContent = item.product_code ?? "";
+    tdCode.appendChild(codeEl);
+    tr.appendChild(tdCode);
+
+    const tdPrice = document.createElement("td");
+    tdPrice.textContent = money(item.unit_price);
+    tr.appendChild(tdPrice);
+
+    const tdQty = document.createElement("td");
+    tdQty.textContent = item.quantity;
+    tr.appendChild(tdQty);
+
+    const tdTotal = document.createElement("td");
+    tdTotal.className = "money";
+    tdTotal.textContent = money(item.line_total);
+    tr.appendChild(tdTotal);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
   elements.itemsList.replaceChildren(table);
 
   updateStepper(order);
@@ -521,9 +548,15 @@ function updateMapMarker(lat, lon, address, recipientName) {
     markerInstance = L.marker([lat, lon], { icon: applePinIcon }).addTo(mapInstance);
   }
 
-  markerInstance.bindPopup(
-    `<strong>${recipientName || "Delivery Location"}</strong><br>${address}`
-  ).openPopup();
+  const popupContent = document.createElement("div");
+  const strongEl = document.createElement("strong");
+  strongEl.textContent = recipientName || "Delivery Location";
+  popupContent.appendChild(strongEl);
+  popupContent.appendChild(document.createElement("br"));
+  if (address) {
+    popupContent.appendChild(document.createTextNode(address));
+  }
+  markerInstance.bindPopup(popupContent).openPopup();
 }
 
 window.addEventListener("load", () => {

@@ -201,7 +201,8 @@ def list_products(
             status_code=422,
             detail=error_detail(
                 "ERR_VALIDATION",
-                f"Invalid sort option '{sort}'. Allowed options: {', '.join(sorted(ALLOWED_SORTS))}.",
+                f"Invalid sort option '{sort}'. "
+                f"Allowed options: {', '.join(sorted(ALLOWED_SORTS))}.",
             ),
         )
 
@@ -212,7 +213,8 @@ def list_products(
         # Stock availability filter
         if in_stock is True:
             filters.append(Product.stock_quantity > Product.reserved_stock)
-        # When in_stock is False (or None), all active products are returned (both in-stock and out-of-stock)
+        # When in_stock is False (or None), all active products are returned
+        # (both in-stock and out-of-stock)
 
         # AC1: Keyword search across product name OR description
         if search and search.strip():

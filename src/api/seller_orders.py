@@ -295,7 +295,11 @@ def update_seller_order_status(
     elif new_status == "CANCELLED":
         note = "Stock restored."
     elif new_status == "SHIPPED":
-        note = f"Shipped. Tracking: {request.tracking_number}" if request.tracking_number else "Shipped."
+        note = (
+            f"Shipped. Tracking: {request.tracking_number}"
+            if request.tracking_number
+            else "Shipped."
+        )
     elif new_status == "DELIVERED":
         note = "Delivered."
     elif new_status == "CONFIRMED":

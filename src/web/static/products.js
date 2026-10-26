@@ -371,6 +371,14 @@ function resetAllFilters() {
 }
 
 async function loadFilterOptions() {
+  if (
+    !elements.filterCategory ||
+    elements.filterCategory.tagName !== "SELECT" ||
+    !elements.filterSeller ||
+    elements.filterSeller.tagName !== "SELECT"
+  ) {
+    return;
+  }
   try {
     const [categoriesRes, sellersRes] = await Promise.all([
       fetch(CATEGORIES_URL, { headers: { Accept: "application/json" } }).catch(() => null),
@@ -380,7 +388,10 @@ async function loadFilterOptions() {
     if (categoriesRes && categoriesRes.ok && elements.filterCategory) {
       const categories = await categoriesRes.json();
       if (Array.isArray(categories)) {
-        elements.filterCategory.innerHTML = '<option value="">All categories</option>';
+        const defaultCatOpt = document.createElement("option");
+        defaultCatOpt.value = "";
+        defaultCatOpt.textContent = "All categories";
+        elements.filterCategory.replaceChildren(defaultCatOpt);
         for (const cat of categories) {
           const opt = document.createElement("option");
           opt.value = String(cat.id);
@@ -394,7 +405,10 @@ async function loadFilterOptions() {
     if (sellersRes && sellersRes.ok && elements.filterSeller) {
       const sellers = await sellersRes.json();
       if (Array.isArray(sellers)) {
-        elements.filterSeller.innerHTML = '<option value="">All sellers</option>';
+        const defaultSellerOpt = document.createElement("option");
+        defaultSellerOpt.value = "";
+        defaultSellerOpt.textContent = "All sellers";
+        elements.filterSeller.replaceChildren(defaultSellerOpt);
         for (const seller of sellers) {
           const opt = document.createElement("option");
           opt.value = String(seller.id);

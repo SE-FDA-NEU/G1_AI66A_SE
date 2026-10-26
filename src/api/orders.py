@@ -120,7 +120,10 @@ def update_buyer_order_status(
         seller_sub_orders = [s for s in sub_orders if s.seller_id == user.id]
         if not seller_sub_orders:
             raise HTTPException(
-                403, detail=error_detail("ERR_RESOURCE_OWNER", "You do not own any items in this order.")
+                403,
+                detail=error_detail(
+                    "ERR_RESOURCE_OWNER", "You do not own any items in this order."
+                ),
             )
 
         for sub_order in seller_sub_orders:
@@ -181,7 +184,11 @@ def update_buyer_order_status(
             elif new_status == "CANCELLED":
                 note = "Stock restored."
             elif new_status == "SHIPPED":
-                note = f"Shipped. Tracking: {request.tracking_number}" if request.tracking_number else "Shipped."
+                note = (
+                    f"Shipped. Tracking: {request.tracking_number}"
+                    if request.tracking_number
+                    else "Shipped."
+                )
             elif new_status == "DELIVERED":
                 note = "Delivered."
             elif new_status == "CONFIRMED":
@@ -235,7 +242,8 @@ def update_buyer_order_status(
 
         session.add(order)
         session.commit()
-        return OrderResponse(data=receipt(session, buyer_id=None, order_id=order.id, seller_id=user.id))
+        receipt_data = receipt(session, buyer_id=None, order_id=order.id, seller_id=user.id)
+        return OrderResponse(data=receipt_data)
 
     # 2. Buyer flow
     if order.buyer_id != user.id:
@@ -247,7 +255,8 @@ def update_buyer_order_status(
                 400,
                 detail=error_detail(
                     "ERR_INVALID_TRANSITION",
-                    "Only pending orders can be directly cancelled. For confirmed orders, please request cancellation.",
+                    "Only pending orders can be directly cancelled. "
+                    "For confirmed orders, please request cancellation.",
                 ),
             )
         for sub_order in sub_orders:

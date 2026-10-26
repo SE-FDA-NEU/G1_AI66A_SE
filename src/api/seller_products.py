@@ -3,12 +3,12 @@
 import logging
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import SellerUser
 from src.database import SessionDep
 from src.errors import error_detail
-from pydantic import BaseModel
 from src.models.product import Product
 from src.schemas.seller_products import ProductCreate, SellerProduct, SellerProductResponse
 from src.services.seller_products import SellerProductError, create_product

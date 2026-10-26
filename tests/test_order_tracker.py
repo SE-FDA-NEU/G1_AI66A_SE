@@ -340,8 +340,12 @@ def test_buyer_cancellation_request_and_seller_rejection(client: TestClient, tra
         assert prod.stock_quantity == 8  # Still 8, stock untouched
 
 
-def test_buyer_cancellation_request_and_seller_approval_restores_stock_once(client: TestClient, tracker_fixture):
-    order_id, so_id = _create_single_order(tracker_fixture, initial_status="CONFIRMED", quantity=2)
+def test_buyer_cancellation_request_and_seller_approval_restores_stock_once(
+    client: TestClient, tracker_fixture
+):
+    order_id, so_id = _create_single_order(
+        tracker_fixture, initial_status="CONFIRMED", quantity=2
+    )
     buyer_hdr = {"Authorization": f"Bearer {tracker_fixture['buyer_token']}"}
     seller_hdr = {"Authorization": f"Bearer {tracker_fixture['seller_a_token']}"}
 
@@ -561,7 +565,9 @@ def test_order_tracker_routes_and_assets(client: TestClient):
 
 
 def test_both_roles_can_track_order_and_execute_transitions(client: TestClient, tracker_fixture):
-    """Both buyer and seller can track the order via /api/v1/orders/{id} and perform role-allowed updates."""
+    """Both buyer and seller can track the order via /api/v1/orders/{id}
+    and perform role-allowed updates.
+    """
     seller_a_token = tracker_fixture["seller_a_token"]
     seller_b_token = tracker_fixture["seller_b_token"]
     buyer_token = tracker_fixture["buyer_token"]
@@ -597,7 +603,10 @@ def test_both_roles_can_track_order_and_execute_transitions(client: TestClient, 
     order_id = order_res.json()["data"]["id"]
 
     # 1. Buyer can get order tracker receipt
-    buyer_get = client.get(f"/api/v1/orders/{order_id}", headers={"Authorization": f"Bearer {buyer_token}"})
+    buyer_get = client.get(
+        f"/api/v1/orders/{order_id}",
+        headers={"Authorization": f"Bearer {buyer_token}"},
+    )
     assert buyer_get.status_code == 200
     assert buyer_get.json()["data"]["status"] == "PENDING"
 
@@ -651,8 +660,83 @@ def test_both_roles_can_track_order_and_execute_transitions(client: TestClient, 
     assert buyer_complete.json()["data"]["completed_at"] is not None
 
     # 8. Buyer can list their orders
-    buyer_orders_list = client.get("/api/v1/orders", headers={"Authorization": f"Bearer {buyer_token}"})
+    buyer_orders_list = client.get(
+        "/api/v1/orders",
+        headers={"Authorization": f"Bearer {buyer_token}"},
+    )
     assert buyer_orders_list.status_code == 200
     orders_data = buyer_orders_list.json()
     assert any(o["data"]["id"] == order_id for o in orders_data)
+
+
+def test_order_tracker_xss_protection_in_order_js(client: TestClient):
+    """Regression test: verify order.js renders product names and codes via textContent
+
+    and does not inject untrusted product data directly into innerHTML.
+    """
+    res = client.get("/static/order.js")
+    assert res.status_code == 200
+    js_text = res.text
+
+    # Verify DOM creation and textContent are used for product items
+    assert "strongName.textContent = item.product_name" in js_text
+    assert "codeEl.textContent = item.product_code" in js_text
+
+    # Verify no raw innerHTML interpolation of item properties
+    assert "${item.product_name}" not in js_text
+    assert "${item.product_code}" not in js_text
+
+    # Verify map marker popup does not interpolate raw unescaped values into HTML
+    assert "${address}" not in js_text
+
+
+def test_order_api_supports_malicious_xss_payloads_safely(client: TestClient, tracker_fixture):
+    """Regression test: seller products with HTML/JS payloads can be ordered
+
+    and returned safely without corrupting API payloads or failing JSON serialization.
+    """
+    buyer_token = tracker_fixture["buyer_token"]
+
+    # Set product name with XSS payload (simulating seller updating product name)
+    xss_payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+    prod_id = tracker_fixture["product_a_id"]
+    with Session(engine) as session:
+        prod = session.get(Product, prod_id)
+        prod.name = f"Malicious Product {xss_payload}"
+        prod_code = prod.code
+        session.commit()
+
+    # Buyer adds to cart and checks out
+    add_cart = client.post(
+        "/api/v1/cart/items",
+        headers={"Authorization": f"Bearer {buyer_token}"},
+        json={"product_code": prod_code, "quantity": 1},
+    )
+    assert add_cart.status_code in (200, 201)
+
+    checkout_res = client.post(
+        "/api/v1/orders",
+        headers={
+            "Authorization": f"Bearer {buyer_token}",
+            "Idempotency-Key": "xss-regression-order-key",
+        },
+        json={
+            "recipient_name": 'Buyer <svg onload=alert("xss")>',
+            "delivery_address": "123 Injection St <script>",
+            "phone_number": "0900000000",
+        },
+    )
+    assert checkout_res.status_code == 201
+    order_id = checkout_res.json()["data"]["id"]
+
+    # Fetch order receipt via API
+    order_detail = client.get(
+        f"/api/v1/orders/{order_id}",
+        headers={"Authorization": f"Bearer {buyer_token}"},
+    )
+    assert order_detail.status_code == 200
+    items = order_detail.json()["data"]["items"]
+    assert len(items) >= 1
+    item = next(it for it in items if it["product_id"] == prod_id)
+    assert xss_payload in item["product_name"]
 
