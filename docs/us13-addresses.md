@@ -1,9 +1,9 @@
 # US13 — Address book and delivery snapshots
 
-Implementation for #105 and tasks #122, #123, #124, #125, based on local
-`main` at `526803cdef0d2dd7db70342b9e68c0dcbe676067`. PR #164 was checked through
-GitHub and remained open/unmerged during implementation; its order tracking work
-is not included. There is no invented PR link or claim of external review/issue closure.
+Implementation for #105 and tasks #122, #123, #124, #125, rebased onto `main` at
+`1d809f0bcb0b3fecf38568dc249f76196e23fcf4` (includes the US15 reviews and
+notifications from PR #166). PR #164 was checked through GitHub and remained
+open/unmerged during implementation; its order tracking work is not included. There is no invented PR link or claim of external review/issue closure.
 
 ## Buyer API contract
 
@@ -88,7 +88,7 @@ review. Auth context is checked before requests and after responses; account cha
 hide/clear old address data and block submit/retry/CRUD. Cross-tab token changes also
 invalidate the view.
 
-## Acceptance evidence — 25 October 2026
+## Acceptance evidence — 27 October 2026
 
 | Acceptance criterion | Automated evidence | Browser evidence |
 |---|---|---|
@@ -104,9 +104,9 @@ Screenshots from the real app on a disposable database:
 - [Receipt after editing/deleting its source](images/us13/snapshot-after-delete.png)
 - [Replay after response loss and source deletion](images/us13/replay-after-source-delete.png)
 
-Final verification on 25 October 2026: **476 pytest tests passed** (including 49
-US13 tests), Ruff passed, all five Node scripts passed, and the Chromium acceptance
-run passed. The repeatable browser run also verifies initialization twice and retry
+Final verification on 27 October 2026, after rebasing onto `main` at `1d809f0`:
+**490 pytest tests passed** (including 49 US13 tests), Ruff passed, all six Node
+scripts passed, and the Chromium acceptance run passed and regenerated the screenshots. The repeatable browser run also verifies initialization twice and retry
 after a committed response is lost and its source address is deleted.
 
 Run the automated checks with the repository virtual environment:
@@ -119,6 +119,7 @@ node tests/checkout_ui.mjs
 node tests/addresses_ui.mjs
 node tests/seller_products_ui.mjs
 node tests/seller_orders_ui.mjs
+node tests/product_detail_ui.mjs
 ```
 
 Optional real-browser evidence run: install Playwright in the Python environment used
