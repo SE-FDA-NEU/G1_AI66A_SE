@@ -1,11 +1,14 @@
-"""Optional Chromium acceptance run: requires Playwright and an installed .venv.
+"""Optional Chromium acceptance run: requires Playwright installed in the project .venv.
 
-Run `python tests/browser_us13.py`; all demo data lives in a temporary SQLite file.
+Run `python tests/browser_us13.py` with .venv activated (Windows, macOS or Linux); child
+processes reuse the same interpreter and all demo data lives in a temporary SQLite file.
 """
 
 import json
 import os
+import signal
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -16,33 +19,38 @@ from playwright.sync_api import expect, sync_playwright
 root = Path(__file__).resolve().parents[1]
 images = root / "docs/images/us13"
 images.mkdir(parents=True, exist_ok=True)
+server_log = Path(tempfile.gettempdir()) / "us13-server.log"
 with tempfile.TemporaryDirectory(prefix="us13-demo-") as directory:
-    env = {**os.environ, "DATABASE_URL": f"sqlite:///{directory}/demo.db", "DEBUG": "false"}
+    database = Path(directory) / "demo.db"
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{database}", "DEBUG": "false"}
     subprocess.run(
-        [str(root / ".venv/bin/python"), "-m", "src.database"],
+        [sys.executable, "-m", "src.database"],
         cwd=root,
         env=env,
         check=True,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        [str(root / ".venv/bin/python"), "-m", "src.database"],
+        [sys.executable, "-m", "src.database"],
         cwd=root,
         env=env,
         check=True,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        [str(root / ".venv/bin/python"), "-m", "src.seed", "--demo"],
+        [sys.executable, "-m", "src.seed", "--demo"],
         cwd=root,
         env=env,
         check=True,
         stdout=subprocess.DEVNULL,
     )
-    with open("/tmp/us13-server.log", "w") as log:
+    # A Windows venv python.exe is a launcher that runs the server as its child; Ctrl+Break
+    # reaches the whole process group so uvicorn exits before the database is removed.
+    windows = os.name == "nt"
+    with open(server_log, "w") as log:
         server = subprocess.Popen(
             [
-                str(root / ".venv/bin/python"),
+                sys.executable,
                 "-m",
                 "uvicorn",
                 "src.main:app",
@@ -55,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix="us13-demo-") as directory:
             env=env,
             stdout=log,
             stderr=log,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if windows else 0,
         )
         try:
             for _ in range(100):
@@ -222,5 +231,5 @@ with tempfile.TemporaryDirectory(prefix="us13-demo-") as directory:
                     "two-account isolation and empty-cart management."
                 )
         finally:
-            server.terminate()
+            server.send_signal(signal.CTRL_BREAK_EVENT if windows else signal.SIGTERM)
             server.wait(timeout=10)

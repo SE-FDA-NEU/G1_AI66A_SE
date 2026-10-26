@@ -122,11 +122,14 @@ node tests/seller_orders_ui.mjs
 node tests/product_detail_ui.mjs
 ```
 
-Optional real-browser evidence run: install Playwright in the Python environment used
-for this command and Chromium (`python -m playwright install chromium`), then run
-`python tests/browser_us13.py`. It uses application dependencies from `.venv`, runs
-`init_db` twice, seeds only a temporary SQLite file, starts a local server on port
-8135, exercises both buyers, saves the screenshots above and stops the server.
+Optional real-browser evidence run: with `.venv` activated, install Playwright and
+Chromium into it (`python -m pip install playwright`, then
+`python -m playwright install chromium`) and run `python tests/browser_us13.py` from the
+repository root. The command is the same in PowerShell, Command Prompt and bash. The
+script starts every child process with the interpreter that runs it, runs `init_db`
+twice, seeds only a temporary SQLite file, writes the server log to `us13-server.log`
+in the system temporary directory, starts a local server on port 8135, exercises both
+buyers, saves the screenshots above and stops the server.
 The normal pytest/CI suite does not require Playwright.
 
 Baseline repairs: checkout UI fixtures now include US12 selection data; the seller UI
