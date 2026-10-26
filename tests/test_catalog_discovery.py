@@ -643,7 +643,7 @@ def test_categories_and_sellers_error_handling_contracts(client: TestClient):
 
 def test_frontend_products_js_race_condition_handling(client: TestClient):
     """Frontend products.js uses AbortController and request ID sequence tracking for rapid filter changes."""
-    script = client.get("/static/products.js").text
+    script = client.get("/static/products.js").text.replace("\r\n", "\n")
     assert "activeAbortController" in script
     assert "currentRequestId" in script
     assert "activeAbortController.abort()" in script
@@ -653,7 +653,7 @@ def test_frontend_products_js_race_condition_handling(client: TestClient):
 
 def test_frontend_products_js_request_scoped_abort_timeout(client: TestClient):
     """Frontend products.js timeout aborts the request-scoped controller, not the shared activeAbortController."""
-    script = client.get("/static/products.js").text
+    script = client.get("/static/products.js").text.replace("\r\n", "\n")
     assert "const controller = new AbortController();" in script
     assert "activeAbortController = controller;" in script
     assert "controller.abort()" in script
@@ -745,4 +745,3 @@ def test_sort_newest_handles_null_timestamps_and_fallback_by_id(client: TestClie
     returned_codes = [p["code"] for p in res.json()["data"]]
     # Products with created_at come first (newest to oldest), then items without created_at by ID desc
     assert returned_codes == ["P-SORT-NEW", "P-SORT-OLD", "P-SORT-NO-META-B", "P-SORT-NO-META-A"]
-

@@ -38,6 +38,12 @@ def login_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "login.html")
 
 
+@router.get("/notifications", response_class=FileResponse, include_in_schema=False)
+def notifications_page() -> FileResponse:
+    """Serve the in-app notification center."""
+    return FileResponse(PAGES_DIR / "notifications.html")
+
+
 @router.get("/seller/orders", response_class=FileResponse, include_in_schema=False)
 def seller_orders_page() -> FileResponse:
     """Serve the seller order management page."""

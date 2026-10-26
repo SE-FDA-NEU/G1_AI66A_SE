@@ -55,6 +55,7 @@ class ProductResponse(BaseModel):
     category_id: int | None = None
     seller_id: int | None = None
     rating: float = 0.0
+    review_count: int = 0
     sales_count: int = 0
 
 
@@ -106,6 +107,7 @@ def product_response(
         category_id=meta.category_id if meta else None,
         seller_id=product.seller_id,
         rating=float(meta.rating if meta and meta.rating is not None else 0.0),
+        review_count=int(meta.review_count if meta else 0),
         sales_count=int(meta.sales_count if meta and meta.sales_count is not None else 0),
     )
 

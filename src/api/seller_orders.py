@@ -17,6 +17,7 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
+from src.services.notifications import create_notification
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
@@ -275,6 +276,17 @@ def update_seller_order_status(
         else:
             parent.status = "PENDING"
         session.add(parent)
+        create_notification(
+            session,
+            recipient_user_id=parent.buyer_id,
+            order_id=parent.id,
+            event_key=f"seller-order:{seller_order.id}:status:{new_status}",
+            message=(
+                f"Seller order #{seller_order.id} in your order #{parent.id} "
+                f"is now {new_status.lower()}."
+            ),
+            target_path=f"/checkout/confirmation/{parent.id}",
+        )
 
     session.commit()
     session.refresh(seller_order)

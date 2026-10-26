@@ -221,6 +221,7 @@ def seed_product_metadata(session: Session, products: list[Product]) -> None:
                 product_id=product.id,
                 category_id=cat_id,
                 rating=rating_val,
+                review_count=0,
                 sales_count=sales_val,
                 created_at=created_dt,
             )
@@ -294,6 +295,7 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
                 product_id=prod.id,
                 category_id=None,
                 rating=0.0,
+                review_count=0,
                 sales_count=0,
                 created_at=datetime.now(UTC),
             )

@@ -1,0 +1,72 @@
+.product-rating {
+  color: #7c4a03;
+  font-weight: 600;
+}
+
+.reviews,
+.review-form {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e4e7eb;
+}
+
+.reviews__list {
+  display: grid;
+  gap: 16px;
+}
+
+.review-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e4e7eb;
+  border-radius: 8px;
+}
+
+.review-card h3,
+.review-card h4,
+.review-card p {
+  margin: 0;
+}
+
+.review-card time {
+  color: #52606d;
+  font-size: 0.9rem;
+}
+
+.review-card__reply {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.review-form form,
+.seller-reply-form {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.review-form input,
+.review-form select,
+.review-form textarea,
+.seller-reply-form textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #9aa5b1;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.review-form textarea,
+.seller-reply-form textarea {
+  resize: vertical;
+}
+
+.review-form .button,
+.seller-reply-form .button {
+  justify-self: start;
+}

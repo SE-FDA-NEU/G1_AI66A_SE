@@ -119,16 +119,22 @@ contract records the current behaviour.
 
 The Mini Marketplace uses a relational database model to support the P0 buyer and seller workflows defined in Milestone 1.
 
-The data model contains six main tables:
+The data model contains these main tables:
 
 - `users`
+- `categories`
 - `products`
+- `product_metadata`
 - `cart_items`
 - `orders`
 - `seller_orders`
 - `order_items`
+- `order_history`
+- `reviews`
+- `notifications`
 
-The current implementation already contains the `products` table through the `Product` SQLModel. The remaining tables define the relational structure required to support cart management, checkout, seller ownership, and seller order management.
+Together, these tables support catalog discovery, cart management, checkout,
+seller-owned fulfillment, verified product reviews, and in-app notifications.
 
 ---
 
@@ -341,6 +347,53 @@ This table satisfies the Sprint 3 audit requirement for US08 (Issue #74 / Issue 
 
 ---
 
+#### reviews
+
+**Purpose:** Stores one verified-purchase review for an order item, including an
+optional media URL and the seller's reply.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | INTEGER | Primary Key |
+| `order_item_id` | INTEGER | NOT NULL, UNIQUE, Foreign Key → `order_items.id` |
+| `product_id` | INTEGER | NOT NULL, Foreign Key → `products.id` |
+| `buyer_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `rating` | INTEGER | NOT NULL, CHECK `1 <= rating <= 5` |
+| `comment` | VARCHAR(2000) | Optional |
+| `media_url` | VARCHAR(2048) | Optional HTTP(S) URL |
+| `seller_reply` | VARCHAR(2000) | Optional |
+| `seller_replied_at` | DATETIME | Optional |
+| `created_at` | DATETIME | NOT NULL |
+
+The API verifies buyer ownership and `seller_orders.status = COMPLETED`; the
+unique `order_item_id` constraint prevents repeat reviews. The transaction
+updates `product_metadata.rating` and `product_metadata.review_count` from the
+saved reviews.
+
+---
+
+#### notifications
+
+**Purpose:** Stores recipient-scoped in-app messages for important order and
+review events.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | INTEGER | Primary Key |
+| `recipient_user_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `order_id` | INTEGER | NOT NULL, Foreign Key → `orders.id` |
+| `event_key` | VARCHAR(200) | NOT NULL, UNIQUE |
+| `message` | VARCHAR(255) | NOT NULL |
+| `target_path` | VARCHAR(512) | NOT NULL, internal UI route |
+| `created_at` | DATETIME | NOT NULL |
+| `read_at` | DATETIME | Optional |
+
+The event key makes notification creation idempotent. Notifications are saved
+within the order/review transaction and can only be listed or marked read by
+their recipient.
+
+---
+
 ### 2.3 Relationships and Cardinality
 
 | Relationship | Cardinality | Description |
@@ -355,6 +408,10 @@ This table satisfies the Sprint 3 audit requirement for US08 (Issue #74 / Issue 
 | `products` → `order_items` | 1 to 0..* | One product may appear in zero or many historical order items |
 | `seller_orders` → `order_history` | 1 to 0..* | One seller order has zero or many historical state transition records |
 | `users` → `order_history` | 1 to 0..* | One user may trigger zero or many order transition events |
+| `order_items` → `reviews` | 1 to 0..1 | An order item can have at most one review |
+| `products` → `reviews` | 1 to 0..* | A product may receive reviews from completed purchases |
+| `users` → `notifications` | 1 to 0..* | A user receives their own in-app notifications |
+| `orders` → `notifications` | 1 to 0..* | An order can produce multiple recipient-specific notifications |
 
 ---
 
@@ -748,10 +805,15 @@ implementation"). This table lists every code the code raises, checked by
 | `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
 | `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND` | Unknown or inactive product code | Products, cart |
+| `404 Not Found` | `ERR_REVIEW_NOT_ELIGIBLE` | The order item does not belong to this buyer or product | Reviews |
+| `404 Not Found` | `ERR_REVIEW_NOT_FOUND` | The requested review does not exist | Seller reviews |
 | `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
+| `404 Not Found` | `ERR_NOTIFICATION_NOT_FOUND` | The notification does not exist or belongs to another user | Notifications |
 | `404 Not Found` | `ERR_ORDER_NOT_FOUND` | Unknown order, another buyer's order, or unknown seller order | Orders, seller orders |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
 | `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
+| `409 Conflict` | `ERR_REVIEW_NOT_COMPLETED` | The seller order has not reached `COMPLETED` | Reviews |
+| `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |

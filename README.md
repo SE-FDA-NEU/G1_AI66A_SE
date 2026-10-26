@@ -189,8 +189,8 @@ The listing is created active and owned by the logged-in seller; the page shows 
 product code and a link to it. Stock 0 is allowed: the product page shows Out of
 stock and the catalog leaves it out. Buyers and guests cannot create products. The
 page-script checks run with `node tests/checkout_ui.mjs`,
-`node tests/seller_products_ui.mjs` and `node tests/seller_orders_ui.mjs` (Node is
-only needed for these checks). See
+`node tests/seller_products_ui.mjs`, `node tests/seller_orders_ui.mjs` and
+`node tests/product_detail_ui.mjs` (Node is only needed for these checks). See
 [US06 verification](docs/evidence/us06.md).
 
 ### Seller order management (US08 / #82)

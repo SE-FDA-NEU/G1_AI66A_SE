@@ -16,6 +16,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutRequest, OrderData, OrderLine
+from src.services.notifications import create_notification
 
 
 class CheckoutError(Exception):
@@ -125,6 +126,14 @@ def checkout(
                     session.add(suborder)
                     session.flush()
                     sellers[product.seller_id] = suborder.id
+                    create_notification(
+                        session,
+                        recipient_user_id=product.seller_id,
+                        order_id=order.id,
+                        event_key=f"order:{order.id}:created:seller:{product.seller_id}",
+                        message=f"New order #{order.id} is waiting for processing.",
+                        target_path="/seller/orders",
+                    )
                 session.add(
                     OrderItem(
                         seller_order_id=sellers[product.seller_id],
@@ -147,6 +156,7 @@ def checkout(
                             product_id=product.id,
                             category_id=None,
                             rating=0.0,
+                            review_count=0,
                             sales_count=line.quantity,
                             created_at=datetime.now(UTC),
                         )

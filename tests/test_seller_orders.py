@@ -6,6 +6,7 @@ from starlette.testclient import TestClient
 
 from src.auth import hash_password
 from src.database import engine
+from src.models.notification import Notification
 from src.models.order import Order
 from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
@@ -18,6 +19,7 @@ from src.models.user import User
 def seller_order_data():
     with Session(engine) as session:
         session.exec(delete(OrderHistory))
+        session.exec(delete(Notification))
         session.exec(delete(OrderItem))
         session.exec(delete(SellerOrder))
         session.exec(delete(Order))
@@ -99,12 +101,15 @@ def seller_order_data():
             "seller_order_a": seller_order_a.id,
             "seller_order_b": seller_order_b.id,
             "product_a": product_a.id,
+            "buyer": buyer.email,
+            "order_id": parent.id,
         }
 
     yield result
 
     with Session(engine) as session:
         session.exec(delete(OrderHistory))
+        session.exec(delete(Notification))
         session.exec(delete(OrderItem))
         session.exec(delete(SellerOrder))
         session.exec(delete(Order))
@@ -236,6 +241,44 @@ def test_completion_sets_completed_at(
         seller_order = session.get(SellerOrder, seller_order_data["seller_order_a"])
         assert seller_order is not None
         assert seller_order.completed_at is not None
+
+
+def test_status_notification_identifies_sub_order_in_multi_seller_checkout(
+    client: TestClient,
+    seller_order_data,
+) -> None:
+    seller_token = _token(client, seller_order_data["seller_a"])
+    buyer_token = _token(client, seller_order_data["buyer"])
+    url = f"/api/v1/seller/orders/{seller_order_data['seller_order_a']}/status"
+
+    for status in ("PROCESSING", "SHIPPED", "COMPLETED"):
+        response = client.patch(
+            url,
+            headers={"Authorization": f"Bearer {seller_token}"},
+            json={"status": status},
+        )
+        assert response.status_code == 200
+
+    notifications = client.get(
+        "/api/v1/notifications",
+        headers={"Authorization": f"Bearer {buyer_token}"},
+    ).json()["data"]
+    expected_message = (
+        f"Seller order #{seller_order_data['seller_order_a']} "
+        f"in your order #{seller_order_data['order_id']} is now completed."
+    )
+    completed_notification = next(
+        notification
+        for notification in notifications
+        if notification["message"] == expected_message
+    )
+    assert completed_notification["message"] == expected_message
+
+    with Session(engine) as session:
+        parent = session.get(Order, seller_order_data["order_id"])
+        other_seller_order = session.get(SellerOrder, seller_order_data["seller_order_b"])
+        assert parent is not None and parent.status == "PROCESSING"
+        assert other_seller_order is not None and other_seller_order.status == "PENDING"
 
 
 def test_cancellations_increment_shared_product_stock_atomically(
