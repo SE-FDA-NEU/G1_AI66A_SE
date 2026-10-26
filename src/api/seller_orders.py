@@ -281,7 +281,10 @@ def update_seller_order_status(
             recipient_user_id=parent.buyer_id,
             order_id=parent.id,
             event_key=f"seller-order:{seller_order.id}:status:{new_status}",
-            message=f"Your order #{parent.id} is now {new_status.lower()}.",
+            message=(
+                f"Seller order #{seller_order.id} in your order #{parent.id} "
+                f"is now {new_status.lower()}."
+            ),
             target_path=f"/checkout/confirmation/{parent.id}",
         )
 

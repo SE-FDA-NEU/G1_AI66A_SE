@@ -39,6 +39,11 @@ const elements = {
 const priceFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 let currentProduct = null;
 let currentIdentity = null;
+let authRevision = 0;
+
+function isCurrentAuth(token, revision) {
+  return authRevision === revision && localStorage.getItem("access_token") === token;
+}
 
 function getReturnPath(selectedQty) {
   const qty = selectedQty !== undefined ? selectedQty : (parseInt(elements.quantity?.value, 10) || 1);
@@ -190,7 +195,15 @@ elements.form.addEventListener("submit", async (event) => {
 
 elements.logout.addEventListener("click", () => {
   localStorage.removeItem("access_token");
+  authRevision += 1;
+  currentIdentity = null;
+  elements.reviewForm.hidden = true;
+  elements.reviewLoginPrompt.hidden = false;
+  elements.reviewFormStatus.textContent = "";
+  elements.reviewsList.querySelectorAll(".seller-reply-form").forEach((form) => form.remove());
   configureNavigation();
+  loadReviews();
+  loadReviewForm();
 });
 elements.reviewForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -223,7 +236,7 @@ elements.reviewForm.addEventListener("submit", async (event) => {
     elements.reviewMediaUrl.value = "";
     elements.reviewFormStatus.textContent = "Your verified-purchase review was submitted.";
     await loadReviews();
-    await loadReviewForm();
+    await loadReviewForm({ preserveStatus: true });
   } catch (error) {
     elements.reviewFormStatus.textContent = error instanceof Error ? error.message : "Unable to submit review.";
   } finally {
@@ -238,7 +251,8 @@ async function loadReviews() {
   elements.reviewsError.hidden = true;
   try {
     const token = localStorage.getItem("access_token");
-    currentIdentity = null;
+    const revision = authRevision;
+    if (!token) currentIdentity = null;
     const response = await fetch(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
       headers: { Accept: "application/json" },
     });
@@ -254,17 +268,28 @@ async function loadReviews() {
         const identityResponse = await fetch("/api/v1/auth/me", {
           headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
         });
-        if (identityResponse.ok) currentIdentity = await identityResponse.json();
-        else if (identityResponse.status === 401) localStorage.removeItem("access_token");
-        else {
+        if (identityResponse.ok) {
+          const identity = await identityResponse.json();
+          if (isCurrentAuth(token, revision)) currentIdentity = identity;
+        }
+        else if (identityResponse.status === 401 && isCurrentAuth(token, revision)) {
+          localStorage.removeItem("access_token");
+          authRevision += 1;
+          currentIdentity = null;
+          configureNavigation();
+        }
+        else if (isCurrentAuth(token, revision)) {
           elements.reviewsError.textContent = "Seller reply controls could not be checked.";
           elements.reviewsError.hidden = false;
         }
       } catch {
-        elements.reviewsError.textContent = "Seller reply controls could not be checked.";
-        elements.reviewsError.hidden = false;
+        if (isCurrentAuth(token, revision)) {
+          elements.reviewsError.textContent = "Seller reply controls could not be checked.";
+          elements.reviewsError.hidden = false;
+        }
       }
     }
+    if (!isCurrentAuth(token, revision)) currentIdentity = null;
     elements.reviewsList.replaceChildren(...reviews.map(createReviewCard));
   } catch (error) {
     elements.reviewsError.textContent = error instanceof Error ? error.message : "Unable to load reviews.";
@@ -316,26 +341,32 @@ function createReviewCard(review) {
   return card;
 }
 
-async function loadReviewForm() {
+async function loadReviewForm({ preserveStatus = false } = {}) {
   const token = localStorage.getItem("access_token");
+  const revision = authRevision;
   elements.reviewFormSection.hidden = false;
   elements.reviewForm.hidden = true;
   elements.reviewLoginPrompt.hidden = Boolean(token);
+  if (!preserveStatus) elements.reviewFormStatus.textContent = "";
   elements.reviewLoginLink.href = `/login?return_to=${encodeURIComponent(window.location.pathname)}`;
   if (!token) return;
   try {
     const identityResponse = await fetch("/api/v1/auth/me", {
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     });
+    if (!isCurrentAuth(token, revision)) return;
     if (identityResponse.status === 401) {
       localStorage.removeItem("access_token");
+      authRevision += 1;
       elements.reviewLoginPrompt.hidden = false;
+      configureNavigation();
       return;
     }
     if (!identityResponse.ok) {
       throw new Error("Unable to verify the current account.");
     }
     const identity = await identityResponse.json();
+    if (!isCurrentAuth(token, revision)) return;
     if (identity.role !== "buyer") {
       elements.reviewFormStatus.textContent = "Only buyer accounts can submit product reviews.";
       return;
@@ -345,6 +376,7 @@ async function loadReviewForm() {
       { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } },
     );
     const payload = await response.json().catch(() => null);
+    if (!isCurrentAuth(token, revision)) return;
     if (!response.ok) throw new Error(payload?.error?.message || "Unable to check completed purchases.");
     const items = Array.isArray(payload.data) ? payload.data : [];
     elements.reviewOrderItem.replaceChildren(...items.map((item) => {
@@ -355,15 +387,19 @@ async function loadReviewForm() {
     }));
     elements.reviewForm.hidden = items.length === 0;
     if (items.length === 0) {
-      elements.reviewFormStatus.textContent = "There are no completed, unreviewed purchases for this product.";
+      if (!preserveStatus || !elements.reviewFormStatus.textContent) {
+        elements.reviewFormStatus.textContent = "There are no completed, unreviewed purchases for this product.";
+      }
+    } else if (!preserveStatus) {
+      elements.reviewFormStatus.textContent = "";
     }
   } catch (error) {
+    if (!isCurrentAuth(token, revision)) return;
     elements.reviewFormStatus.textContent = error instanceof Error ? error.message : "Unable to check completed purchases.";
   }
 }
 
 function appendSellerReplyForm(card, review) {
-  const token = localStorage.getItem("access_token");
   const form = document.createElement("form");
   form.className = "seller-reply-form";
   const label = document.createElement("label");
@@ -382,6 +418,11 @@ function appendSellerReplyForm(card, review) {
   form.append(label, input, button, status);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      status.textContent = "Log in with your seller account to reply to reviews.";
+      return;
+    }
     button.disabled = true;
     try {
       const replyResponse = await fetch(`/api/v1/seller/reviews/${review.id}/reply`, {
