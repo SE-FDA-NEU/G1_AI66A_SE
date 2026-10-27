@@ -1305,6 +1305,6 @@ formulas, largest-remainder platform allocation, one shop voucher per seller ord
 one platform and one free-shipping voucher per checkout, a flat 20.000 ₫ fee per seller
 order under policy `US16-V1`, `POST /api/v1/orders/quote` with a `quote_revision` that
 checkout verifies, conditional usage counters inside the checkout transaction, and
-restoration rules for cancellation. Section 3.4 gains the `ERR_VOUCHER_*` and
+restoration rules tied to the US14 cancellation paths (#106, PR #164). Section 3.4 gains the `ERR_VOUCHER_*` and
 `ERR_QUOTE_STALE` codes only in the PR that first raises them. Legacy checkout bodies
 keep today's hash and pricing until the checkout UI (#136) sends quotes.

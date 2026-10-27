@@ -4,7 +4,7 @@ Story #108, tasks #133 (voucher model and validation), #134 (seller voucher UI),
 #135 (pricing and shipping), #136 (checkout voucher UI) and #137 (combo rules).
 
 **Status: contract only.** Nothing in this document is implemented on `main` at
-`df40107bc1bb8136e28400640c5a7c0cbecbade1` (after PR #167). The tables, endpoints and
+`d939a13ea679179df3472f39058a1c3ea12d7ed5` (after PR #164, the US14 order tracker). The tables, endpoints and
 error codes below are proposals that the owners of #133–#137 confirm or amend in their
 own pull requests. Error codes join `docs/design.md` section 3.4 only in the PR that
 first raises them; `tests/test_ui_docs_contract.py` requires that table to match the
@@ -201,9 +201,14 @@ A request without the new fields hashes byte-for-byte as it does today, so
 fields includes them in its hash. Reusing a key with different vouchers or a different
 revision returns `ERR_IDEMPOTENCY_CONFLICT`.
 
-The receipt (`GET /api/v1/orders/{orderId}`) adds the per-seller-order breakdown and the
-applied codes. It reads them from persisted rows and never re-runs pricing.
-`total_amount` keeps its meaning: the grand total.
+The receipt (`GET /api/v1/orders/{orderId}`, also used by `GET /api/v1/orders`) adds the
+per-seller-order breakdown and the applied codes. It reads them from persisted rows and
+never re-runs pricing. `total_amount` keeps its meaning: the grand total. The
+confirmation page and the `/orders/{orderId}` tracker page show the same persisted
+values. A seller who opens the receipt (the `seller_id` path added in PR #164) sees only
+their own seller order's breakdown, never another shop's amounts or the buyer's grand
+total. On `main` that path still returns every item of the parent order, so the item
+query has to be scoped to the seller before the breakdown is added.
 
 ### 5.3 Quote revision
 
@@ -298,7 +303,19 @@ as well. Python locks or `SELECT ... FOR UPDATE` are not part of the design.
 **Checkout failure.** Any failure, including stock or cart changes, rolls back stock,
 counters, usages and the order together. No restore step is needed.
 
-**Restoration (#128 wires it into cancellation):**
+**Restoration (#128 wires it into cancellation).** Since PR #164, a seller order
+reaches `CANCELLED`, and has its stock restored, through three code paths:
+
+| Entry point | Who | When |
+|---|---|---|
+| `PATCH /api/v1/seller/orders/{subOrderId}/status` (`src/api/seller_orders.py`) | Owning seller | From `PENDING`, `CONFIRMED` or `PROCESSING`, or approving `CANCELLATION_REQUESTED` |
+| `PATCH /api/v1/orders/{orderId}/status`, seller branch (`src/api/orders.py`) | Owning seller | The same transitions, applied to all of that seller's seller orders in the order |
+| `PATCH /api/v1/orders/{orderId}/status` or `POST /api/v1/orders/{orderId}/cancel`, buyer branch (`src/api/orders.py`) | Owning buyer | Only while the parent order is `PENDING`; cancels every seller order |
+
+Restoring a voucher belongs in one shared cancellation function that all three paths
+call, which is the extraction #128 plans. It must not be copied into each route. Moving
+to `CANCELLATION_REQUESTED`, or rejecting a request (back to `CONFIRMED` or
+`PROCESSING`), restores nothing.
 
 - A shop usage is restored when its seller order is cancelled.
 - A platform or shipping usage is restored only when every seller order of the order
@@ -329,7 +346,8 @@ under a new policy version.
 | Per-shop discount and proportional platform allocation | Section 2.2 cases; `sum(D_platform_s) = D_platform` for random inputs | #135 |
 | Seller-order and grand totals | Section 2.1 example end to end; the persisted totals equal the quote; the receipt reads persisted values | #135, #136 |
 | Combo rules recorded before implementation | Section 8 confirmed in #137 | #137 |
-| Rollback and restore keep usage consistent | Failure injected after consumption leaves no usage rows and unchanged counters; one restore per cancellation; platform restore only after every allocated seller order is cancelled; replay never consumes twice | #133, #128 |
+| Rollback and restore keep usage consistent | Failure injected after consumption leaves no usage rows and unchanged counters; one restore per cancellation through each entry point in section 7, including approval of a cancellation request; no restore on request or rejection; platform restore only after every allocated seller order is cancelled; replay never consumes twice | #133, #128 |
+| Seller receipt scope | A seller reading a two-shop order sees only their own items and breakdown | #136 |
 | Compatibility | Legacy hash test unchanged; key reuse with other vouchers conflicts; migration fresh, legacy and rerun | #133, #136 |
 | Seller management scope | Seller A cannot read or edit seller B's voucher; `scope` and `seller_id` in the body are rejected | #134 |
 
