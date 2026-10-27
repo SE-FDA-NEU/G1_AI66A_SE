@@ -10,7 +10,6 @@ from sqlmodel import select
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.category import Category
-from src.models.user import User
 
 logger = logging.getLogger(__name__)
 

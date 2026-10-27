@@ -809,7 +809,9 @@ implementation"). This table lists every code the code raises, checked by
 | `404 Not Found` | `ERR_REVIEW_NOT_FOUND` | The requested review does not exist | Seller reviews |
 | `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
 | `404 Not Found` | `ERR_NOTIFICATION_NOT_FOUND` | The notification does not exist or belongs to another user | Notifications |
+| `404 Not Found` | `ERR_ADDRESS_NOT_FOUND` | Unknown address or address owned by another buyer | Addresses, orders |
 | `404 Not Found` | `ERR_ORDER_NOT_FOUND` | Unknown order, another buyer's order, or unknown seller order | Orders, seller orders |
+| `409 Conflict` | `ERR_ADDRESS_CHANGED` | Submitted address version is stale | Addresses, orders |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
 | `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
 | `409 Conflict` | `ERR_REVIEW_NOT_COMPLETED` | The seller order has not reached `COMPLETED` | Reviews |
@@ -1261,3 +1263,34 @@ checks out only selected rows. The runtime contract, migration behavior,
 transaction boundaries and acceptance checks are documented in
 [US12 cart selection](us12-cart-selection.md). This implementation completes the
 story scope, including persistence, selected checkout and regression coverage.
+
+
+## US13 address book and delivery snapshots (#105)
+
+`user_addresses` belongs to `users` through `user_id`; it contains recipient_name,
+phone_number, province, district, ward, detailed_address, is_default, version and UTC
+created_at/updated_at. Its SQLite primary key uses AUTOINCREMENT so deleted IDs are
+never reused. The partial unique index `ux_user_addresses_one_default` covers user_id
+only where is_default=true. Version starts at 1 and increments on every update,
+including when another address becomes default. Clearing and setting defaults commit
+in one owner-scoped transaction; only lock/default-index conflicts get bounded retries.
+`init_db()` registers the table/index on existing databases without replacing orders.
+
+Buyer-only `/api/v1/addresses`: GET lists default first then ID; POST creates (201);
+PUT /{id} replaces fields with a required version; PATCH /{id}/default accepts version;
+DELETE /{id} returns 204 with no JSON. Create/update accept six delivery text fields
+and strict boolean is_default; update also needs a strict positive integer version.
+Server-owned fields are forbidden. See [US13 contract and evidence](us13-addresses.md).
+
+POST /api/v1/orders accepts exactly one of the legacy delivery body or
+`{"address_id":12,"address_version":3}`. Ownership/version resolution occurs after
+idempotency replay. Hashing keeps legacy field order, separators and phone formatting.
+Saved-address hashes contain only ID/version. The service copies the name, phone and
+`detailed_address, ward, district, province` into orders in the checkout transaction.
+Receipts read these immutable fields directly; there is no dependency on the address
+remaining in the book. Selected cart lines, stock checks and request-key uniqueness
+remain part of the existing transaction.
+
+Address/checkout validation adds error.fields with safe field names and `_form` for
+payload-shape/extra-field errors. Union branch names and raw input never enter this
+response. Seller-product validation retains its original contract.
