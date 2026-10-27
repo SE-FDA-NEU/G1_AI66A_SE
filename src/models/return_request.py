@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import Index, text
 from sqlmodel import Field, SQLModel
 
 
@@ -7,6 +8,14 @@ class ReturnRequest(SQLModel, table=True):
     """Return and refund request submitted by a buyer for a delivered order."""
 
     __tablename__ = "return_requests"
+    __table_args__ = (
+        Index(
+            "uq_return_requests_seller_order_pending",
+            "seller_order_id",
+            unique=True,
+            sqlite_where=text("status = 'PENDING'"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="orders.id", index=True)

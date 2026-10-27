@@ -236,6 +236,14 @@ def migrate_db(connection: Connection | None = None) -> None:
                 )
             )
 
+        if "return_requests" in tables:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_return_requests_seller_order_pending "
+                    "ON return_requests(seller_order_id) WHERE status = 'PENDING'"
+                )
+            )
+
 
 def init_db() -> None:
     """Register application models, create missing tables, and run migrations."""

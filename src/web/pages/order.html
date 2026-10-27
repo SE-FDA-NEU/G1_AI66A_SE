@@ -283,42 +283,47 @@
         <h3 class="section-subheading" style="margin-bottom: 0;">RETURN &amp; REFUND REQUEST</h3>
         <span id="badge-return-status" class="badge"></span>
       </div>
-      <div class="info-block" style="margin-bottom: 12px;">
-        <p class="order-metric-label" style="font-size: 13px; color: var(--ios-text-muted);">Request #<span id="return-req-id"></span> &middot; Submitted on <span id="return-req-date"></span></p>
-      </div>
-      <div class="info-block" style="margin-bottom: 12px;">
-        <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Reason for Request</div>
-        <div id="return-req-reason" class="info-value" style="font-weight: 500; margin-top: 4px;"></div>
-      </div>
-      <div class="info-block" style="margin-bottom: 12px;">
-        <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Supporting Evidence</div>
-        <div id="return-req-evidence" class="info-value" style="margin-top: 4px; white-space: pre-wrap;"></div>
-      </div>
-      <div id="return-resolution-details" class="info-block" hidden style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ios-border);">
-        <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Resolution Details</div>
-        <div id="return-req-decision-notes" class="info-value" style="margin-top: 4px;"></div>
-        <div id="return-req-restock-status" class="info-value" style="margin-top: 6px; font-weight: 600; color: var(--ios-green);"></div>
-      </div>
+      <!-- Container for displaying multiple return requests per seller order -->
+      <div id="return-requests-list" style="margin-bottom: 12px;"></div>
 
-      <!-- Decision Controls for Seller / Admin -->
-      <div id="reviewer-decision-panel" hidden style="margin-top: 16px; border-top: 1px solid var(--ios-border); padding-top: 16px;">
-        <h4 style="font-size: 15px; margin-bottom: 10px; font-weight: 600;">Review Return Request</h4>
-        <form id="decision-form">
-          <div class="form-group" style="margin-bottom: 12px;">
-            <label for="decision-notes-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Decision Notes / Feedback</label>
-            <textarea id="decision-notes-input" rows="3" class="ios-textarea" placeholder="Provide notes regarding approval or rejection..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
-          </div>
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-              <input type="checkbox" id="decision-restock-checkbox">
-              Item confirmed restockable into inventory
-            </label>
-          </div>
-          <div class="action-buttons">
-            <button type="button" id="btn-approve-return" class="ios-btn ios-btn-primary" style="background: #16a34a;">Approve Return &amp; Refund</button>
-            <button type="button" id="btn-reject-return" class="ios-btn ios-btn-danger">Reject Request</button>
-          </div>
-        </form>
+      <div id="return-single-request-details">
+        <div class="info-block" style="margin-bottom: 12px;">
+          <p class="order-metric-label" style="font-size: 13px; color: var(--ios-text-muted);">Request #<span id="return-req-id"></span> &middot; Submitted on <span id="return-req-date"></span></p>
+        </div>
+        <div class="info-block" style="margin-bottom: 12px;">
+          <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Reason for Request</div>
+          <div id="return-req-reason" class="info-value" style="font-weight: 500; margin-top: 4px;"></div>
+        </div>
+        <div class="info-block" style="margin-bottom: 12px;">
+          <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Supporting Evidence</div>
+          <div id="return-req-evidence" class="info-value" style="margin-top: 4px; white-space: pre-wrap;"></div>
+        </div>
+        <div id="return-resolution-details" class="info-block" hidden style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ios-border);">
+          <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Resolution Details</div>
+          <div id="return-req-decision-notes" class="info-value" style="margin-top: 4px;"></div>
+          <div id="return-req-restock-status" class="info-value" style="margin-top: 6px; font-weight: 600; color: var(--ios-green);"></div>
+        </div>
+
+        <!-- Decision Controls for Seller / Admin -->
+        <div id="reviewer-decision-panel" hidden style="margin-top: 16px; border-top: 1px solid var(--ios-border); padding-top: 16px;">
+          <h4 style="font-size: 15px; margin-bottom: 10px; font-weight: 600;">Review Return Request</h4>
+          <form id="decision-form">
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label for="decision-notes-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Decision Notes / Feedback</label>
+              <textarea id="decision-notes-input" rows="3" class="ios-textarea" placeholder="Provide notes regarding approval or rejection..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                <input type="checkbox" id="decision-restock-checkbox">
+                Item confirmed restockable into inventory
+              </label>
+            </div>
+            <div class="action-buttons">
+              <button type="button" id="btn-approve-return" class="ios-btn ios-btn-primary" style="background: #16a34a;">Approve Return &amp; Refund</button>
+              <button type="button" id="btn-reject-return" class="ios-btn ios-btn-danger">Reject Request</button>
+            </div>
+          </form>
+        </div>
       </div>
     </section>
 
@@ -331,6 +336,10 @@
         If you encountered issues with your delivered items, you may submit a request with supporting evidence.
       </p>
       <form id="buyer-return-form">
+        <div id="return-seller-order-group" class="form-group" style="margin-bottom: 12px;" hidden>
+          <label for="return-seller-order-select" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Select Sub-Order to Return *</label>
+          <select id="return-seller-order-select" class="ios-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px; background: white;"></select>
+        </div>
         <div class="form-group" style="margin-bottom: 12px;">
           <label for="return-reason-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Reason for Return/Refund *</label>
           <textarea id="return-reason-input" rows="3" required minlength="3" maxlength="500" class="ios-textarea" placeholder="Describe the reason (e.g. damaged on delivery, defective item, incorrect specification)..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>

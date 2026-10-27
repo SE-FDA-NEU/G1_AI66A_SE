@@ -21,6 +21,7 @@ from src.schemas.orders import (
     DeliverySnapshot,
     OrderData,
     OrderLine,
+    SubOrderSummary,
 )
 from src.services.addresses import AddressError, owned_address
 from src.services.notifications import create_notification
@@ -71,6 +72,14 @@ def receipt(
         values["delivered_at"] = order.delivered_at.replace(tzinfo=UTC)
     if order.completed_at:
         values["completed_at"] = order.completed_at.replace(tzinfo=UTC)
+    sub_orders = session.exec(
+        select(SellerOrder).where(SellerOrder.order_id == order.id).order_by(SellerOrder.id)
+    ).all()
+    sub_order_map = {so.id: so for so in sub_orders}
+    visible_sub_orders = sub_orders
+    if seller_id is not None:
+        visible_sub_orders = [so for so in sub_orders if so.seller_id == seller_id]
+
     return OrderData(
         **values,
         items=[
@@ -79,8 +88,26 @@ def receipt(
                 product_code=product.code,
                 product_name=product.name,
                 line_total=item.quantity * item.unit_price,
+                seller_order_status=sub_order_map[item.seller_order_id].status
+                if item.seller_order_id in sub_order_map
+                else None,
             )
             for item, product in rows
+        ],
+        sub_orders=[
+            SubOrderSummary(
+                id=so.id,  # type: ignore
+                seller_id=so.seller_id,
+                status=so.status,
+                payment_status=so.payment_status,
+                escrow_status=so.escrow_status,
+                tracking_number=so.tracking_number,
+                shipped_at=so.shipped_at.replace(tzinfo=UTC) if so.shipped_at else None,
+                delivered_at=so.delivered_at.replace(tzinfo=UTC) if so.delivered_at else None,
+                completed_at=so.completed_at.replace(tzinfo=UTC) if so.completed_at else None,
+            )
+            for so in visible_sub_orders
+            if so.id is not None
         ],
     )
 

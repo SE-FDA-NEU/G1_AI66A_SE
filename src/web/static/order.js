@@ -104,6 +104,10 @@ const elements = {
   buyerReturnForm: document.getElementById("buyer-return-form"),
   returnReasonInput: document.getElementById("return-reason-input"),
   returnEvidenceInput: document.getElementById("return-evidence-input"),
+  returnSellerOrderGroup: document.getElementById("return-seller-order-group"),
+  returnSellerOrderSelect: document.getElementById("return-seller-order-select"),
+  returnRequestsList: document.getElementById("return-requests-list"),
+  returnSingleRequestDetails: document.getElementById("return-single-request-details"),
 };
 
 let currentOrder = null;
@@ -422,6 +426,14 @@ function renderOrder(order) {
     nameStrong.textContent = item.product_name;
     strongName.textContent = item.product_name;
     tdName.appendChild(strongName);
+    if (item.seller_order_id) {
+      const subTag = document.createElement("span");
+      subTag.style.cssText = "display: block; font-size: 11px; color: var(--ios-text-muted); margin-top: 2px;";
+      subTag.textContent = item.seller_order_status
+        ? `Sub-Order #${item.seller_order_id} (${item.seller_order_status.replace("_", " ")})`
+        : `Sub-Order #${item.seller_order_id}`;
+      tdName.appendChild(subTag);
+    }
     tr.appendChild(tdName);
 
     const tdCode = document.createElement("td");
@@ -801,31 +813,83 @@ async function loadReturnRequests(order) {
     const returnRequests = (res && res.data) ? res.data : [];
     activeReturnRequest = returnRequests.length > 0 ? returnRequests[0] : null;
 
-    if (activeReturnRequest) {
-      if (elements.returnStatusCard) {
+    // Build sub-orders list
+    let subOrders = order.sub_orders || [];
+    if (!subOrders.length && order.items && order.items.length) {
+      const seen = new Set();
+      subOrders = [];
+      order.items.forEach((it) => {
+        if (!seen.has(it.seller_order_id)) {
+          seen.add(it.seller_order_id);
+          subOrders.push({
+            id: it.seller_order_id,
+            status: it.seller_order_status || order.status,
+          });
+        }
+      });
+    }
+
+    const returnMap = new Map();
+    returnRequests.forEach((r) => returnMap.set(r.seller_order_id, r));
+
+    // Determine sub-orders eligible for return
+    const eligibleSubOrders = subOrders.filter((so) => {
+      const isDelivered = (so.status === "DELIVERED") || (!so.status && order.status === "DELIVERED");
+      return isDelivered && !returnMap.has(so.id);
+    });
+
+    // Populate Buyer Return Request Form
+    if (elements.buyerReturnFormCard) {
+      if (user && user.role === "buyer" && eligibleSubOrders.length > 0) {
+        elements.buyerReturnFormCard.hidden = false;
+        if (elements.returnSellerOrderSelect) {
+          elements.returnSellerOrderSelect.replaceChildren();
+          eligibleSubOrders.forEach((so) => {
+            const opt = document.createElement("option");
+            opt.value = String(so.id);
+            const items = (order.items || []).filter((it) => it.seller_order_id === so.id);
+            const summary = items.map((it) => `${it.product_name} × ${it.quantity}`).join(", ");
+            opt.textContent = `Sub-order #${so.id} (${summary || "Item"}) — DELIVERED`;
+            elements.returnSellerOrderSelect.appendChild(opt);
+          });
+        }
+        if (elements.returnSellerOrderGroup) {
+          elements.returnSellerOrderGroup.hidden = subOrders.length <= 1;
+        }
+      } else {
+        elements.buyerReturnFormCard.hidden = true;
+      }
+    }
+
+    // Display Return Requests Status per seller order
+    if (elements.returnStatusCard) {
+      if (returnRequests.length > 0) {
         elements.returnStatusCard.hidden = false;
-        if (elements.returnReqId) elements.returnReqId.textContent = String(activeReturnRequest.id);
-        if (elements.returnReqDate) elements.returnReqDate.textContent = formatDate(activeReturnRequest.created_at);
+
+        // Populate single request elements for backwards compatibility
+        const primaryReq = activeReturnRequest;
+        if (elements.returnReqId) elements.returnReqId.textContent = String(primaryReq.id);
+        if (elements.returnReqDate) elements.returnReqDate.textContent = formatDate(primaryReq.created_at);
         if (elements.badgeReturnStatus) {
-          elements.badgeReturnStatus.textContent = activeReturnRequest.status;
+          elements.badgeReturnStatus.textContent = primaryReq.status;
           elements.badgeReturnStatus.className = "badge " + (
-            activeReturnRequest.status === "APPROVED" ? "badge-success" :
-            activeReturnRequest.status === "REJECTED" ? "badge-danger" : "badge-warning"
+            primaryReq.status === "APPROVED" ? "badge-success" :
+            primaryReq.status === "REJECTED" ? "badge-danger" : "badge-warning"
           );
         }
-        if (elements.returnReqReason) elements.returnReqReason.textContent = activeReturnRequest.reason;
-        if (elements.returnReqEvidence) elements.returnReqEvidence.textContent = activeReturnRequest.evidence;
+        if (elements.returnReqReason) elements.returnReqReason.textContent = primaryReq.reason;
+        if (elements.returnReqEvidence) elements.returnReqEvidence.textContent = primaryReq.evidence;
 
         const returnResolutionDetails = document.getElementById("return-resolution-details");
-        if (activeReturnRequest.status !== "PENDING") {
+        if (primaryReq.status !== "PENDING") {
           if (returnResolutionDetails) {
             returnResolutionDetails.hidden = false;
             if (elements.returnReqDecisionNotes) {
-              elements.returnReqDecisionNotes.textContent = activeReturnRequest.decision_notes || "No notes provided.";
+              elements.returnReqDecisionNotes.textContent = primaryReq.decision_notes || "No notes provided.";
             }
             if (elements.returnReqRestockStatus) {
-              elements.returnReqRestockStatus.textContent = activeReturnRequest.status === "APPROVED"
-                ? (activeReturnRequest.is_restockable ? "Items confirmed restockable; inventory restored." : "Items not restocked.")
+              elements.returnReqRestockStatus.textContent = primaryReq.status === "APPROVED"
+                ? (primaryReq.is_restockable ? "Items confirmed restockable; inventory restored." : "Items not restocked.")
                 : "Return request was rejected. Order returned to completion.";
             }
           }
@@ -836,12 +900,96 @@ async function loadReturnRequests(order) {
             elements.reviewerPanel.hidden = !(user && (user.role === "admin" || user.role === "seller"));
           }
         }
-      }
-      if (elements.buyerReturnFormCard) elements.buyerReturnFormCard.hidden = true;
-    } else {
-      if (elements.returnStatusCard) elements.returnStatusCard.hidden = true;
-      if (elements.buyerReturnFormCard) {
-        elements.buyerReturnFormCard.hidden = !(order.status === "DELIVERED" && user && user.role === "buyer");
+
+        // If multiple return requests, render per-seller-order list
+        if (elements.returnRequestsList && returnRequests.length > 1) {
+          if (elements.returnSingleRequestDetails) elements.returnSingleRequestDetails.hidden = true;
+          elements.returnRequestsList.replaceChildren();
+
+          returnRequests.forEach((req) => {
+            const card = document.createElement("div");
+            card.className = "return-request-item";
+            card.style.cssText = "padding: 14px; border: 1px solid var(--ios-border); border-radius: 12px; margin-bottom: 12px; background: rgba(0,0,0,0.015);";
+
+            const headerRow = document.createElement("div");
+            headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;";
+
+            const subOrderTitle = document.createElement("strong");
+            const items = (order.items || []).filter((it) => it.seller_order_id === req.seller_order_id);
+            const summary = items.map((it) => it.product_name).join(", ");
+            subOrderTitle.textContent = `Sub-Order #${req.seller_order_id} ${summary ? "(" + summary + ")" : ""}`;
+
+            const badge = document.createElement("span");
+            badge.className = "badge " + (
+              req.status === "APPROVED" ? "badge-success" :
+              req.status === "REJECTED" ? "badge-danger" : "badge-warning"
+            );
+            badge.textContent = req.status;
+
+            headerRow.append(subOrderTitle, badge);
+            card.appendChild(headerRow);
+
+            const metaP = document.createElement("p");
+            metaP.style.cssText = "font-size: 13px; color: var(--ios-text-muted); margin-bottom: 8px;";
+            metaP.textContent = `Request #${req.id} · Submitted on ${formatDate(req.created_at)}`;
+            card.appendChild(metaP);
+
+            const reasonP = document.createElement("p");
+            reasonP.style.cssText = "font-size: 14px; margin-bottom: 6px;";
+            const reasonLabel = document.createElement("strong");
+            reasonLabel.textContent = "Reason: ";
+            reasonP.append(reasonLabel, document.createTextNode(req.reason));
+            card.appendChild(reasonP);
+
+            const evidenceP = document.createElement("p");
+            evidenceP.style.cssText = "font-size: 14px; margin-bottom: 8px; white-space: pre-wrap;";
+            const evidenceLabel = document.createElement("strong");
+            evidenceLabel.textContent = "Evidence: ";
+            evidenceP.append(evidenceLabel, document.createTextNode(req.evidence));
+            card.appendChild(evidenceP);
+
+            if (req.status !== "PENDING") {
+              const resDiv = document.createElement("div");
+              resDiv.style.cssText = "padding-top: 8px; border-top: 1px solid var(--ios-border); font-size: 13px;";
+              const notesP = document.createElement("p");
+              notesP.textContent = `Notes: ${req.decision_notes || "No notes provided."}`;
+              const restockP = document.createElement("p");
+              restockP.style.cssText = "font-weight: 600; color: var(--ios-green); margin-top: 4px;";
+              restockP.textContent = req.status === "APPROVED"
+                ? (req.is_restockable ? "Inventory restored." : "Inventory not restocked.")
+                : "Request rejected.";
+              resDiv.append(notesP, restockP);
+              card.appendChild(resDiv);
+            } else if (user && (user.role === "admin" || user.role === "seller")) {
+              const actionRow = document.createElement("div");
+              actionRow.style.cssText = "margin-top: 10px; display: flex; gap: 8px;";
+
+              const btnApprove = document.createElement("button");
+              btnApprove.type = "button";
+              btnApprove.className = "ios-btn ios-btn-primary";
+              btnApprove.style.cssText = "background: #16a34a; font-size: 13px; padding: 6px 12px;";
+              btnApprove.textContent = "Approve";
+              btnApprove.addEventListener("click", () => handleReturnDecision("APPROVE", req.id));
+
+              const btnReject = document.createElement("button");
+              btnReject.type = "button";
+              btnReject.className = "ios-btn ios-btn-danger";
+              btnReject.style.cssText = "font-size: 13px; padding: 6px 12px;";
+              btnReject.textContent = "Reject";
+              btnReject.addEventListener("click", () => handleReturnDecision("REJECT", req.id));
+
+              actionRow.append(btnApprove, btnReject);
+              card.appendChild(actionRow);
+            }
+
+            elements.returnRequestsList.appendChild(card);
+          });
+        } else {
+          if (elements.returnSingleRequestDetails) elements.returnSingleRequestDetails.hidden = false;
+          if (elements.returnRequestsList) elements.returnRequestsList.replaceChildren();
+        }
+      } else {
+        elements.returnStatusCard.hidden = true;
       }
     }
   } catch (_) {}
@@ -856,6 +1004,12 @@ if (elements.buyerReturnForm) {
     const orderId = (currentOrder && currentOrder.id) || getOrderId();
     if (!orderId) return;
 
+    const sellerOrderId = elements.returnSellerOrderSelect ? elements.returnSellerOrderSelect.value : null;
+    const body = { reason, evidence };
+    if (sellerOrderId) {
+      body.seller_order_id = Number(sellerOrderId);
+    }
+
     elements.statusMsg.hidden = false;
     elements.statusMsg.textContent = "Submitting return request...";
     elements.errorMsg.hidden = true;
@@ -863,7 +1017,7 @@ if (elements.buyerReturnForm) {
     try {
       const res = await request(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, {
         method: "POST",
-        body: JSON.stringify({ reason, evidence }),
+        body: JSON.stringify(body),
       });
       if (res && res.data) {
         elements.statusMsg.textContent = "Return request submitted. Escrow release paused pending review.";
@@ -878,8 +1032,9 @@ if (elements.buyerReturnForm) {
   });
 }
 
-async function handleReturnDecision(action) {
-  if (!activeReturnRequest) return;
+async function handleReturnDecision(action, reqId) {
+  const targetReqId = reqId || (activeReturnRequest && activeReturnRequest.id);
+  if (!targetReqId) return;
   const notes = (elements.decisionNotesInput && elements.decisionNotesInput.value || "").trim();
   const restock = elements.decisionRestockCheckbox ? elements.decisionRestockCheckbox.checked : false;
 
@@ -888,7 +1043,7 @@ async function handleReturnDecision(action) {
   elements.errorMsg.hidden = true;
 
   try {
-    const res = await request(`/api/v1/return-requests/${encodeURIComponent(activeReturnRequest.id)}/decision`, {
+    const res = await request(`/api/v1/return-requests/${encodeURIComponent(targetReqId)}/decision`, {
       method: "POST",
       body: JSON.stringify({
         action,
