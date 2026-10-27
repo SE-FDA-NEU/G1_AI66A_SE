@@ -17,6 +17,7 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
+from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
@@ -50,8 +51,11 @@ TRANSITIONS: dict[str, set[str]] = {
 class SellerOrderItemResponse(BaseModel):
     id: int
     product_id: int
+    variant_id: int | None = None
     product_name: str
+    variant_name: str | None = None
     product_code: str
+    image_url: str | None = None
     quantity: int
     unit_price: int
     total_price: int
@@ -125,8 +129,19 @@ def _seller_order_response(
         SellerOrderItemResponse(
             id=item.id,
             product_id=item.product_id,
-            product_name=product.name,
+            variant_id=item.variant_id,
+            product_name=(
+                item.product_name_snapshot
+                if item.snapshot_initialized
+                else item.product_name_snapshot or product.name
+            ),
+            variant_name=item.variant_name_snapshot,
             product_code=product.code,
+            image_url=(
+                item.product_image_snapshot
+                if item.snapshot_initialized
+                else item.product_image_snapshot or product.image_url
+            ),
             quantity=item.quantity,
             unit_price=item.unit_price,
             total_price=item.quantity * item.unit_price,
@@ -198,8 +213,7 @@ def list_seller_orders(
     ).all()
     return SellerOrderListResponse(
         data=[
-            _seller_order_response(session, seller_order, parent)
-            for seller_order, parent in rows
+            _seller_order_response(session, seller_order, parent) for seller_order, parent in rows
         ],
         meta={"page": page, "limit": limit, "total": total},
     )
@@ -270,15 +284,7 @@ def update_seller_order_status(
     ).all()
     if new_status == "CANCELLED":
         for item, product in items:
-            session.exec(
-                update(Product)
-                .where(Product.id == product.id)
-                .values(
-                    stock_quantity=Product.stock_quantity + item.quantity,
-                    version=Product.version + 1,
-                )
-                .execution_options(synchronize_session=False)
-            )
+            restore_order_item_stock(session, item)
             session.exec(
                 update(ProductMetadata)
                 .where(ProductMetadata.product_id == product.id)
@@ -375,6 +381,4 @@ def update_seller_order_status(
             status_code=500,
             detail=error_detail("ERR_DATABASE_FAILURE", "The parent order could not be loaded."),
         )
-    return StatusUpdateResponse(
-        data=_seller_order_response(session, seller_order, parent)
-    )
+    return StatusUpdateResponse(data=_seller_order_response(session, seller_order, parent))

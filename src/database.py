@@ -90,6 +90,139 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "WHERE price_at_add IS NULL"
                     )
                 )
+            if "variant_id" not in columns:
+                if (
+                    connection.dialect.name == "sqlite"
+                    and {
+                        "buyer_id",
+                        "product_id",
+                        "quantity",
+                        "created_at",
+                    }
+                    <= columns
+                ):
+                    connection.execute(
+                        text(
+                            "CREATE TABLE cart_items__variants ("
+                            "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                            "buyer_id INTEGER NOT NULL, product_id INTEGER NOT NULL, "
+                            "variant_id INTEGER, quantity INTEGER NOT NULL, "
+                            "is_selected BOOLEAN NOT NULL DEFAULT TRUE, price_at_add INTEGER, "
+                            "created_at DATETIME NOT NULL, "
+                            "FOREIGN KEY(buyer_id) REFERENCES users(id), "
+                            "FOREIGN KEY(product_id) REFERENCES products(id), "
+                            "FOREIGN KEY(variant_id) REFERENCES product_variants(id), "
+                            "CHECK(quantity > 0))"
+                        )
+                    )
+                    connection.execute(
+                        text(
+                            "INSERT INTO cart_items__variants "
+                            "(id, buyer_id, product_id, quantity, is_selected, "
+                            "price_at_add, created_at) "
+                            "SELECT id, buyer_id, product_id, quantity, is_selected, "
+                            "price_at_add, created_at "
+                            "FROM cart_items"
+                        )
+                    )
+                    connection.execute(text("DROP TABLE cart_items"))
+                    connection.execute(
+                        text("ALTER TABLE cart_items__variants RENAME TO cart_items")
+                    )
+                    connection.execute(
+                        text("CREATE INDEX ix_cart_items_buyer_id ON cart_items (buyer_id)")
+                    )
+                    connection.execute(
+                        text("CREATE INDEX ix_cart_items_product_id ON cart_items (product_id)")
+                    )
+                    connection.execute(
+                        text("CREATE INDEX ix_cart_items_variant_id ON cart_items (variant_id)")
+                    )
+                    connection.execute(
+                        text(
+                            "CREATE UNIQUE INDEX uq_cart_items_buyer_product_base "
+                            "ON cart_items (buyer_id, product_id) WHERE variant_id IS NULL"
+                        )
+                    )
+                    connection.execute(
+                        text(
+                            "CREATE UNIQUE INDEX uq_cart_items_buyer_product_variant "
+                            "ON cart_items (buyer_id, product_id, variant_id) "
+                            "WHERE variant_id IS NOT NULL"
+                        )
+                    )
+                else:
+                    connection.execute(text("ALTER TABLE cart_items ADD COLUMN variant_id INTEGER"))
+                    if connection.dialect.name != "sqlite":
+                        for constraint in inspector.get_unique_constraints("cart_items"):
+                            if set(constraint.get("column_names") or ()) == {
+                                "buyer_id",
+                                "product_id",
+                            }:
+                                name = constraint.get("name")
+                                if name:
+                                    connection.execute(
+                                        text(f'ALTER TABLE cart_items DROP CONSTRAINT "{name}"')
+                                    )
+                    if {"buyer_id", "product_id"} <= columns:
+                        connection.execute(
+                            text(
+                                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                                "uq_cart_items_buyer_product_base "
+                                "ON cart_items (buyer_id, product_id) WHERE variant_id IS NULL"
+                            )
+                        )
+                        connection.execute(
+                            text(
+                                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                                "uq_cart_items_buyer_product_variant "
+                                "ON cart_items (buyer_id, product_id, variant_id) "
+                                "WHERE variant_id IS NOT NULL"
+                            )
+                        )
+
+        if "categories" in tables:
+            columns = {c["name"] for c in inspector.get_columns("categories")}
+            if "is_active" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE categories ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
+                    )
+                )
+
+        if "order_items" in tables:
+            columns = {c["name"] for c in inspector.get_columns("order_items")}
+            if "variant_id" not in columns:
+                connection.execute(text("ALTER TABLE order_items ADD COLUMN variant_id INTEGER"))
+            for name, declaration in (
+                ("product_name_snapshot", "VARCHAR(200)"),
+                ("variant_name_snapshot", "VARCHAR(100)"),
+                ("product_image_snapshot", "VARCHAR(2048)"),
+                ("snapshot_initialized", "BOOLEAN NOT NULL DEFAULT FALSE"),
+            ):
+                if name not in columns:
+                    connection.execute(
+                        text(f"ALTER TABLE order_items ADD COLUMN {name} {declaration}")
+                    )
+            if "products" in tables:
+                connection.execute(
+                    text(
+                        "UPDATE order_items SET product_name_snapshot = "
+                        "(SELECT name FROM products WHERE products.id = order_items.product_id) "
+                        ", product_image_snapshot = "
+                        "(SELECT image_url FROM products "
+                        "WHERE products.id = order_items.product_id), "
+                        "snapshot_initialized = TRUE "
+                        "WHERE snapshot_initialized = FALSE "
+                        "AND product_name_snapshot IS NULL"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "UPDATE order_items SET snapshot_initialized = TRUE "
+                        "WHERE snapshot_initialized = FALSE"
+                    )
+                )
 
         if "orders" in tables:
             columns = {c["name"] for c in inspector.get_columns("orders")}
@@ -212,10 +345,7 @@ def migrate_db(connection: Connection | None = None) -> None:
                     # 4. Swap tables and recreate index
                     connection.execute(text("DROP TABLE product_metadata"))
                     connection.execute(
-                        text(
-                            "ALTER TABLE product_metadata__migration "
-                            "RENAME TO product_metadata"
-                        )
+                        text("ALTER TABLE product_metadata__migration RENAME TO product_metadata")
                     )
                     connection.execute(
                         text(

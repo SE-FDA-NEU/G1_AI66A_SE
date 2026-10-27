@@ -154,6 +154,19 @@ def require_buyer(user: CurrentUser) -> User:
 BuyerUser = Annotated[User, Depends(require_buyer)]
 
 
+def require_admin(user: CurrentUser) -> User:
+    """Require an authenticated administrator for category management."""
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ADMIN_REQUIRED", "An administrator account is required."),
+        )
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]
+
+
 def _b64encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 

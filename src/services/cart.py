@@ -17,6 +17,7 @@ from sqlmodel import Session, select
 
 from src.models.cart_item import CartItem
 from src.models.product import Product
+from src.models.product_variant import ProductVariant
 from src.models.user import User
 from src.schemas.cart import Cart, CartLine, CartLineAvailability
 
@@ -76,27 +77,55 @@ def validate_quantity(quantity: object) -> None:
         raise CartError(CartErrorCode.INVALID_QUANTITY, INVALID_QUANTITY_MESSAGE)
 
 
-def get_available_stock(product: Product) -> int:
+def get_available_stock(product: Product, variant: ProductVariant | None = None) -> int:
     """Stock a buyer may still put in a cart: physical stock minus stock reserved by orders."""
-    return product.stock_quantity - product.reserved_stock
+    item = variant or product
+    return item.stock_quantity - item.reserved_stock
 
 
-def get_line_availability(product: Product, quantity: int) -> CartLineAvailability:
+def product_requires_variant(session: Session, product_id: int) -> bool:
+    return (
+        session.exec(
+            select(ProductVariant.id).where(ProductVariant.product_id == product_id)
+        ).first()
+        is not None
+    )
+
+
+def get_line_availability(
+    product: Product,
+    quantity: int,
+    variant: ProductVariant | None = None,
+    requires_variant: bool = False,
+) -> CartLineAvailability:
     """Classify `quantity` of `product` against its current availability."""
-    if not product.is_active:
+    if not product.is_active or (variant is not None and not variant.is_active):
         return CartLineAvailability.UNAVAILABLE
-    if quantity > get_available_stock(product):
+    if requires_variant and variant is None:
+        return CartLineAvailability.VARIANT_REQUIRED
+    if quantity > get_available_stock(product, variant):
         return CartLineAvailability.INSUFFICIENT_STOCK
     return CartLineAvailability.AVAILABLE
 
 
-def validate_purchasable_quantity(product: Product, quantity: int) -> None:
+def validate_purchasable_quantity(
+    product: Product,
+    quantity: int,
+    variant: ProductVariant | None = None,
+    requires_variant: bool = False,
+) -> None:
     """Refuse a cart quantity the product cannot satisfy right now (BR2)."""
-    availability = get_line_availability(product, quantity)
+    availability = get_line_availability(product, quantity, variant, requires_variant)
+    if availability is CartLineAvailability.VARIANT_REQUIRED:
+        raise CartError(
+            CartErrorCode.PRODUCT_UNAVAILABLE,
+            "This product now has options. Choose an option on the product page "
+            "before updating it.",
+        )
     if availability is CartLineAvailability.UNAVAILABLE:
         raise CartError(CartErrorCode.PRODUCT_UNAVAILABLE, PRODUCT_UNAVAILABLE_MESSAGE)
     if availability is CartLineAvailability.INSUFFICIENT_STOCK:
-        available_stock = get_available_stock(product)
+        available_stock = get_available_stock(product, variant)
         message = (
             OUT_OF_STOCK_MESSAGE
             if available_stock == 0
@@ -113,21 +142,38 @@ def find_product(session: Session, product_code: str) -> Product:
     return product
 
 
-def find_cart_item_for_product(session: Session, buyer_id: int, product_id: int) -> CartItem | None:
-    """Return the buyer's line for a product, or None when the product is not in the cart."""
+def find_cart_item_for_product(
+    session: Session, buyer_id: int, product_id: int, variant_id: int | None = None
+) -> CartItem | None:
+    """Return the buyer's line for this product and selected variant."""
+    variant_filter = (
+        CartItem.variant_id == variant_id
+        if variant_id is not None
+        else CartItem.variant_id.is_(None)
+    )
     return session.exec(
-        select(CartItem).where(CartItem.buyer_id == buyer_id, CartItem.product_id == product_id)
+        select(CartItem).where(
+            CartItem.buyer_id == buyer_id,
+            CartItem.product_id == product_id,
+            variant_filter,
+        )
     ).first()
 
 
 def find_buyer_cart_item(
-    session: Session, buyer_id: int, product_code: str
+    session: Session, buyer_id: int, product_code: str, variant_id: int | None
 ) -> tuple[CartItem, Product]:
     """Return the buyer's line for a product code; lines of other buyers are never matched."""
     row = session.exec(
         select(CartItem, Product)
         .join(Product, Product.id == CartItem.product_id)
-        .where(CartItem.buyer_id == buyer_id, Product.code == product_code)
+        .where(
+            CartItem.buyer_id == buyer_id,
+            Product.code == product_code,
+            CartItem.variant_id == variant_id
+            if variant_id is not None
+            else CartItem.variant_id.is_(None),
+        )
     ).first()
     if row is None:
         raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
@@ -165,26 +211,37 @@ def is_lost_race(error: Exception) -> bool:
     return code is not None and code & 0xFF in (SQLITE_BUSY, SQLITE_LOCKED)
 
 
-def to_cart_line(cart_item: CartItem, product: Product, seller: User) -> CartLine:
+def to_cart_line(
+    cart_item: CartItem,
+    product: Product,
+    seller: User,
+    variant: ProductVariant | None = None,
+    requires_variant: bool = False,
+) -> CartLine:
     """Price one line from the current product row."""
-    availability = get_line_availability(product, cart_item.quantity)
-    baseline = cart_item.price_at_add if cart_item.price_at_add is not None else product.price
+    availability = get_line_availability(
+        product, cart_item.quantity, variant, requires_variant
+    )
+    current_price = variant.price if variant is not None else product.price
+    baseline = cart_item.price_at_add if cart_item.price_at_add is not None else current_price
     return CartLine(
         cart_item_id=cart_item.id,
         seller_id=seller.id,
         seller_name=seller.name,
         is_selected=cart_item.is_selected and availability == CartLineAvailability.AVAILABLE,
         price_at_add=baseline,
-        price_changed=baseline != product.price,
+        price_changed=baseline != current_price,
         product_id=product.id,
+        variant_id=variant.id if variant else None,
+        variant_name=variant.name if variant else None,
         product_code=product.code,
         name=product.name,
-        image_url=product.image_url,
-        unit_price=product.price,
+        image_url=variant.image_url or product.image_url if variant else product.image_url,
+        unit_price=current_price,
         quantity=cart_item.quantity,
-        line_total=product.price * cart_item.quantity,
-        available_stock=get_available_stock(product),
-        availability=get_line_availability(product, cart_item.quantity),
+        line_total=current_price * cart_item.quantity,
+        available_stock=get_available_stock(product, variant),
+        availability=availability,
     )
 
 
@@ -213,24 +270,35 @@ def build_cart_snapshot(session: Session, buyer_id: int) -> Cart:
     `availability`; they are never removed or shrunk silently.
     """
     rows = session.exec(
-        select(CartItem, Product, User)
+        select(CartItem, Product, User, ProductVariant)
         .join(Product, Product.id == CartItem.product_id)
         .join(User, User.id == Product.seller_id)
+        .outerjoin(ProductVariant, ProductVariant.id == CartItem.variant_id)
         .where(CartItem.buyer_id == buyer_id)
         .order_by(CartItem.id)
     ).all()
+    product_ids = {product.id for _item, product, _seller, _variant in rows}
+    products_with_variants = set(
+        session.exec(
+            select(ProductVariant.product_id).where(
+                ProductVariant.product_id.in_(product_ids)
+            )
+        ).all()
+    ) if product_ids else set()
     lines = []
-    for cart_item, product, seller in rows:
+    for cart_item, product, seller, variant in rows:
+        requires_variant = product.id in products_with_variants
         changes = {}
         if cart_item.price_at_add is None:
-            changes["price_at_add"] = product.price
+            changes["price_at_add"] = variant.price if variant else product.price
         if cart_item.is_selected and (
-            get_line_availability(product, cart_item.quantity) != CartLineAvailability.AVAILABLE
+            get_line_availability(product, cart_item.quantity, variant, requires_variant)
+            != CartLineAvailability.AVAILABLE
         ):
             changes["is_selected"] = False
         if changes:
             update_line_fields(session, cart_item, **changes)
-        line = to_cart_line(cart_item, product, seller)
+        line = to_cart_line(cart_item, product, seller, variant, requires_variant)
         lines.append(line)
     return Cart(
         items=lines,
@@ -253,7 +321,9 @@ class CartService:
         """
         return self._run_mutation(lambda: build_cart_snapshot(self.session, buyer_id))
 
-    def add_item(self, buyer_id: int, product_code: str, quantity: int) -> AddItemResult:
+    def add_item(
+        self, buyer_id: int, product_code: str, quantity: int, variant_id: int | None = None
+    ) -> AddItemResult:
         """Add a new line, or increase the existing one; the resulting quantity must fit stock."""
         validate_quantity(quantity)
 
@@ -264,43 +334,84 @@ class CartService:
                     CartErrorCode.SELF_PURCHASE,
                     "You cannot add your own product to your cart.",
                 )
-            cart_item = find_cart_item_for_product(self.session, buyer_id, product.id)
+            variant = self.session.get(ProductVariant, variant_id) if variant_id else None
+            if variant_id is not None and (
+                variant is None or variant.product_id != product.id or not variant.is_active
+            ):
+                raise CartError(
+                    CartErrorCode.PRODUCT_UNAVAILABLE,
+                    "This product variant is no longer available.",
+                )
+            has_any_variant = self.session.exec(
+                select(ProductVariant.id).where(
+                    ProductVariant.product_id == product.id,
+                )
+            ).first()
+            if variant is None and has_any_variant is not None:
+                raise CartError(
+                    CartErrorCode.PRODUCT_UNAVAILABLE,
+                    "Choose an available product variant before adding it to your cart.",
+                )
+            cart_item = (
+                find_cart_item_for_product(self.session, buyer_id, product.id)
+                if variant_id is None
+                else find_cart_item_for_product(self.session, buyer_id, product.id, variant_id)
+            )
             if cart_item is None:
-                validate_purchasable_quantity(product, quantity)
+                validate_purchasable_quantity(product, quantity, variant)
                 self.session.add(
                     CartItem(
                         buyer_id=buyer_id,
                         product_id=product.id,
+                        variant_id=variant_id,
                         quantity=quantity,
-                        price_at_add=product.price,
+                        price_at_add=variant.price if variant else product.price,
                         is_selected=True,
                     )
                 )
                 return AddItemResult(cart=self._flush_and_snapshot(buyer_id), created=True)
-            validate_purchasable_quantity(product, cart_item.quantity + quantity)
-            increase_line(self.session, cart_item, quantity, get_available_stock(product))
+            validate_purchasable_quantity(product, cart_item.quantity + quantity, variant)
+            increase_line(
+                self.session,
+                cart_item,
+                quantity,
+                get_available_stock(product, variant),
+            )
             return AddItemResult(cart=self._flush_and_snapshot(buyer_id), created=False)
 
         return self._run_mutation(change)
 
-    def update_item(self, buyer_id: int, product_code: str, quantity: int) -> Cart:
+    def update_item(
+        self, buyer_id: int, product_code: str, quantity: int, variant_id: int | None = None
+    ) -> Cart:
         """Replace a line's quantity. Zero is refused: the buyer removes the line instead."""
         validate_quantity(quantity)
 
         def change() -> Cart:
-            cart_item, product = find_buyer_cart_item(self.session, buyer_id, product_code)
-            validate_purchasable_quantity(product, quantity)
+            cart_item, product = find_buyer_cart_item(
+                self.session, buyer_id, product_code, variant_id
+            )
+            variant = self.session.get(ProductVariant, variant_id) if variant_id else None
+            validate_purchasable_quantity(
+                product,
+                quantity,
+                variant,
+                requires_variant=variant_id is None
+                and product_requires_variant(self.session, product.id),
+            )
             cart_item.quantity = quantity
             self.session.add(cart_item)
             return self._flush_and_snapshot(buyer_id)
 
         return self._run_mutation(change)
 
-    def remove_item(self, buyer_id: int, product_code: str) -> Cart:
+    def remove_item(self, buyer_id: int, product_code: str, variant_id: int | None = None) -> Cart:
         """Delete one line of the buyer's cart, including a line whose product was withdrawn."""
 
         def change() -> Cart:
-            cart_item, _product = find_buyer_cart_item(self.session, buyer_id, product_code)
+            cart_item, _product = find_buyer_cart_item(
+                self.session, buyer_id, product_code, variant_id
+            )
             self.session.delete(cart_item)
             return self._flush_and_snapshot(buyer_id)
 
@@ -311,15 +422,22 @@ class CartService:
 
         def change() -> Cart:
             row = self.session.exec(
-                select(CartItem, Product)
+                select(CartItem, Product, ProductVariant)
                 .join(Product, Product.id == CartItem.product_id)
+                .outerjoin(ProductVariant, ProductVariant.id == CartItem.variant_id)
                 .where(CartItem.id == item_id, CartItem.buyer_id == buyer_id)
             ).first()
             if row is None:
                 raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
-            line, product = row
+            line, product, variant = row
             if selected:
-                validate_purchasable_quantity(product, line.quantity)
+                validate_purchasable_quantity(
+                    product,
+                    line.quantity,
+                    variant,
+                    requires_variant=variant is None
+                    and product_requires_variant(self.session, product.id),
+                )
             update_line_fields(self.session, line, is_selected=selected)
             return self._flush_and_snapshot(buyer_id)
 
@@ -330,15 +448,29 @@ class CartService:
 
         def change() -> Cart:
             rows = self.session.exec(
-                select(CartItem, Product)
+                select(CartItem, Product, ProductVariant)
                 .join(Product, Product.id == CartItem.product_id)
+                .outerjoin(ProductVariant, ProductVariant.id == CartItem.variant_id)
                 .where(CartItem.buyer_id == buyer_id, Product.seller_id == seller_id)
             ).all()
             if not rows:
                 raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
-            for line, product in rows:
+            products_with_variants = set(
+                self.session.exec(
+                    select(ProductVariant.product_id).where(
+                        ProductVariant.product_id.in_({product.id for _, product, _ in rows})
+                    )
+                ).all()
+            )
+            for line, product, variant in rows:
                 available = (
-                    get_line_availability(product, line.quantity) == CartLineAvailability.AVAILABLE
+                    get_line_availability(
+                        product,
+                        line.quantity,
+                        variant,
+                        requires_variant=product.id in products_with_variants and variant is None,
+                    )
+                    == CartLineAvailability.AVAILABLE
                 )
                 update_line_fields(self.session, line, is_selected=selected and available)
             return self._flush_and_snapshot(buyer_id)

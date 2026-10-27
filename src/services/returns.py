@@ -15,6 +15,7 @@ from src.models.return_request import ReturnRequest
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.schemas.returns import CreateReturnRequest, ReturnDecisionRequest, ReturnRequestData
+from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
 
 
@@ -49,9 +50,7 @@ def _to_return_data(
 
 def sync_parent_order_state(session: Session, order: Order) -> None:
     """Derive parent order status, payment status, and escrow status from all seller orders."""
-    child_orders = session.exec(
-        select(SellerOrder).where(SellerOrder.order_id == order.id)
-    ).all()
+    child_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
     if not child_orders:
         return
 
@@ -138,9 +137,7 @@ def submit_return_request(
         if seller_order is None:
             raise ReturnError("ERR_ORDER_NOT_FOUND", "Seller order not found.", 404)
     else:
-        sub_orders = session.exec(
-            select(SellerOrder).where(SellerOrder.order_id == order.id)
-        ).all()
+        sub_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
         if len(sub_orders) == 1:
             seller_order = sub_orders[0]
         elif len(sub_orders) == 0:
@@ -284,9 +281,7 @@ def list_order_return_requests(
     if order is None:
         raise ReturnError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
 
-    sub_orders = session.exec(
-        select(SellerOrder).where(SellerOrder.order_id == order.id)
-    ).all()
+    sub_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
     sub_order_map = {so.id: so for so in sub_orders}
 
     if current_user.role == "admin":
@@ -386,15 +381,7 @@ def decide_return_request(
                 .where(OrderItem.seller_order_id == seller_order.id)
             ).all()
             for item, product in items:
-                session.exec(
-                    update(Product)
-                    .where(Product.id == product.id)
-                    .values(
-                        stock_quantity=Product.stock_quantity + item.quantity,
-                        version=Product.version + 1,
-                    )
-                    .execution_options(synchronize_session=False)
-                )
+                restore_order_item_stock(session, item)
                 session.exec(
                     update(ProductMetadata)
                     .where(ProductMetadata.product_id == product.id)

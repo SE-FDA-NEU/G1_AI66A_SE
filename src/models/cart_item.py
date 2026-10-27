@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy import CheckConstraint, Index, text
 from sqlmodel import Field, SQLModel
 
 
@@ -8,10 +8,22 @@ class CartItem(SQLModel, table=True):
     __tablename__ = "cart_items"
 
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_cart_items_buyer_product_base",
             "buyer_id",
             "product_id",
-            name="uq_cart_items_buyer_product",
+            unique=True,
+            sqlite_where=text("variant_id IS NULL"),
+            postgresql_where=text("variant_id IS NULL"),
+        ),
+        Index(
+            "uq_cart_items_buyer_product_variant",
+            "buyer_id",
+            "product_id",
+            "variant_id",
+            unique=True,
+            sqlite_where=text("variant_id IS NOT NULL"),
+            postgresql_where=text("variant_id IS NOT NULL"),
         ),
         CheckConstraint(
             "quantity > 0",
@@ -30,6 +42,8 @@ class CartItem(SQLModel, table=True):
         foreign_key="products.id",
         index=True,
     )
+
+    variant_id: int | None = Field(default=None, foreign_key="product_variants.id", index=True)
 
     quantity: int = Field(gt=0)
 

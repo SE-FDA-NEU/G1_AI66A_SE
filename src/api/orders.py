@@ -16,6 +16,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutInput, OrderResponse
+from src.services.inventory import restore_order_item_stock
 from src.services.orders import CheckoutError, checkout, receipt
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -108,9 +109,7 @@ def update_buyer_order_status(
     if order is None:
         raise HTTPException(404, detail=error_detail("ERR_ORDER_NOT_FOUND", "Order not found."))
 
-    sub_orders = session.exec(
-        select(SellerOrder).where(SellerOrder.order_id == order.id)
-    ).all()
+    sub_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
 
     new_status = request.status
     now = datetime.now(UTC)
@@ -153,15 +152,7 @@ def update_buyer_order_status(
                     .where(OrderItem.seller_order_id == sub_order.id)
                 ).all()
                 for item, product in items:
-                    session.exec(
-                        update(Product)
-                        .where(Product.id == product.id)
-                        .values(
-                            stock_quantity=Product.stock_quantity + item.quantity,
-                            version=Product.version + 1,
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
+                    restore_order_item_stock(session, item)
                     session.exec(
                         update(ProductMetadata)
                         .where(ProductMetadata.product_id == product.id)
@@ -270,15 +261,7 @@ def update_buyer_order_status(
                     .where(OrderItem.seller_order_id == sub_order.id)
                 ).all()
                 for item, product in items:
-                    session.exec(
-                        update(Product)
-                        .where(Product.id == product.id)
-                        .values(
-                            stock_quantity=Product.stock_quantity + item.quantity,
-                            version=Product.version + 1,
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
+                    restore_order_item_stock(session, item)
                     session.exec(
                         update(ProductMetadata)
                         .where(ProductMetadata.product_id == product.id)

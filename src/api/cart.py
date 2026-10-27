@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Response, status
+from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import BuyerUser
@@ -77,7 +77,9 @@ def add_cart_item(
 ) -> CartResponse:
     """Add a product, or increase its existing line: 201 for a new line, 200 otherwise."""
     with cart_errors_as_http():
-        result = CartService(session).add_item(buyer.id, request.product_code, request.quantity)
+        result = CartService(session).add_item(
+            buyer.id, request.product_code, request.quantity, request.variant_id
+        )
     response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
     return CartResponse(data=result.cart)
 
@@ -88,20 +90,26 @@ def update_cart_item(
     request: UpdateCartItemRequest,
     buyer: BuyerUser,
     session: SessionDep,
+    variant_id: int | None = Query(default=None, gt=0),
 ) -> CartResponse:
     """Replace the quantity of one line."""
     with cart_errors_as_http():
-        cart = CartService(session).update_item(buyer.id, product_code, request.quantity)
+        cart = CartService(session).update_item(
+            buyer.id, product_code, request.quantity, variant_id
+        )
     return CartResponse(data=cart)
 
 
 @router.delete("/items/{productCode}", response_model=CartResponse)
 def remove_cart_item(
-    product_code: ProductCodePath, buyer: BuyerUser, session: SessionDep
+    product_code: ProductCodePath,
+    buyer: BuyerUser,
+    session: SessionDep,
+    variant_id: int | None = Query(default=None, gt=0),
 ) -> CartResponse:
     """Remove one line and return the remaining cart."""
     with cart_errors_as_http():
-        cart = CartService(session).remove_item(buyer.id, product_code)
+        cart = CartService(session).remove_item(buyer.id, product_code, variant_id)
     return CartResponse(data=cart)
 
 

@@ -48,9 +48,12 @@ class SubOrderSummary(BaseModel):
 
 class OrderLine(BaseModel):
     product_id: int
+    variant_id: int | None = None
     # The receipt names each product; unit_price stays the purchase-time snapshot.
     product_code: str
     product_name: str
+    variant_name: str | None = None
+    image_url: str | None = None
     seller_order_id: int
     quantity: int
     unit_price: int
