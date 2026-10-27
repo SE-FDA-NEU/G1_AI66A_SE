@@ -9,6 +9,7 @@ from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.return_request import ReturnRequest
 from src.models.review import Review
 from src.models.seller_order import SellerOrder
@@ -21,6 +22,7 @@ __all__ = [
     "UserAddress",
     "Category",
     "Product",
+    "ProductVariant",
     "ProductMetadata",
     "CartItem",
     "Order",

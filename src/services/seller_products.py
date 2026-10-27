@@ -55,7 +55,7 @@ def create_product(session: Session, seller_id: int, data: ProductCreate) -> Sel
     category_id = data.category_id
     if category_id is not None:
         category = session.get(Category, category_id)
-        if category is None:
+        if category is None or not category.is_active:
             raise SellerProductError("ERR_VALIDATION", "Category not found.", status=422)
 
     product_data = data.model_dump(exclude={"category_id"})
