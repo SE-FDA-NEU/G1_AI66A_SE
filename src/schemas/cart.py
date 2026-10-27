@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 PRODUCT_CODE_MAX_LENGTH = 20
 
@@ -29,9 +29,20 @@ class UpdateCartItemRequest(BaseModel):
     quantity: StrictInt
 
 
+class SelectCartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    is_selected: StrictBool
+
+
 class CartLine(BaseModel):
     """One cart line, priced from the current product row."""
 
+    cart_item_id: int
+    seller_id: int
+    seller_name: str
+    is_selected: bool
+    price_at_add: int
+    price_changed: bool
     product_id: int
     product_code: str
     name: str
@@ -48,6 +59,8 @@ class Cart(BaseModel):
 
     items: list[CartLine]
     cart_total: int
+    selected_total: int
+    supports_partial_checkout: bool = True
 
 
 class CartResponse(BaseModel):

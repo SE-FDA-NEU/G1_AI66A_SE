@@ -121,9 +121,9 @@ def test_legacy_database_migration_adds_password_hash(tmp_path: Path) -> None:
 
 
 def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: Path) -> None:
-    """Databases with pre-existing product_metadata lacking foreign keys
-
-    are safely migrated and foreign keys enforced.
+    """
+    Databases with pre-existing product_metadata lacking foreign keys are safely migrated and
+    foreign keys enforced.
     """
     db_path = tmp_path / "legacy_metadata.db"
 
@@ -168,8 +168,8 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
             )
             """
         )
-        # Create pre-existing product_metadata without foreign key constraints
-        # (like before PR #102 fix)
+        # Create pre-existing product_metadata without foreign key constraints (like
+        # before PR #102 fix)
         connection.execute(
             """
             CREATE TABLE product_metadata (
@@ -183,32 +183,32 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
         )
         # Insert a user, category, and product
         connection.execute(
-            "INSERT INTO users (id, name, email, role, created_at) "
+            'INSERT INTO users (id, name, email, role, created_at) '
             "VALUES (1, 'Seller', 's@test.local', 'seller', '2026-10-01')"
         )
         connection.execute(
             "INSERT INTO categories (id, name, slug) VALUES (1, 'Peripherals', 'peripherals')"
         )
         connection.execute(
-            "INSERT INTO products "
-            "(id, code, seller_id, name, description, price, stock_quantity, image_url) "
+            'INSERT INTO products (id, code, seller_id, '
+            'name, description, price, stock_quantity, image_url) '
             "VALUES (1, 'P-LEGACY-1', 1, 'Legacy Mouse', 'Desc', 100000, 10, 'http://test/mouse.jpg')"
         )
         connection.execute(
-            "INSERT INTO products "
-            "(id, code, seller_id, name, description, price, stock_quantity, image_url) "
+            'INSERT INTO products (id, code, seller_id, '
+            'name, description, price, stock_quantity, image_url) '
             "VALUES (2, 'P-LEGACY-2', 1, 'Legacy Keyboard', 'Desc', 200000, 5, 'http://test/keyb.jpg')"
         )
         # Metadata for product 1
         connection.execute(
-            "INSERT INTO product_metadata "
-            "(product_id, category_id, rating, sales_count, created_at) "
+            'INSERT INTO product_metadata (product_id, '
+            'category_id, rating, sales_count, created_at) '
             "VALUES (1, 1, 4.2, 35, '2026-10-01 10:00:00')"
         )
         # Orphan metadata row (product_id 999 does not exist)
         connection.execute(
-            "INSERT INTO product_metadata "
-            "(product_id, category_id, rating, sales_count, created_at) "
+            'INSERT INTO product_metadata (product_id, '
+            'category_id, rating, sales_count, created_at) '
             "VALUES (999, 1, 3.0, 10, '2026-10-01 10:00:00')"
         )
         connection.commit()
@@ -236,15 +236,15 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
 
         # Check existing valid data was preserved
         valid = connection.execute(
-            "SELECT product_id, category_id, rating, sales_count "
-            "FROM product_metadata WHERE product_id = 1"
+            'SELECT product_id, category_id, rating, '
+            'sales_count FROM product_metadata WHERE product_id = 1'
         ).fetchone()
         assert valid == (1, 1, 4.2, 35)
 
         # Check existing product 2 without metadata was backfilled with defaults
         p2_meta = connection.execute(
-            "SELECT product_id, category_id, rating, sales_count "
-            "FROM product_metadata WHERE product_id = 2"
+            'SELECT product_id, category_id, rating, '
+            'sales_count FROM product_metadata WHERE product_id = 2'
         ).fetchone()
         assert p2_meta is not None
         assert p2_meta[0] == 2
@@ -254,8 +254,8 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
         # Foreign key constraint must now be enforced by SQLite
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
-                "INSERT INTO product_metadata "
-                "(product_id, category_id, rating, sales_count, created_at) "
+                'INSERT INTO product_metadata (product_id, '
+                'category_id, rating, sales_count, created_at) '
                 "VALUES (8888, 1, 0.0, 0, '2026-10-23 00:00:00')"
             )
             connection.commit()

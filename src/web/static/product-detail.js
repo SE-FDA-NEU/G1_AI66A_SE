@@ -11,6 +11,7 @@ const elements = {
   image: document.getElementById("product-image"),
   name: document.getElementById("product-name"),
   price: document.getElementById("product-price"),
+  rating: document.getElementById("product-rating"),
   description: document.getElementById("product-description"),
   stock: document.getElementById("product-stock"),
   form: document.getElementById("add-to-cart-form"),
@@ -23,8 +24,29 @@ const elements = {
   myOrders: document.getElementById("my-orders-link"),
   sellerNewProduct: document.getElementById("seller-new-product-link"),
   sellerOrders: document.getElementById("seller-orders-link"),
+  reviews: document.getElementById("reviews-section"),
+  reviewsSummary: document.getElementById("reviews-summary"),
+  reviewsError: document.getElementById("reviews-error"),
+  reviewsList: document.getElementById("reviews-list"),
+  reviewFormSection: document.getElementById("review-form-section"),
+  reviewLoginPrompt: document.getElementById("review-login-prompt"),
+  reviewLoginLink: document.getElementById("review-login-link"),
+  reviewForm: document.getElementById("review-form"),
+  reviewOrderItem: document.getElementById("review-order-item"),
+  reviewRating: document.getElementById("review-rating"),
+  reviewComment: document.getElementById("review-comment"),
+  reviewMediaUrl: document.getElementById("review-media-url"),
+  reviewSubmit: document.getElementById("review-submit"),
+  reviewFormStatus: document.getElementById("review-form-status"),
 };
 const priceFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
+let currentProduct = null;
+let currentIdentity = null;
+let authRevision = 0;
+
+function isCurrentAuth(token, revision) {
+  return authRevision === revision && localStorage.getItem("access_token") === token;
+}
 
 function getUserFromToken() {
   const token = localStorage.getItem("access_token");
@@ -105,6 +127,9 @@ async function loadProduct() {
     const product = payload;
     elements.name.textContent = product.name;
     elements.price.textContent = priceFormatter.format(product.price);
+    elements.rating.textContent = product.review_count
+      ? `${Number(product.rating).toFixed(1)} ★ (${product.review_count} reviews)`
+      : "No reviews yet";
     elements.description.textContent = product.description || "No description available.";
     elements.image.alt = product.name;
     elements.image.src = product.image_url || product.thumbnail_url || PLACEHOLDER_IMAGE;
@@ -132,7 +157,11 @@ async function loadProduct() {
 
     elements.detail.hidden = false;
     elements.status.hidden = true;
+    currentProduct = product;
+    elements.reviews.hidden = false;
     configureNavigation();
+    loadReviews();
+    loadReviewForm();
   } catch (error) {
     showError("We could not load this product. Check your connection, then select Retry.");
   }
@@ -188,8 +217,254 @@ elements.form.addEventListener("submit", async (event) => {
 
 elements.logout.addEventListener("click", () => {
   localStorage.removeItem("access_token");
+  authRevision += 1;
+  currentIdentity = null;
+  elements.reviewForm.hidden = true;
+  elements.reviewLoginPrompt.hidden = false;
+  elements.reviewFormStatus.textContent = "";
+  elements.reviewsList.querySelectorAll(".seller-reply-form").forEach((form) => form.remove());
   configureNavigation();
+  loadReviews();
+  loadReviewForm();
+});
+elements.reviewForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    elements.reviewFormStatus.textContent = "Log in with your buyer account to submit a review.";
+    return;
+  }
+  const requestBody = {
+    order_item_id: Number(elements.reviewOrderItem.value),
+    rating: Number(elements.reviewRating.value),
+    comment: elements.reviewComment.value.trim() || null,
+    media_url: elements.reviewMediaUrl.value.trim() || null,
+  };
+  elements.reviewSubmit.disabled = true;
+  elements.reviewFormStatus.textContent = "Submitting review…";
+  try {
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to submit review.");
+    elements.reviewComment.value = "";
+    elements.reviewMediaUrl.value = "";
+    elements.reviewFormStatus.textContent = "Your verified-purchase review was submitted.";
+    await loadReviews();
+    await loadReviewForm({ preserveStatus: true });
+  } catch (error) {
+    elements.reviewFormStatus.textContent = error instanceof Error ? error.message : "Unable to submit review.";
+  } finally {
+    elements.reviewSubmit.disabled = false;
+  }
 });
 elements.retry.addEventListener("click", loadProduct);
 configureNavigation();
 loadProduct();
+
+async function loadReviews() {
+  elements.reviewsError.hidden = true;
+  try {
+    const token = localStorage.getItem("access_token");
+    const revision = authRevision;
+    if (!token) currentIdentity = null;
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to load reviews.");
+    const reviews = Array.isArray(payload.data) ? payload.data : [];
+    elements.reviewsSummary.textContent = payload.review_count
+      ? `${Number(payload.rating).toFixed(1)} ★ from ${payload.review_count} verified purchase${payload.review_count === 1 ? "" : "s"}`
+      : "No reviews yet.";
+    elements.rating.textContent = elements.reviewsSummary.textContent;
+    if (token) {
+      try {
+        const identityResponse = await fetch("/api/v1/auth/me", {
+          headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+        });
+        if (identityResponse.ok) {
+          const identity = await identityResponse.json();
+          if (isCurrentAuth(token, revision)) currentIdentity = identity;
+        }
+        else if (identityResponse.status === 401 && isCurrentAuth(token, revision)) {
+          localStorage.removeItem("access_token");
+          authRevision += 1;
+          currentIdentity = null;
+          configureNavigation();
+        }
+        else if (isCurrentAuth(token, revision)) {
+          elements.reviewsError.textContent = "Seller reply controls could not be checked.";
+          elements.reviewsError.hidden = false;
+        }
+      } catch {
+        if (isCurrentAuth(token, revision)) {
+          elements.reviewsError.textContent = "Seller reply controls could not be checked.";
+          elements.reviewsError.hidden = false;
+        }
+      }
+    }
+    if (!isCurrentAuth(token, revision)) currentIdentity = null;
+    elements.reviewsList.replaceChildren(...reviews.map(createReviewCard));
+  } catch (error) {
+    elements.reviewsError.textContent = error instanceof Error ? error.message : "Unable to load reviews.";
+    elements.reviewsError.hidden = false;
+  }
+}
+
+function createReviewCard(review) {
+  const card = document.createElement("article");
+  card.className = "review-card";
+  const heading = document.createElement("h3");
+  heading.textContent = `${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)} · Verified purchase`;
+  const date = document.createElement("time");
+  date.dateTime = review.created_at;
+  date.textContent = new Date(review.created_at).toLocaleDateString();
+  card.append(heading, date);
+  if (review.comment) {
+    const comment = document.createElement("p");
+    comment.textContent = review.comment;
+    card.append(comment);
+  }
+  if (review.media_url) {
+    const media = document.createElement("a");
+    media.href = review.media_url;
+    media.target = "_blank";
+    media.rel = "noopener noreferrer";
+    media.textContent = "View review media";
+    card.append(media);
+  }
+  if (review.seller_reply) {
+    const reply = document.createElement("div");
+    reply.className = "review-card__reply";
+    const replyHeading = document.createElement("h4");
+    replyHeading.textContent = "Seller reply";
+    const replyText = document.createElement("p");
+    replyText.textContent = review.seller_reply;
+    const replyDate = document.createElement("time");
+    replyDate.dateTime = review.seller_replied_at;
+    replyDate.textContent = new Date(review.seller_replied_at).toLocaleDateString();
+    reply.append(replyHeading, replyText, replyDate);
+    card.append(reply);
+  }
+  if (
+    currentIdentity?.role === "seller"
+    && currentIdentity.id === currentProduct?.seller_id
+  ) {
+    appendSellerReplyForm(card, review);
+  }
+  return card;
+}
+
+async function loadReviewForm({ preserveStatus = false } = {}) {
+  const token = localStorage.getItem("access_token");
+  const revision = authRevision;
+  elements.reviewFormSection.hidden = false;
+  elements.reviewForm.hidden = true;
+  elements.reviewLoginPrompt.hidden = Boolean(token);
+  if (!preserveStatus) elements.reviewFormStatus.textContent = "";
+  elements.reviewLoginLink.href = `/login?return_to=${encodeURIComponent(window.location.pathname)}`;
+  if (!token) return;
+  try {
+    const identityResponse = await fetch("/api/v1/auth/me", {
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+    if (!isCurrentAuth(token, revision)) return;
+    if (identityResponse.status === 401) {
+      localStorage.removeItem("access_token");
+      authRevision += 1;
+      elements.reviewLoginPrompt.hidden = false;
+      configureNavigation();
+      return;
+    }
+    if (!identityResponse.ok) {
+      throw new Error("Unable to verify the current account.");
+    }
+    const identity = await identityResponse.json();
+    if (!isCurrentAuth(token, revision)) return;
+    if (identity.role !== "buyer") {
+      elements.reviewFormStatus.textContent = "Only buyer accounts can submit product reviews.";
+      return;
+    }
+    const response = await fetch(
+      `/api/v1/products/${encodeURIComponent(code)}/reviewable-items`,
+      { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } },
+    );
+    const payload = await response.json().catch(() => null);
+    if (!isCurrentAuth(token, revision)) return;
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to check completed purchases.");
+    const items = Array.isArray(payload.data) ? payload.data : [];
+    elements.reviewOrderItem.replaceChildren(...items.map((item) => {
+      const option = document.createElement("option");
+      option.value = String(item.order_item_id);
+      option.textContent = `Order item #${item.order_item_id} · quantity ${item.quantity}`;
+      return option;
+    }));
+    elements.reviewForm.hidden = items.length === 0;
+    if (items.length === 0) {
+      if (!preserveStatus || !elements.reviewFormStatus.textContent) {
+        elements.reviewFormStatus.textContent = "There are no completed, unreviewed purchases for this product.";
+      }
+    } else if (!preserveStatus) {
+      elements.reviewFormStatus.textContent = "";
+    }
+  } catch (error) {
+    if (!isCurrentAuth(token, revision)) return;
+    elements.reviewFormStatus.textContent = error instanceof Error ? error.message : "Unable to check completed purchases.";
+  }
+}
+
+function appendSellerReplyForm(card, review) {
+  const form = document.createElement("form");
+  form.className = "seller-reply-form";
+  const label = document.createElement("label");
+  label.textContent = review.seller_reply ? "Update your reply" : "Reply to this review";
+  const input = document.createElement("textarea");
+  input.required = true;
+  input.maxLength = 2000;
+  input.rows = 3;
+  input.value = review.seller_reply || "";
+  const button = document.createElement("button");
+  button.type = "submit";
+  button.className = "button";
+  button.textContent = review.seller_reply ? "Update reply" : "Reply";
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  form.append(label, input, button, status);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      status.textContent = "Log in with your seller account to reply to reviews.";
+      return;
+    }
+    button.disabled = true;
+    try {
+      const replyResponse = await fetch(`/api/v1/seller/reviews/${review.id}/reply`, {
+        method: "PATCH",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reply: input.value.trim() }),
+      });
+      const replyPayload = await replyResponse.json().catch(() => null);
+      if (!replyResponse.ok) throw new Error(replyPayload?.error?.message || "Unable to save reply.");
+      status.textContent = "Reply saved.";
+      await loadReviews();
+    } catch (cause) {
+      status.textContent = cause instanceof Error ? cause.message : "Unable to save reply.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+  card.append(form);
+}

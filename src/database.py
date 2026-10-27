@@ -71,6 +71,26 @@ def migrate_db(connection: Connection | None = None) -> None:
                     )
                 )
 
+        if "cart_items" in tables:
+            columns = {c["name"] for c in inspector.get_columns("cart_items")}
+            if "is_selected" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE cart_items ADD COLUMN "
+                        "is_selected BOOLEAN NOT NULL DEFAULT TRUE"
+                    )
+                )
+            if "price_at_add" not in columns:
+                connection.execute(text("ALTER TABLE cart_items ADD COLUMN price_at_add INTEGER"))
+            if "products" in tables:
+                connection.execute(
+                    text(
+                        "UPDATE cart_items SET price_at_add = "
+                        "(SELECT price FROM products WHERE products.id = cart_items.product_id) "
+                        "WHERE price_at_add IS NULL"
+                    )
+                )
+
         if "orders" in tables:
             columns = {c["name"] for c in inspector.get_columns("orders")}
             for name in ("request_key", "request_hash"):
@@ -101,8 +121,25 @@ def migrate_db(connection: Connection | None = None) -> None:
                     connection.execute(
                         text(f"ALTER TABLE seller_orders ADD COLUMN {name} DATETIME")
                     )
+        if "notifications" in tables:
+            columns = {c["name"] for c in inspector.get_columns("notifications")}
+            if "target_path" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE notifications ADD COLUMN "
+                        "target_path VARCHAR(512) NOT NULL DEFAULT '/notifications'"
+                    )
+                )
 
         if "product_metadata" in tables:
+            columns = {c["name"] for c in inspector.get_columns("product_metadata")}
+            if "review_count" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE product_metadata ADD COLUMN "
+                        "review_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
             fks = inspector.get_foreign_keys("product_metadata")
             fk_tables = {fk.get("referred_table") for fk in fks}
             if "products" not in fk_tables or "categories" not in fk_tables:
@@ -130,6 +167,7 @@ def migrate_db(connection: Connection | None = None) -> None:
                             "product_id INTEGER NOT NULL PRIMARY KEY, "
                             "category_id INTEGER, "
                             "rating FLOAT NOT NULL DEFAULT 0.0, "
+                            "review_count INTEGER NOT NULL DEFAULT 0, "
                             "sales_count INTEGER NOT NULL DEFAULT 0, "
                             "created_at DATETIME NOT NULL, "
                             "FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE, "
@@ -150,6 +188,10 @@ def migrate_db(connection: Connection | None = None) -> None:
                     connection.execute(text("DROP TABLE product_metadata"))
                     connection.execute(
                         text("ALTER TABLE product_metadata__migration RENAME TO product_metadata")
+                        text(
+                            "ALTER TABLE product_metadata__migration "
+                            "RENAME TO product_metadata"
+                        )
                     )
                     connection.execute(
                         text(

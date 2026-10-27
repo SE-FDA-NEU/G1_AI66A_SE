@@ -4,6 +4,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.schemas.addresses import PositiveID
+from src.schemas.delivery import valid_phone, visible_text
+
 
 class CheckoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -12,14 +15,23 @@ class CheckoutRequest(BaseModel):
     delivery_address: str = Field(min_length=1, max_length=1000)
     phone_number: str = Field(min_length=7, max_length=20)
 
-    @field_validator("phone_number")
-    @classmethod
-    def valid_phone(cls, value: str) -> str:
-        if any(c not in "+0123456789 ()-" for c in value):
-            raise ValueError("Phone contains invalid characters")
-        if not 7 <= sum(c.isdigit() for c in value) <= 15:
-            raise ValueError("Phone must contain 7 to 15 digits")
-        return value
+    _phone = field_validator("phone_number")(valid_phone)
+    _visible = field_validator("recipient_name", "delivery_address")(visible_text)
+
+
+class SavedAddressCheckoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    address_id: PositiveID
+    address_version: PositiveID
+
+
+CheckoutInput = CheckoutRequest | SavedAddressCheckoutRequest
+
+
+class DeliverySnapshot(BaseModel):
+    recipient_name: str
+    phone_number: str
+    delivery_address: str
 
 
 class OrderLine(BaseModel):

@@ -15,7 +15,15 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
-from src.schemas.orders import CheckoutRequest, OrderData, OrderLine
+from src.schemas.orders import (
+    CheckoutInput,
+    CheckoutRequest,
+    DeliverySnapshot,
+    OrderData,
+    OrderLine,
+)
+from src.services.addresses import AddressError, owned_address
+from src.services.notifications import create_notification
 
 
 class CheckoutError(Exception):
@@ -77,8 +85,26 @@ def receipt(
     )
 
 
+def resolve_delivery_snapshot(
+    session: Session, buyer_id: int, body: CheckoutInput
+) -> DeliverySnapshot:
+    if isinstance(body, CheckoutRequest):
+        return DeliverySnapshot(**body.model_dump())
+    try:
+        address = owned_address(session, buyer_id, body.address_id, body.address_version)
+    except AddressError as exc:
+        raise CheckoutError(exc.code, exc.message, exc.status) from exc
+    return DeliverySnapshot(
+        recipient_name=address.recipient_name,
+        phone_number=address.phone_number,
+        delivery_address=", ".join(
+            (address.detailed_address, address.ward, address.district, address.province)
+        ),
+    )
+
+
 def checkout(
-    session: Session, buyer_id: int, body: CheckoutRequest, key: str
+    session: Session, buyer_id: int, body: CheckoutInput, key: str
 ) -> tuple[OrderData, bool]:
     """Own the request session transaction; auth may already have begun it."""
     fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
@@ -91,10 +117,20 @@ def checkout(
                         "ERR_IDEMPOTENCY_CONFLICT", "Key was used for another request."
                     )
                 return receipt(session, buyer_id, existing.id), False
+            snapshot = resolve_delivery_snapshot(session, buyer_id, body)
             lines = session.exec(
-                select(CartItem).where(CartItem.buyer_id == buyer_id).order_by(CartItem.product_id)
+                select(CartItem)
+                .where(CartItem.buyer_id == buyer_id, CartItem.is_selected.is_(True))
+                .order_by(CartItem.product_id)
             ).all()
             if not lines:
+                has_cart = session.exec(
+                    select(CartItem.id).where(CartItem.buyer_id == buyer_id)
+                ).first()
+                if has_cart is not None:
+                    raise CheckoutError(
+                        "ERR_EMPTY_CART", "Select at least one item for checkout.", 400
+                    )
                 raise CheckoutError("ERR_EMPTY_CART", "Your cart is empty.", 400)
             order = Order(
                 buyer_id=buyer_id,
@@ -102,7 +138,9 @@ def checkout(
                 status="PENDING",
                 request_key=key,
                 request_hash=fingerprint,
-                **body.model_dump(),
+                recipient_name=snapshot.recipient_name,
+                phone_number=snapshot.phone_number,
+                delivery_address=snapshot.delivery_address,
             )
             session.add(order)
             session.flush()
@@ -146,6 +184,14 @@ def checkout(
                     session.add(suborder)
                     session.flush()
                     sellers[product.seller_id] = suborder.id
+                    create_notification(
+                        session,
+                        recipient_user_id=product.seller_id,
+                        order_id=order.id,
+                        event_key=f"order:{order.id}:created:seller:{product.seller_id}",
+                        message=f"New order #{order.id} is waiting for processing.",
+                        target_path="/seller/orders",
+                    )
                 session.add(
                     OrderItem(
                         seller_order_id=sellers[product.seller_id],
@@ -168,6 +214,7 @@ def checkout(
                             product_id=product.id,
                             category_id=None,
                             rating=0.0,
+                            review_count=0,
                             sales_count=line.quantity,
                             created_at=datetime.now(UTC),
                         )
@@ -184,6 +231,7 @@ def checkout(
                         CartItem.buyer_id == buyer_id,
                         CartItem.product_id == line.product_id,
                         CartItem.quantity == line.quantity,
+                        CartItem.is_selected.is_(True),
                     )
                     .execution_options(synchronize_session=False)
                 )

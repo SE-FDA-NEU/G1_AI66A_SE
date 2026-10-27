@@ -119,16 +119,22 @@ contract records the current behaviour.
 
 The Mini Marketplace uses a relational database model to support the P0 buyer and seller workflows defined in Milestone 1.
 
-The data model contains six main tables:
+The data model contains these main tables:
 
 - `users`
+- `categories`
 - `products`
+- `product_metadata`
 - `cart_items`
 - `orders`
 - `seller_orders`
 - `order_items`
+- `order_history`
+- `reviews`
+- `notifications`
 
-The current implementation already contains the `products` table through the `Product` SQLModel. The remaining tables define the relational structure required to support cart management, checkout, seller ownership, and seller order management.
+Together, these tables support catalog discovery, cart management, checkout,
+seller-owned fulfillment, verified product reviews, and in-app notifications.
 
 ---
 
@@ -220,6 +226,8 @@ The current implementation already uses these fields in the `Product` SQLModel. 
 | `buyer_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
 | `product_id` | INTEGER | NOT NULL, Foreign Key → `products.id` |
 | `quantity` | INTEGER | NOT NULL, CHECK `quantity > 0` |
+| `is_selected` | BOOLEAN | NOT NULL, defaults to true |
+| `price_at_add` | INTEGER | Initial unit price; nullable only for legacy/imported rows |
 | `created_at` | DATETIME | NOT NULL |
 
 Additional constraint:
@@ -339,6 +347,53 @@ This table satisfies the Sprint 3 audit requirement for US08 (Issue #74 / Issue 
 
 ---
 
+#### reviews
+
+**Purpose:** Stores one verified-purchase review for an order item, including an
+optional media URL and the seller's reply.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | INTEGER | Primary Key |
+| `order_item_id` | INTEGER | NOT NULL, UNIQUE, Foreign Key → `order_items.id` |
+| `product_id` | INTEGER | NOT NULL, Foreign Key → `products.id` |
+| `buyer_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `rating` | INTEGER | NOT NULL, CHECK `1 <= rating <= 5` |
+| `comment` | VARCHAR(2000) | Optional |
+| `media_url` | VARCHAR(2048) | Optional HTTP(S) URL |
+| `seller_reply` | VARCHAR(2000) | Optional |
+| `seller_replied_at` | DATETIME | Optional |
+| `created_at` | DATETIME | NOT NULL |
+
+The API verifies buyer ownership and `seller_orders.status = COMPLETED`; the
+unique `order_item_id` constraint prevents repeat reviews. The transaction
+updates `product_metadata.rating` and `product_metadata.review_count` from the
+saved reviews.
+
+---
+
+#### notifications
+
+**Purpose:** Stores recipient-scoped in-app messages for important order and
+review events.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | INTEGER | Primary Key |
+| `recipient_user_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `order_id` | INTEGER | NOT NULL, Foreign Key → `orders.id` |
+| `event_key` | VARCHAR(200) | NOT NULL, UNIQUE |
+| `message` | VARCHAR(255) | NOT NULL |
+| `target_path` | VARCHAR(512) | NOT NULL, internal UI route |
+| `created_at` | DATETIME | NOT NULL |
+| `read_at` | DATETIME | Optional |
+
+The event key makes notification creation idempotent. Notifications are saved
+within the order/review transaction and can only be listed or marked read by
+their recipient.
+
+---
+
 ### 2.3 Relationships and Cardinality
 
 | Relationship | Cardinality | Description |
@@ -353,6 +408,10 @@ This table satisfies the Sprint 3 audit requirement for US08 (Issue #74 / Issue 
 | `products` → `order_items` | 1 to 0..* | One product may appear in zero or many historical order items |
 | `seller_orders` → `order_history` | 1 to 0..* | One seller order has zero or many historical state transition records |
 | `users` → `order_history` | 1 to 0..* | One user may trigger zero or many order transition events |
+| `order_items` → `reviews` | 1 to 0..1 | An order item can have at most one review |
+| `products` → `reviews` | 1 to 0..* | A product may receive reviews from completed purchases |
+| `users` → `notifications` | 1 to 0..* | A user receives their own in-app notifications |
+| `orders` → `notifications` | 1 to 0..* | An order can produce multiple recipient-specific notifications |
 
 ---
 
@@ -637,6 +696,8 @@ model; this contract does not assume that every identifier is a UUID.
 | `POST /api/v1/cart/items` | U (buyer) | JSON: `{ "product_code": "P-100", "quantity": 1 }` | `201 Created` for a new line, or `200 OK` when an existing line is increased; returns the updated cart in the same shape as `GET` | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer, such as `true`, `1.5` or `"2"`; `401 Unauthorized`; `404 Not Found` (`ERR_PRODUCT_NOT_FOUND`) for an unknown product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`), when the quantity after adding exceeds available stock (`ERR_STOCK_EXCEEDED`), or when concurrent requests on the same line still collide after five attempts (`ERR_CONCURRENCY_CONFLICT`) | US03 Cart management |
 | `PATCH /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; JSON: `{ "quantity": 2 }` | `200 OK`: updated cart with recalculated line and cart totals | `400 Bad Request` (`ERR_INVALID_QUANTITY`) for zero or negative quantity, because a line is removed with `DELETE`; `422 Unprocessable Entity` (`ERR_VALIDATION`) when `quantity` is not a JSON integer; `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code; `409 Conflict` when the product is inactive (`ERR_PRODUCT_UNAVAILABLE`) or the new quantity exceeds available stock (`ERR_STOCK_EXCEEDED`) | US03 Cart management |
 | `DELETE /api/v1/cart/items/{productCode}` | U (buyer) | Path: public `productCode`; no body | `200 OK`: updated cart after removing the line | `401 Unauthorized`; `404 Not Found` (`ERR_CART_ITEM_NOT_FOUND`) when the buyer's cart has no line for the product code | US03 Cart management |
+| `PATCH /api/v1/cart/items/{item_id}/select` | U (buyer) | Cart row ID; strict boolean `is_selected` | `200 OK`: full cart and selected total | 401/403; 404 missing/other buyer; 409 unavailable; 422 invalid input | US12 item selection |
+| `PATCH /api/v1/cart/select-shop/{seller_id}` | U (buyer) | Seller ID; strict boolean `is_selected` | `200 OK`: atomic shop selection, unavailable rows deselected | 401/403; 404 no rows in this buyer's shop; 422 invalid input | US12 shop selection |
 | `POST /api/v1/orders` | U (buyer) | Header `Idempotency-Key` (1-64 characters); JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, items (`product_id`, `product_code`, `product_name`, `quantity`, purchase-time `unit_price`, `line_total`), total, status, and delivery information; `200 OK` with the same order when the same key and body are replayed | `400 Bad Request` for an empty cart (`ERR_EMPTY_CART`) or a key with surrounding spaces (`ERR_INVALID_KEY`); `422` (`ERR_VALIDATION`) for invalid delivery fields or a missing key; `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `409 Conflict` when a product is unavailable (`ERR_PRODUCT_UNAVAILABLE`), stock changed (`ERR_STOCK_EXCEEDED`), the cart changed (`ERR_CONCURRENCY_CONFLICT`) or the key was used with another body (`ERR_IDEMPOTENCY_CONFLICT`); `500` (`ERR_DATABASE_FAILURE`) | US04 Checkout and order placement |
 | `GET /api/v1/orders/{orderId}` | U (buyer) | Path: integer `orderId` | `200 OK`: the same order shape as checkout, so the confirmation page names each product | `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `404 Not Found` (`ERR_ORDER_NOT_FOUND`) for a missing order or another buyer's order; `422` for a non-integer id | US04 Order confirmation |
 | `POST /api/v1/seller/products` | S | JSON product body: `name`, `description`, `price` (integer VND), `stock_quantity`, and `image_url` (absolute http(s) URL); seller, code and status come from the server (#81) | `201 Created`: `{ "data": ... }` with the new listing, its generated `code`, seller ownership and `is_active` status | `422 Unprocessable Entity` (`ERR_VALIDATION`) with messages per field in `error.fields` for empty, invalid or out-of-range values; `401 Unauthorized`; `403 Forbidden` for a non-seller account; `409 Conflict` when no unique product code could be assigned; `500` on database failure | US06 Create product listing |
@@ -647,7 +708,7 @@ model; this contract does not assume that every identifier is a UUID.
 
 `subOrderId` is `seller_orders.id` from section 2. Fulfilment status is stored per seller order, so a seller changes the status of their whole part of a marketplace order, not of a single order item.
 
-#### Cart response and rules (US03)
+#### Cart response and rules (US03, US12)
 
 Every cart endpoint, read or mutation, returns the whole cart in one shape
 (`CartResponse` in `src/schemas/cart.py`), so the `/cart` page always renders
@@ -658,6 +719,12 @@ the server's answer instead of keeping its own copy of the rules:
   "data": {
     "items": [
       {
+        "cart_item_id": 1,
+        "seller_id": 1,
+        "seller_name": "Demo Seller",
+        "is_selected": true,
+        "price_at_add": 180000,
+        "price_changed": false,
         "product_id": 1,
         "product_code": "P-100",
         "name": "Wireless Mouse",
@@ -669,7 +736,9 @@ the server's answer instead of keeping its own copy of the rules:
         "availability": "available"
       }
     ],
-    "cart_total": 360000
+    "cart_total": 360000,
+    "selected_total": 360000,
+    "supports_partial_checkout": true
   }
 }
 ```
@@ -694,7 +763,7 @@ token itself:
 - When stock drops or a product is withdrawn after it was added, `GET` keeps
   the line and its quantity and flags it through `availability`. Nothing is
   removed or reduced without the buyer. Flagged lines still count in
-  `cart_total`.
+  `cart_total`, but are deselected and excluded from `selected_total`.
 - A refused change leaves the cart exactly as it was. Each mutation commits or
   rolls back inside the service; the router does not commit again.
 - The database allows one line per buyer and product:
@@ -737,10 +806,17 @@ implementation"). This table lists every code the code raises, checked by
 | `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
 | `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND` | Unknown or inactive product code | Products, cart |
+| `404 Not Found` | `ERR_REVIEW_NOT_ELIGIBLE` | The order item does not belong to this buyer or product | Reviews |
+| `404 Not Found` | `ERR_REVIEW_NOT_FOUND` | The requested review does not exist | Seller reviews |
 | `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
+| `404 Not Found` | `ERR_NOTIFICATION_NOT_FOUND` | The notification does not exist or belongs to another user | Notifications |
+| `404 Not Found` | `ERR_ADDRESS_NOT_FOUND` | Unknown address or address owned by another buyer | Addresses, orders |
 | `404 Not Found` | `ERR_ORDER_NOT_FOUND` | Unknown order, another buyer's order, or unknown seller order | Orders, seller orders |
+| `409 Conflict` | `ERR_ADDRESS_CHANGED` | Submitted address version is stale | Addresses, orders |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
 | `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
+| `409 Conflict` | `ERR_REVIEW_NOT_COMPLETED` | The seller order has not reached `COMPLETED` | Reviews |
+| `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
@@ -1179,3 +1255,43 @@ status response. No authentication is required at entry; protected APIs continue
 to enforce roles. This addresses technical observation OBS01 from #83. The
 integration test follows the root contract then verifies catalog through receipt;
 existing root metadata tests continue to check the non-browser response.
+
+
+## US12 selected checkout implementation (#104)
+
+The cart persists selection and price-at-add, groups by seller in the UI, and
+checks out only selected rows. The runtime contract, migration behavior,
+transaction boundaries and acceptance checks are documented in
+[US12 cart selection](us12-cart-selection.md). This implementation completes the
+story scope, including persistence, selected checkout and regression coverage.
+
+
+## US13 address book and delivery snapshots (#105)
+
+`user_addresses` belongs to `users` through `user_id`; it contains recipient_name,
+phone_number, province, district, ward, detailed_address, is_default, version and UTC
+created_at/updated_at. Its SQLite primary key uses AUTOINCREMENT so deleted IDs are
+never reused. The partial unique index `ux_user_addresses_one_default` covers user_id
+only where is_default=true. Version starts at 1 and increments on every update,
+including when another address becomes default. Clearing and setting defaults commit
+in one owner-scoped transaction; only lock/default-index conflicts get bounded retries.
+`init_db()` registers the table/index on existing databases without replacing orders.
+
+Buyer-only `/api/v1/addresses`: GET lists default first then ID; POST creates (201);
+PUT /{id} replaces fields with a required version; PATCH /{id}/default accepts version;
+DELETE /{id} returns 204 with no JSON. Create/update accept six delivery text fields
+and strict boolean is_default; update also needs a strict positive integer version.
+Server-owned fields are forbidden. See [US13 contract and evidence](us13-addresses.md).
+
+POST /api/v1/orders accepts exactly one of the legacy delivery body or
+`{"address_id":12,"address_version":3}`. Ownership/version resolution occurs after
+idempotency replay. Hashing keeps legacy field order, separators and phone formatting.
+Saved-address hashes contain only ID/version. The service copies the name, phone and
+`detailed_address, ward, district, province` into orders in the checkout transaction.
+Receipts read these immutable fields directly; there is no dependency on the address
+remaining in the book. Selected cart lines, stock checks and request-key uniqueness
+remain part of the existing transaction.
+
+Address/checkout validation adds error.fields with safe field names and `_form` for
+payload-shape/extra-field errors. Union branch names and raw input never enter this
+response. Seller-product validation retains its original contract.

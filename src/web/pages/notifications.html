@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notifications | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/products.css">
+  <link rel="stylesheet" href="/static/notifications.css">
+  <script src="/static/notifications.js" defer></script>
+</head>
+<body>
+  <main class="catalog">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/products">Products</a>
+      <a href="/cart">Cart</a>
+      <a href="/seller/products/new">Create product</a>
+      <a href="/seller/orders">Seller orders</a>
+      <a href="/notifications" aria-current="page">Notifications</a>
+      <button id="notifications-logout" class="button" type="button">Log out</button>
+    </nav>
+    <h1 class="catalog__title">Notifications</h1>
+    <p id="notifications-status" class="state__message" role="status" aria-live="polite">Loading notifications…</p>
+    <p id="notifications-error" class="state__message" role="alert" hidden></p>
+    <button id="notifications-retry" class="button" type="button" hidden>Retry</button>
+    <ul id="notifications-list" class="notifications-list"></ul>
+  </main>
+</body>
+</html>

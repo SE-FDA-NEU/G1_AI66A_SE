@@ -468,7 +468,7 @@ async function runPage(script, pathname, responses) {
     localStorage: {getItem: () => null, removeItem() {}},
     sessionStorage: {getItem: () => null, setItem() {}, removeItem() {}},
     fetch: async url => {
-      const next = responses.shift();
+      const next = ["/api/v1/categories", "/api/v1/sellers"].includes(url) ? [] : responses.shift();
       assert.ok(next, `Unexpected request: ${url}`);
       return {status: 200, ok: true, json: async () => next};
     },

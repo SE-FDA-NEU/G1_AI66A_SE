@@ -16,6 +16,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutRequest, OrderResponse
+from src.schemas.orders import CheckoutInput, OrderResponse
 from src.services.orders import CheckoutError, checkout, receipt
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -52,7 +53,7 @@ BuyerStatusUpdateRequest = OrderStatusUpdateRequest
 
 @router.post("", response_model=OrderResponse, status_code=201)
 def place_order(
-    body: CheckoutRequest,
+    body: CheckoutInput,
     buyer: BuyerUser,
     session: SessionDep,
     response: Response,

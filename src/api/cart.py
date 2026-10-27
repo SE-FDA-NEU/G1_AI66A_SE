@@ -15,6 +15,7 @@ from src.schemas.cart import (
     PRODUCT_CODE_MAX_LENGTH,
     AddCartItemRequest,
     CartResponse,
+    SelectCartRequest,
     UpdateCartItemRequest,
 )
 from src.services.cart import CartError, CartErrorCode, CartService
@@ -101,4 +102,28 @@ def remove_cart_item(
     """Remove one line and return the remaining cart."""
     with cart_errors_as_http():
         cart = CartService(session).remove_item(buyer.id, product_code)
+    return CartResponse(data=cart)
+
+
+@router.patch("/items/{item_id}/select", response_model=CartResponse)
+def select_cart_item(
+    item_id: Annotated[int, Path(gt=0)],
+    request: SelectCartRequest,
+    buyer: BuyerUser,
+    session: SessionDep,
+) -> CartResponse:
+    with cart_errors_as_http():
+        cart = CartService(session).select_item(buyer.id, item_id, request.is_selected)
+    return CartResponse(data=cart)
+
+
+@router.patch("/select-shop/{seller_id}", response_model=CartResponse)
+def select_cart_shop(
+    seller_id: Annotated[int, Path(gt=0)],
+    request: SelectCartRequest,
+    buyer: BuyerUser,
+    session: SessionDep,
+) -> CartResponse:
+    with cart_errors_as_http():
+        cart = CartService(session).select_shop(buyer.id, seller_id, request.is_selected)
     return CartResponse(data=cart)

@@ -446,9 +446,9 @@ def test_sellers_endpoint_lists_sellers(client: TestClient, sample_catalog):
 
 
 def test_products_page_contains_all_discovery_controls(client: TestClient):
-    """Frontend HTML includes all discovery inputs, filters, sort dropdown,
-
-    and empty state reset button.
+    """
+    Frontend HTML includes all discovery inputs, filters, sort dropdown, and empty state reset
+    button.
     """
     html = client.get("/products").text
     assert 'id="products-search"' in html
@@ -487,9 +487,9 @@ def test_stock_filter_false_returns_all_active_products(client: TestClient, samp
 def test_seller_product_creation_creates_metadata_and_integrates_discovery(
     client: TestClient, discovery_engine, sample_catalog
 ):
-    """Newly created products through seller API receive ProductMetadata
-
-    and integrate with filters.
+    """
+    Newly created products through seller API receive ProductMetadata and integrate with
+    filters.
     """
     with Session(discovery_engine) as session:
         seller = session.get(User, 1)
@@ -638,9 +638,8 @@ def test_metadata_consistency_order_checkout_and_cancellation(
 
 
 def test_categories_and_sellers_error_handling_contracts(client: TestClient):
-    """Categories and sellers endpoints return 500 with ERR_DATABASE_FAILURE
-
-    upon database failure.
+    """
+    Categories and sellers endpoints return 500 with ERR_DATABASE_FAILURE upon database failure.
     """
     with patch("sqlmodel.Session.exec", side_effect=SQLAlchemyError("Simulated DB down")):
         cat_res = client.get("/api/v1/categories")
@@ -655,11 +654,11 @@ def test_categories_and_sellers_error_handling_contracts(client: TestClient):
 
 
 def test_frontend_products_js_race_condition_handling(client: TestClient):
-    """Frontend products.js uses AbortController and request ID sequence tracking
-
-    for rapid filter changes.
     """
-    script = client.get("/static/products.js").text
+    Frontend products.js uses AbortController and request ID sequence tracking for rapid filter
+    changes.
+    """
+    script = client.get("/static/products.js").text.replace("\r\n", "\n")
     assert "activeAbortController" in script
     assert "currentRequestId" in script
     assert "activeAbortController.abort()" in script
@@ -668,11 +667,11 @@ def test_frontend_products_js_race_condition_handling(client: TestClient):
 
 
 def test_frontend_products_js_request_scoped_abort_timeout(client: TestClient):
-    """Frontend products.js timeout aborts the request-scoped controller,
-
-    not the shared activeAbortController.
     """
-    script = client.get("/static/products.js").text
+    Frontend products.js timeout aborts the request-scoped controller, not the shared
+    activeAbortController.
+    """
+    script = client.get("/static/products.js").text.replace("\r\n", "\n")
     assert "const controller = new AbortController();" in script
     assert "activeAbortController = controller;" in script
     assert "controller.abort()" in script
@@ -682,9 +681,9 @@ def test_frontend_products_js_request_scoped_abort_timeout(client: TestClient):
 
 
 def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(discovery_engine):
-    """Existing products without metadata must not be assigned synthetic ratings,
-
-    sales, or timestamps.
+    """
+    Existing products without metadata must not be assigned synthetic ratings, sales, or
+    timestamps.
     """
     from src.seed import DEMO_DATE, seed_categories, seed_product_metadata
 
@@ -813,7 +812,6 @@ def test_sort_newest_handles_null_timestamps_and_fallback_by_id(
     res = client.get("/api/v1/products?seller_id=201&sort=newest")
     assert res.status_code == 200
     returned_codes = [p["code"] for p in res.json()["data"]]
-    # Products with created_at come first (newest to oldest),
-    # then items without created_at by ID desc
+    # Products with created_at come first (newest to oldest), then items without created_at by
+    # ID desc
     assert returned_codes == ["P-SORT-NEW", "P-SORT-OLD", "P-SORT-NO-META-B", "P-SORT-NO-META-A"]
-

@@ -15,11 +15,12 @@
       <a id="cart-link" href="/cart" aria-current="page">Cart</a>
       <a id="my-orders-link" href="/orders">My orders</a>
       <a id="seller-orders-link" href="/seller/orders" hidden>Seller orders</a>
+      <a href="/notifications">Notifications</a>
       <button id="logout-button" class="button" type="button">Log out</button>
     </nav>
     <h1 class="catalog__title">Your cart</h1>
 
-    <p id="cart-status" class="visually-hidden" role="status" aria-live="polite"></p>
+    <p id="cart-status" class="visually-hidden" role="status" aria-live="polite" tabindex="-1"></p>
 
     <ul id="cart-loading" class="cart-lines" aria-hidden="true">
       <li class="cart-skeleton"></li>
@@ -28,10 +29,11 @@
     </ul>
 
     <section id="cart-content" aria-label="Cart items" hidden>
+      <p id="cart-change-error" class="cart-line__error" role="alert" hidden></p>
       <ul id="cart-lines" class="cart-lines"></ul>
       <div class="cart-summary">
         <div>
-          <p class="cart-total">Total: <strong id="cart-total"></strong></p>
+          <p class="cart-total"><span id="cart-total-label">Total:</span> <strong id="cart-total"></strong></p>
           <p class="cart-summary__note">No shipping fee is added at checkout.</p>
           <p id="checkout-blocked" class="cart-summary__note" hidden>
             Update or remove the highlighted items before checkout.

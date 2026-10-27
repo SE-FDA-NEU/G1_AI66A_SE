@@ -28,6 +28,8 @@ from tests.cart_db import (
 
 CART_ENDPOINTS = [
     ("GET", "/api/v1/cart", None),
+    ("PATCH", "/api/v1/cart/items/1/select", {"is_selected": True}),
+    ("PATCH", "/api/v1/cart/select-shop/1", {"is_selected": True}),
     ("POST", "/api/v1/cart/items", {"product_code": "P-100", "quantity": 1}),
     ("PATCH", "/api/v1/cart/items/P-100", {"quantity": 1}),
     ("DELETE", "/api/v1/cart/items/P-100", None),
@@ -108,7 +110,14 @@ def test_buyer_without_lines_gets_an_empty_cart(api: TestClient) -> None:
     response = api.get("/api/v1/cart", headers=BUYER)
 
     assert response.status_code == 200
-    assert response.json() == {"data": {"items": [], "cart_total": 0}}
+    assert response.json() == {
+        "data": {
+            "items": [],
+            "cart_total": 0,
+            "selected_total": 0,
+            "supports_partial_checkout": True,
+        }
+    }
 
 
 def test_add_creates_a_line_then_increases_it(api: TestClient, engine: Engine) -> None:
@@ -122,6 +131,12 @@ def test_add_creates_a_line_then_increases_it(api: TestClient, engine: Engine) -
         "data": {
             "items": [
                 {
+                    "cart_item_id": 1,
+                    "seller_id": SELLER_ID,
+                    "seller_name": "Seller",
+                    "is_selected": True,
+                    "price_at_add": 150_000,
+                    "price_changed": False,
                     "product_id": product_id,
                     "product_code": "P-100",
                     "name": "Product P-100",
@@ -134,6 +149,8 @@ def test_add_creates_a_line_then_increases_it(api: TestClient, engine: Engine) -
                 }
             ],
             "cart_total": 300_000,
+            "selected_total": 300_000,
+            "supports_partial_checkout": True,
         }
     }
     assert increased.status_code == 200
@@ -185,7 +202,14 @@ def test_delete_removes_the_line_and_recalculates_the_total(
     assert first.status_code == 200
     assert lines(first) == [("P-101", 1, 50_000)]
     assert first.json()["data"]["cart_total"] == 50_000
-    assert last.json() == {"data": {"items": [], "cart_total": 0}}
+    assert last.json() == {
+        "data": {
+            "items": [],
+            "cart_total": 0,
+            "selected_total": 0,
+            "supports_partial_checkout": True,
+        }
+    }
     assert stored_lines(engine, BUYER_ID) == []
 
 
@@ -306,7 +330,14 @@ def test_buyers_only_see_and_change_their_own_cart(api: TestClient, engine: Engi
     other_patch = api.patch("/api/v1/cart/items/P-100", json={"quantity": 5}, headers=OTHER_BUYER)
     other_delete = api.delete("/api/v1/cart/items/P-100", headers=OTHER_BUYER)
 
-    assert other_cart.json() == {"data": {"items": [], "cart_total": 0}}
+    assert other_cart.json() == {
+        "data": {
+            "items": [],
+            "cart_total": 0,
+            "selected_total": 0,
+            "supports_partial_checkout": True,
+        }
+    }
     assert other_patch.status_code == 404
     assert other_delete.status_code == 404
     assert stored_lines(engine, BUYER_ID) == [("P-100", 2)]

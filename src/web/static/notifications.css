@@ -1,0 +1,33 @@
+.notifications-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e4e7eb;
+  border-radius: 8px;
+}
+
+.notification--unread {
+  border-inline-start: 4px solid #1d4ed8;
+}
+
+.notification p {
+  margin: 0;
+}
+
+.notification time {
+  color: #52606d;
+  font-size: 0.9rem;
+}
+
+.notification .button {
+  justify-self: start;
+}
