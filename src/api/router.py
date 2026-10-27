@@ -12,6 +12,7 @@ from src.api.notifications import router as notifications_router
 from src.api.orders import router as orders_router
 from src.api.products import router as products_router
 from src.api.reviews import router as reviews_router
+from src.api.seller_analytics import router as seller_analytics_router
 from src.api.seller_orders import router as seller_orders_router
 from src.api.seller_products import router as seller_products_router
 from src.api.sellers import router as sellers_router
@@ -28,6 +29,7 @@ api_router.include_router(products_router)
 api_router.include_router(orders_router)
 api_router.include_router(reviews_router)
 api_router.include_router(notifications_router)
+api_router.include_router(seller_analytics_router)
 api_router.include_router(seller_orders_router)
 api_router.include_router(seller_products_router)
 api_router.include_router(sellers_router)
