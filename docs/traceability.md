@@ -400,3 +400,17 @@ The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for 
 
 No implementation PR number is recorded until a real PR exists. Story closure and
 review remain GitHub workflow steps after this implementation is reviewed.
+
+
+## US16 contract (#108, #133–#137)
+
+Runtime: **Not implemented.** Contract proposed in
+[docs/us16-promotions.md](us16-promotions.md); each task PR confirms or amends its part.
+
+| Task | Contract section | Evidence required before closing |
+|---|---|---|
+| #133 voucher model and validation | 3, 6, 7 | One test per eligibility code; cap races on two connections; usage rollback and restore; migration fresh, legacy and rerun |
+| #134 seller voucher UI | 5.5 | Seller-scoped CRUD with field errors; `scope` and `seller_id` cannot be set |
+| #135 pricing and shipping | 2, 4 | Section 2.1 example and 2.2 boundary cases; allocation sums equal the discount |
+| #136 checkout voucher UI | 5.1–5.4 | Quote rendering, apply/remove, stale quote, persisted receipt breakdown |
+| #137 combo rules | 8 | Deferral or agreed rules recorded before any combo discount |
