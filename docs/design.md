@@ -821,6 +821,21 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
 | `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | A database failure; the response never contains SQL | All routes |
+| `400 Bad Request` | `ERR_PARENT_NOT_FOUND` | Parent category does not exist | Admin categories |
+| `400 Bad Request` | `ERR_CATEGORY_CYCLE` | Category parent assignment would cause a cycle | Admin categories |
+| `400 Bad Request` | `ERR_INVALID_DATES` | Voucher end date is before start date | Admin vouchers |
+| `400 Bad Request` | `ERR_INVALID_DISCOUNT` | Voucher discount value exceeds limits | Admin vouchers |
+| `400 Bad Request` | `ERR_INVALID_USAGE_LIMIT` | Voucher per-user limit exceeds total usage limit | Admin vouchers |
+| `400 Bad Request` | `ERR_SELF_MODERATION` | Administrator attempts to suspend their own account | Admin users |
+| `400 Bad Request` | `ERR_DISPUTE_RESOLVED` | Administrator attempts to decide an already resolved dispute | Admin disputes |
+| `403 Forbidden` | `ERR_ADMIN_REQUIRED` | Non-admin user calls an admin endpoint | All admin routes |
+| `403 Forbidden` | `ERR_ACCOUNT_RESTRICTED` | Restricted or suspended account attempts prohibited actions | Auth, cart, products |
+| `404 Not Found` | `ERR_CATEGORY_NOT_FOUND` | Category does not exist | Admin categories |
+| `404 Not Found` | `ERR_USER_NOT_FOUND` | User account not found | Admin users |
+| `404 Not Found` | `ERR_VOUCHER_NOT_FOUND` | Platform voucher not found | Admin vouchers |
+| `404 Not Found` | `ERR_DISPUTE_NOT_FOUND` | Return dispute not found | Admin disputes |
+| `409 Conflict` | `ERR_CATEGORY_EXISTS` | Category with this slug already exists | Admin categories |
+| `409 Conflict` | `ERR_VOUCHER_EXISTS` | Voucher with this code already exists | Admin vouchers |
 | Any | `ERR_BAD_REQUEST`, `ERR_FORBIDDEN`, `ERR_NOT_FOUND`, `ERR_CONFLICT`, `ERR_INTERNAL_SERVER`, `ERR_REQUEST_FAILED` | Fallback codes in `src/main.py` for an `HTTPException` raised without an envelope; no route raises one today | Shared handler |
 
 The Sprint 3 planning list (`docs/evidence/sprint3.md` section 2.3) also named
