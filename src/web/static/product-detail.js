@@ -21,6 +21,9 @@ const elements = {
   cartLink: document.getElementById("cart-link"),
   login: document.getElementById("login-link"),
   logout: document.getElementById("logout-button"),
+  myOrders: document.getElementById("my-orders-link"),
+  sellerNewProduct: document.getElementById("seller-new-product-link"),
+  sellerOrders: document.getElementById("seller-orders-link"),
   reviews: document.getElementById("reviews-section"),
   reviewsSummary: document.getElementById("reviews-summary"),
   reviewsError: document.getElementById("reviews-error"),
@@ -45,18 +48,37 @@ function isCurrentAuth(token, revision) {
   return authRevision === revision && localStorage.getItem("access_token") === token;
 }
 
+function getUserFromToken() {
+  const token = localStorage.getItem("access_token");
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return { id: Number(payload.sub), role: payload.role };
+  } catch {
+    return null;
+  }
+}
+
 function getReturnPath(selectedQty) {
   const qty = selectedQty !== undefined ? selectedQty : (parseInt(elements.quantity?.value, 10) || 1);
   return `${window.location.pathname}?quantity=${encodeURIComponent(qty)}`;
 }
 
 function configureNavigation() {
-  const loggedIn = Boolean(localStorage.getItem("access_token"));
+  const user = getUserFromToken();
+  const loggedIn = Boolean(user);
   elements.login.hidden = loggedIn;
   elements.logout.hidden = !loggedIn;
   if (!loggedIn) {
     elements.login.href = `/login?return_to=${encodeURIComponent(getReturnPath())}`;
   }
+
+  const isSeller = Boolean(user && user.role === "seller");
+  const isBuyer = Boolean(user && user.role === "buyer");
+
+  if (elements.myOrders) elements.myOrders.hidden = !isBuyer;
+  if (elements.sellerNewProduct) elements.sellerNewProduct.hidden = !isSeller;
+  if (elements.sellerOrders) elements.sellerOrders.hidden = !isSeller;
 }
 
 function getPreservedQuantity() {

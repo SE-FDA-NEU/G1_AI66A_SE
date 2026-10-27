@@ -53,6 +53,10 @@ class OrderData(BaseModel):
     delivery_address: str
     phone_number: str
     created_at: datetime
+    tracking_number: str | None = None
+    shipped_at: datetime | None = None
+    delivered_at: datetime | None = None
+    completed_at: datetime | None = None
     items: list[OrderLine]
 
 

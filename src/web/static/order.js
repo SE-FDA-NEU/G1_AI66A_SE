@@ -1,0 +1,679 @@
+"use strict";
+
+const money = (n) =>
+  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(n);
+
+const formatDate = (isoStr) => {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  return d.toLocaleDateString("vi-VN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const formatMetricDate = (isoStr) => {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const statusNames = {
+  PENDING: "Order Placed",
+  CONFIRMED: "In Production",
+  PROCESSING: "In Production",
+  CANCELLATION_REQUESTED: "Cancellation Requested",
+  SHIPPED: "Ocean Transit",
+  DELIVERED: "Shipping Final Mile",
+  COMPLETED: "Delivered",
+  CANCELLED: "Order Cancelled",
+};
+
+const elements = {
+  title: document.getElementById("order-title"),
+  statusBadge: document.getElementById("order-status-badge"),
+  liveIndicator: document.getElementById("live-indicator"),
+  meta: document.getElementById("order-meta"),
+  statusMsg: document.getElementById("status-message"),
+  errorMsg: document.getElementById("error-message"),
+  milestonesCard: document.getElementById("milestones-card"),
+  actionsCard: document.getElementById("actions-card"),
+  actionHint: document.getElementById("action-hint"),
+  // Buyer action buttons
+  cancelBtn: document.getElementById("cancel-btn"),
+  reqCancelBtn: document.getElementById("req-cancel-btn"),
+  confirmDeliveryBtn: document.getElementById("confirm-delivery-btn"),
+  // Seller action buttons
+  sellerConfirmBtn: document.getElementById("seller-confirm-btn"),
+  sellerShipBtn: document.getElementById("seller-ship-btn"),
+  sellerDeliverBtn: document.getElementById("seller-deliver-btn"),
+  sellerApproveCancelBtn: document.getElementById("seller-approve-cancel-btn"),
+  sellerRejectCancelBtn: document.getElementById("seller-reject-cancel-btn"),
+  sellerCancelBtn: document.getElementById("seller-cancel-btn"),
+  sellerOrdersLink: document.getElementById("seller-orders-link"),
+  myOrdersLink: document.getElementById("my-orders-link"),
+  detailsCard: document.getElementById("details-card"),
+  recipientName: document.getElementById("recipient-name"),
+  phoneNumber: document.getElementById("phone-number"),
+  deliveryAddress: document.getElementById("delivery-address"),
+  itemsCard: document.getElementById("items-card"),
+  itemsList: document.getElementById("items-list"),
+  orderTotal: document.getElementById("order-total"),
+  retryBtn: document.getElementById("retry-btn"),
+  trackingInfo: document.getElementById("tracking-info"),
+  trackingNumberVal: document.getElementById("tracking-number-val"),
+  // New Metric Summary & Status Elements
+  summaryMetricsBar: document.getElementById("summary-metrics-bar"),
+  orderPlacedVal: document.getElementById("order-placed-val"),
+  orderTotalVal: document.getElementById("order-total-val"),
+  orderShipToVal: document.getElementById("order-ship-to-val"),
+  orderIdVal: document.getElementById("order-id-val"),
+  statusHeadlineName: document.getElementById("status-headline-name"),
+  estDeliveryVal: document.getElementById("est-delivery-val"),
+  stepperProgressBar: document.getElementById("stepper-progress-bar"),
+  mapBtnVector: document.getElementById("map-btn-vector"),
+  mapBtnSat: document.getElementById("map-btn-sat"),
+  mapViewport: document.getElementById("delivery-map-viewport"),
+  mapTargetLabel: document.getElementById("map-target-label"),
+};
+
+let currentOrder = null;
+
+function getCurrentUser() {
+  const token = localStorage.getItem("access_token");
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return { id: Number(payload.sub), role: payload.role };
+  } catch {
+    return null;
+  }
+}
+
+function getOrderId() {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last === "orders" || last === "order" ? null : last;
+}
+
+async function request(url, options = {}) {
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    window.location.replace(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
+    return null;
+  }
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new Error("Network error. Please check your connection and retry.");
+  }
+  if (response.status === 401) {
+    localStorage.removeItem("access_token");
+    window.location.replace(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
+    return null;
+  }
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "Failed to complete request.");
+  }
+  return payload;
+}
+
+function updateStepper(order) {
+  const status = order.status;
+  const steps = [
+    { id: "step-ordered", line: null, dateId: "step-ordered-date", date: order.created_at },
+    { id: "step-confirmed", line: 0, dateId: "step-confirmed-date", date: null },
+    { id: "step-shipped", line: 1, dateId: "step-shipped-date", date: order.shipped_at },
+    { id: "step-delivered", line: 2, dateId: "step-delivered-date", date: order.delivered_at },
+    { id: "step-completed", line: 3, dateId: "step-completed-date", date: order.completed_at },
+  ];
+
+  const statusWeights = {
+    PENDING: 1,
+    CONFIRMED: 2,
+    PROCESSING: 2,
+    CANCELLATION_REQUESTED: 2,
+    SHIPPED: 3,
+    DELIVERED: 4,
+    COMPLETED: 5,
+    CANCELLED: 0,
+  };
+
+  const progressPercent = {
+    0: 0,
+    1: 0,
+    2: 25,
+    3: 50,
+    4: 75,
+    5: 100,
+  };
+
+  const currentWeight = statusWeights[status] || 1;
+
+  steps.forEach((step, index) => {
+    const el = document.getElementById(step.id);
+    if (!el) return;
+    el.classList.remove("active", "done");
+    const stepNum = index + 1;
+    if (status === "CANCELLED") {
+      // no steps marked active
+    } else if (stepNum < currentWeight) {
+      el.classList.add("done");
+    } else if (stepNum === currentWeight) {
+      el.classList.add("active");
+    }
+
+    if (step.date) {
+      const dateEl = document.getElementById(step.dateId);
+      if (dateEl) dateEl.textContent = formatMetricDate(step.date);
+    }
+  });
+
+  if (elements.stepperProgressBar) {
+    const pct = status === "CANCELLED" ? 0 : (progressPercent[currentWeight] ?? 0);
+    elements.stepperProgressBar.style.width = `${pct}%`;
+  }
+
+  if (order.tracking_number) {
+    elements.trackingInfo.hidden = false;
+    elements.trackingNumberVal.textContent = order.tracking_number;
+  } else {
+    elements.trackingInfo.hidden = true;
+  }
+}
+
+function updateActions(order) {
+  const user = getCurrentUser();
+  const isSeller = Boolean(user && user.role === "seller");
+
+  if (elements.sellerOrdersLink) {
+    elements.sellerOrdersLink.hidden = !isSeller;
+  }
+  if (elements.myOrdersLink) {
+    elements.myOrdersLink.hidden = isSeller;
+  }
+
+  // Reset all buttons
+  elements.cancelBtn.hidden = true;
+  elements.reqCancelBtn.hidden = true;
+  elements.confirmDeliveryBtn.hidden = true;
+
+  elements.sellerConfirmBtn.hidden = true;
+  elements.sellerShipBtn.hidden = true;
+  elements.sellerDeliverBtn.hidden = true;
+  elements.sellerApproveCancelBtn.hidden = true;
+  elements.sellerRejectCancelBtn.hidden = true;
+  elements.sellerCancelBtn.hidden = true;
+  elements.actionHint.textContent = "";
+
+  const st = order.status;
+
+  if (isSeller) {
+    // Seller action controls
+    if (st === "PENDING") {
+      elements.actionsCard.hidden = false;
+      elements.sellerConfirmBtn.hidden = false;
+      elements.sellerCancelBtn.hidden = false;
+      elements.actionHint.textContent = "New buyer order. Review and confirm to begin order fulfillment.";
+    } else if (st === "CONFIRMED" || st === "PROCESSING") {
+      elements.actionsCard.hidden = false;
+      elements.sellerShipBtn.hidden = false;
+      elements.sellerCancelBtn.hidden = false;
+      elements.actionHint.textContent = "Order is confirmed. When packaged, enter tracking number to ship.";
+    } else if (st === "CANCELLATION_REQUESTED") {
+      elements.actionsCard.hidden = false;
+      elements.sellerApproveCancelBtn.hidden = false;
+      elements.sellerRejectCancelBtn.hidden = false;
+      elements.actionHint.textContent = "Buyer requested cancellation. Approve to cancel and restore stock, or reject.";
+    } else if (st === "SHIPPED") {
+      elements.actionsCard.hidden = false;
+      elements.sellerDeliverBtn.hidden = false;
+      elements.actionHint.textContent = "Package is in transit. Mark as delivered once carrier confirms delivery.";
+    } else {
+      elements.actionsCard.hidden = true;
+    }
+  } else {
+    // Buyer action controls: clean, minimal, only show what the buyer is strictly authorized to perform
+    if (st === "PENDING") {
+      elements.actionsCard.hidden = false;
+      elements.cancelBtn.hidden = false;
+      elements.actionHint.textContent = "Your order is pending confirmation. You may cancel it if you changed your mind.";
+    } else if (st === "CONFIRMED" || st === "PROCESSING") {
+      elements.actionsCard.hidden = false;
+      elements.reqCancelBtn.hidden = false;
+      elements.actionHint.textContent = "Your order is being prepared. You can request a cancellation from the seller.";
+    } else if (st === "DELIVERED") {
+      elements.actionsCard.hidden = false;
+      elements.confirmDeliveryBtn.hidden = false;
+      elements.actionHint.textContent = "Your package has been delivered! Please inspect the items and confirm receipt below.";
+    } else {
+      elements.actionsCard.hidden = true;
+    }
+  }
+}
+
+let pollTimer = null;
+
+function startPolling(orderId) {
+  if (pollTimer) clearInterval(pollTimer);
+  if (!orderId) return;
+
+  pollTimer = setInterval(async () => {
+    try {
+      const payload = await request(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+      if (payload && payload.data) {
+        const updated = payload.data;
+        if (
+          !currentOrder ||
+          currentOrder.status !== updated.status ||
+          currentOrder.tracking_number !== updated.tracking_number
+        ) {
+          renderOrder(updated);
+        }
+        if (["COMPLETED", "CANCELLED"].includes(updated.status)) {
+          clearInterval(pollTimer);
+          if (elements.liveIndicator) elements.liveIndicator.hidden = true;
+        }
+      }
+    } catch (_) {}
+  }, 4000);
+}
+
+function renderOrder(order) {
+  currentOrder = order;
+
+  if (elements.title) elements.title.textContent = "ORDER TRACKING PAGE";
+  if (elements.statusBadge) {
+    elements.statusBadge.textContent = order.status.replace("_", " ");
+    elements.statusBadge.className = `badge ${order.status.toLowerCase()}`;
+  }
+
+  if (elements.liveIndicator) {
+    elements.liveIndicator.hidden = ["COMPLETED", "CANCELLED"].includes(order.status);
+  }
+
+  // Populate 4-column summary metric bar (exact reference image layout)
+  if (elements.summaryMetricsBar) elements.summaryMetricsBar.hidden = false;
+  if (elements.orderPlacedVal) elements.orderPlacedVal.textContent = formatMetricDate(order.created_at);
+  if (elements.orderTotalVal) elements.orderTotalVal.textContent = money(order.total_amount);
+  if (elements.orderShipToVal) elements.orderShipToVal.textContent = order.recipient_name || "—";
+  if (elements.orderIdVal) elements.orderIdVal.textContent = `#${order.id}`;
+
+  // Populate Status Headline
+  if (elements.statusHeadlineName) {
+    elements.statusHeadlineName.textContent = statusNames[order.status] || order.status;
+    if (order.status === "CANCELLED") {
+      elements.statusHeadlineName.style.color = "#dc2626";
+    } else {
+      elements.statusHeadlineName.style.color = "#16a34a";
+    }
+  }
+
+  // Populate Estimated Delivery
+  if (elements.estDeliveryVal) {
+    if (order.status === "COMPLETED" && order.completed_at) {
+      elements.estDeliveryVal.textContent = `Completed on ${formatMetricDate(order.completed_at)}`;
+    } else if (order.status === "DELIVERED" && order.delivered_at) {
+      elements.estDeliveryVal.textContent = `Delivered on ${formatMetricDate(order.delivered_at)}`;
+    } else if (order.status === "SHIPPED") {
+      elements.estDeliveryVal.textContent = "Arriving in 1 - 3 business days";
+    } else if (order.status === "CANCELLED") {
+      elements.estDeliveryVal.textContent = "Order cancelled";
+    } else {
+      elements.estDeliveryVal.textContent = "Estimated in 2 - 4 business days";
+    }
+  }
+
+  // Recipient details
+  elements.recipientName.textContent = order.recipient_name;
+  elements.phoneNumber.textContent = order.phone_number;
+  elements.deliveryAddress.textContent = order.delivery_address;
+  elements.orderTotal.textContent = money(order.total_amount);
+
+  // Map destination pin label
+  if (elements.mapTargetLabel && order.delivery_address) {
+    const parts = order.delivery_address.split(",").map((s) => s.trim()).filter(Boolean);
+    elements.mapTargetLabel.textContent = parts[parts.length - 1] || "Destination";
+  }
+
+  // Table of items (DOM APIs + textContent to prevent stored XSS)
+  const table = document.createElement("table");
+  table.className = "items-table";
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  const columns = [
+    { title: "Product", align: "left" },
+    { title: "Code", align: "left" },
+    { title: "Unit Price", align: "left" },
+    { title: "Quantity", align: "left" },
+    { title: "Total", align: "right" },
+  ];
+  columns.forEach((col) => {
+    const th = document.createElement("th");
+    th.textContent = col.title;
+    if (col.align === "right") {
+      th.style.textAlign = "right";
+    }
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  (order.items || []).forEach((item) => {
+    const tr = document.createElement("tr");
+
+    const tdName = document.createElement("td");
+    const strongName = document.createElement("strong");
+    strongName.textContent = item.product_name ?? "";
+    tdName.appendChild(strongName);
+    tr.appendChild(tdName);
+
+    const tdCode = document.createElement("td");
+    const codeEl = document.createElement("code");
+    codeEl.textContent = item.product_code ?? "";
+    tdCode.appendChild(codeEl);
+    tr.appendChild(tdCode);
+
+    const tdPrice = document.createElement("td");
+    tdPrice.textContent = money(item.unit_price);
+    tr.appendChild(tdPrice);
+
+    const tdQty = document.createElement("td");
+    tdQty.textContent = item.quantity;
+    tr.appendChild(tdQty);
+
+    const tdTotal = document.createElement("td");
+    tdTotal.className = "money";
+    tdTotal.textContent = money(item.line_total);
+    tr.appendChild(tdTotal);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  elements.itemsList.replaceChildren(table);
+
+  updateStepper(order);
+  updateActions(order);
+  elements.milestonesCard.hidden = false;
+  elements.detailsCard.hidden = false;
+  elements.itemsCard.hidden = false;
+
+  // Real Leaflet Interactive Map
+  initRealMap(order.delivery_address, order.recipient_name);
+}
+
+let mapInstance = null;
+let vectorTileLayer = null;
+let satTileLayer = null;
+let markerInstance = null;
+
+function initRealMap(address, recipientName) {
+  if (typeof L === "undefined") {
+    // If Leaflet is still loading or offline, fallback to vector graphics preview
+    return;
+  }
+  const container = document.getElementById("leaflet-map");
+  if (!container) return;
+
+  if (!mapInstance) {
+    mapInstance = L.map("leaflet-map", {
+      center: [21.0285, 105.8542],
+      zoom: 14,
+      zoomControl: false,
+    });
+
+    L.control.zoom({ position: "bottomright" }).addTo(mapInstance);
+
+    vectorTileLayer = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
+      }
+    );
+
+    satTileLayer = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
+        maxZoom: 18,
+      }
+    );
+
+    vectorTileLayer.addTo(mapInstance);
+
+    if (elements.mapViewport) {
+      elements.mapViewport.classList.add("leaflet-loaded");
+    }
+
+    if (elements.mapBtnVector && elements.mapBtnSat) {
+      elements.mapBtnVector.addEventListener("click", () => {
+        elements.mapBtnVector.classList.add("active");
+        elements.mapBtnSat.classList.remove("active");
+        if (mapInstance && mapInstance.hasLayer(satTileLayer)) {
+          mapInstance.removeLayer(satTileLayer);
+          vectorTileLayer.addTo(mapInstance);
+        }
+      });
+      elements.mapBtnSat.addEventListener("click", () => {
+        elements.mapBtnSat.classList.add("active");
+        elements.mapBtnVector.classList.remove("active");
+        if (mapInstance && mapInstance.hasLayer(vectorTileLayer)) {
+          mapInstance.removeLayer(vectorTileLayer);
+          satTileLayer.addTo(mapInstance);
+        }
+      });
+    }
+
+    const expandBtn = document.getElementById("map-expand-btn");
+    if (expandBtn) {
+      expandBtn.addEventListener("click", () => {
+        const grid = document.querySelector(".shipping-and-map-grid");
+        if (grid) {
+          grid.classList.toggle("map-expanded");
+          setTimeout(() => mapInstance && mapInstance.invalidateSize(), 300);
+        }
+      });
+    }
+  }
+
+  if (address) {
+    geocodeAndPin(address, recipientName);
+  }
+}
+
+async function geocodeAndPin(address, recipientName) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`,
+      { headers: { "Accept-Language": "vi,en" } }
+    );
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      updateMapMarker(lat, lon, address, recipientName);
+      return;
+    }
+  } catch (_) {}
+
+  // Fallback to Vietnam major cities or default coordinates
+  const lower = (address || "").toLowerCase();
+  let defaultCoords = [21.0285, 105.8542]; // Hanoi
+  if (lower.includes("hồ chí minh") || lower.includes("hcm") || lower.includes("sài gòn")) {
+    defaultCoords = [10.7769, 106.7009];
+  } else if (lower.includes("đà nẵng") || lower.includes("da nang")) {
+    defaultCoords = [16.0544, 108.2022];
+  }
+  updateMapMarker(defaultCoords[0], defaultCoords[1], address, recipientName);
+}
+
+function updateMapMarker(lat, lon, address, recipientName) {
+  if (!mapInstance || typeof L === "undefined") return;
+  mapInstance.setView([lat, lon], 14);
+  setTimeout(() => mapInstance && mapInstance.invalidateSize(), 200);
+
+  const applePinIcon = L.divIcon({
+    className: "apple-map-marker-pin",
+    html: `
+      <div style="position:relative; display:flex; align-items:center; justify-content:center;">
+        <div style="position:absolute; width:18px; height:8px; background:rgba(239,68,68,0.35); border-radius:50%; bottom:-4px; filter:blur(1px);"></div>
+        <svg viewBox="0 0 24 24" fill="#ef4444" style="width:34px; height:34px; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -34],
+  });
+
+  if (markerInstance) {
+    markerInstance.setLatLng([lat, lon]);
+  } else {
+    markerInstance = L.marker([lat, lon], { icon: applePinIcon }).addTo(mapInstance);
+  }
+
+  const popupContent = document.createElement("div");
+  const strongEl = document.createElement("strong");
+  strongEl.textContent = recipientName || "Delivery Location";
+  popupContent.appendChild(strongEl);
+  popupContent.appendChild(document.createElement("br"));
+  if (address) {
+    popupContent.appendChild(document.createTextNode(address));
+  }
+  markerInstance.bindPopup(popupContent).openPopup();
+}
+
+window.addEventListener("load", () => {
+  if (currentOrder && currentOrder.delivery_address) {
+    initRealMap(currentOrder.delivery_address, currentOrder.recipient_name);
+  }
+});
+
+async function loadOrder() {
+  const id = getOrderId();
+  elements.errorMsg.hidden = true;
+  elements.statusMsg.hidden = false;
+  elements.statusMsg.textContent = "Loading order details...";
+  elements.retryBtn.hidden = true;
+
+  try {
+    let payload = null;
+    if (id) {
+      payload = await request(`/api/v1/orders/${encodeURIComponent(id)}`);
+    } else {
+      const user = getCurrentUser();
+      if (user && user.role === "seller") {
+        window.location.replace("/seller/orders");
+        return;
+      }
+      const listPayload = await request("/api/v1/orders");
+      if (!listPayload || !listPayload.length) {
+        elements.statusMsg.hidden = true;
+        elements.errorMsg.hidden = false;
+        elements.errorMsg.textContent = "You do not have any orders yet. Start shopping to place an order!";
+        return;
+      }
+      payload = listPayload[0];
+      if (payload && payload.data && payload.data.id) {
+        history.replaceState(null, "", `/order/${payload.data.id}`);
+      }
+    }
+    if (!payload) return;
+    elements.statusMsg.hidden = true;
+    renderOrder(payload.data);
+    startPolling(payload.data.id);
+  } catch (err) {
+    elements.statusMsg.hidden = true;
+    elements.errorMsg.hidden = false;
+    elements.errorMsg.textContent = err.message;
+    elements.retryBtn.hidden = false;
+  }
+}
+
+async function handleAction(newStatus, confirmPrompt, extraData = {}) {
+  if (confirmPrompt && !window.confirm(confirmPrompt)) {
+    return;
+  }
+  const id = (currentOrder && currentOrder.id) || getOrderId();
+  elements.statusMsg.hidden = false;
+  elements.statusMsg.textContent = "Updating order...";
+  elements.errorMsg.hidden = true;
+
+  try {
+    const payload = await request(`/api/v1/orders/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: newStatus, ...extraData }),
+    });
+    if (!payload) return;
+    elements.statusMsg.textContent = "Status updated successfully.";
+    renderOrder(payload.data);
+    startPolling(payload.data.id);
+    setTimeout(() => {
+      elements.statusMsg.hidden = true;
+    }, 4000);
+  } catch (err) {
+    elements.statusMsg.hidden = true;
+    elements.errorMsg.hidden = false;
+    elements.errorMsg.textContent = err.message;
+  }
+}
+
+// Buyer triggers
+elements.cancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLED", "Are you sure you want to cancel this order?")
+);
+
+elements.reqCancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLATION_REQUESTED", "Request cancellation from the seller?")
+);
+
+elements.confirmDeliveryBtn.addEventListener("click", () =>
+  handleAction("COMPLETED", "Confirm that you have received your order in good condition?")
+);
+
+// Seller triggers
+elements.sellerConfirmBtn.addEventListener("click", () =>
+  handleAction("CONFIRMED", "Confirm this order for fulfillment?")
+);
+
+elements.sellerShipBtn.addEventListener("click", () => {
+  const tracking = window.prompt("Enter carrier tracking number:", "TRK-" + Math.floor(100000 + Math.random() * 900000));
+  if (!tracking) return;
+  handleAction("SHIPPED", null, { tracking_number: tracking.trim() });
+});
+
+elements.sellerDeliverBtn.addEventListener("click", () =>
+  handleAction("DELIVERED", "Mark this order as delivered to buyer?")
+);
+
+elements.sellerApproveCancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLED", "Approve buyer cancellation? Restores item inventory to stock.")
+);
+
+elements.sellerRejectCancelBtn.addEventListener("click", () =>
+  handleAction("CONFIRMED", "Reject buyer cancellation and keep order in fulfillment?")
+);
+
+elements.sellerCancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLED", "Cancel this order? Restores item inventory to stock.")
+);
+
+elements.retryBtn.addEventListener("click", loadOrder);
+
+loadOrder();
