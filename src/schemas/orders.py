@@ -34,15 +34,31 @@ class DeliverySnapshot(BaseModel):
     delivery_address: str
 
 
+class SubOrderSummary(BaseModel):
+    id: int
+    seller_id: int
+    status: str
+    payment_status: str = "PAID"
+    escrow_status: str = "HELD"
+    tracking_number: str | None = None
+    shipped_at: datetime | None = None
+    delivered_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class OrderLine(BaseModel):
     product_id: int
+    variant_id: int | None = None
     # The receipt names each product; unit_price stays the purchase-time snapshot.
     product_code: str
     product_name: str
+    variant_name: str | None = None
+    image_url: str | None = None
     seller_order_id: int
     quantity: int
     unit_price: int
     line_total: int
+    seller_order_status: str | None = None
 
 
 class OrderData(BaseModel):
@@ -52,12 +68,15 @@ class OrderData(BaseModel):
     recipient_name: str
     delivery_address: str
     phone_number: str
+    payment_status: str = "PAID"
+    escrow_status: str = "HELD"
     created_at: datetime
     tracking_number: str | None = None
     shipped_at: datetime | None = None
     delivered_at: datetime | None = None
     completed_at: datetime | None = None
     items: list[OrderLine]
+    sub_orders: list[SubOrderSummary] = Field(default_factory=list)
 
 
 class OrderResponse(BaseModel):

@@ -14,6 +14,7 @@ from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import (
     CheckoutInput,
@@ -21,6 +22,7 @@ from src.schemas.orders import (
     DeliverySnapshot,
     OrderData,
     OrderLine,
+    SubOrderSummary,
 )
 from src.services.addresses import AddressError, owned_address
 from src.services.notifications import create_notification
@@ -71,16 +73,52 @@ def receipt(
         values["delivered_at"] = order.delivered_at.replace(tzinfo=UTC)
     if order.completed_at:
         values["completed_at"] = order.completed_at.replace(tzinfo=UTC)
+    sub_orders = session.exec(
+        select(SellerOrder).where(SellerOrder.order_id == order.id).order_by(SellerOrder.id)
+    ).all()
+    sub_order_map = {so.id: so for so in sub_orders}
+    visible_sub_orders = sub_orders
+    if seller_id is not None:
+        visible_sub_orders = [so for so in sub_orders if so.seller_id == seller_id]
+
     return OrderData(
         **values,
         items=[
             OrderLine(
                 **item.model_dump(),
                 product_code=product.code,
-                product_name=product.name,
+                product_name=(
+                    item.product_name_snapshot
+                    if item.snapshot_initialized
+                    else item.product_name_snapshot or product.name
+                ),
+                variant_name=item.variant_name_snapshot,
+                image_url=(
+                    item.product_image_snapshot
+                    if item.snapshot_initialized
+                    else item.product_image_snapshot or product.image_url
+                ),
                 line_total=item.quantity * item.unit_price,
+                seller_order_status=sub_order_map[item.seller_order_id].status
+                if item.seller_order_id in sub_order_map
+                else None,
             )
             for item, product in rows
+        ],
+        sub_orders=[
+            SubOrderSummary(
+                id=so.id,  # type: ignore
+                seller_id=so.seller_id,
+                status=so.status,
+                payment_status=so.payment_status,
+                escrow_status=so.escrow_status,
+                tracking_number=so.tracking_number,
+                shipped_at=so.shipped_at.replace(tzinfo=UTC) if so.shipped_at else None,
+                delivered_at=so.delivered_at.replace(tzinfo=UTC) if so.delivered_at else None,
+                completed_at=so.completed_at.replace(tzinfo=UTC) if so.completed_at else None,
+            )
+            for so in visible_sub_orders
+            if so.id is not None
         ],
     )
 
@@ -124,6 +162,14 @@ def checkout(
                 .order_by(CartItem.product_id)
             ).all()
             if not lines:
+                session.rollback()
+                existing = session.exec(select(Order).where(Order.request_key == key)).first()
+                if existing is not None:
+                    if existing.buyer_id != buyer_id or existing.request_hash != fingerprint:
+                        raise CheckoutError(
+                            "ERR_IDEMPOTENCY_CONFLICT", "Key was used for another request."
+                        )
+                    return receipt(session, buyer_id, existing.id), False
                 has_cart = session.exec(
                     select(CartItem.id).where(CartItem.buyer_id == buyer_id)
                 ).first()
@@ -152,23 +198,54 @@ def checkout(
                         "ERR_PRODUCT_UNAVAILABLE",
                         f"Product {line.product_id} is no longer available.",
                     )
+                variant = (
+                    session.get(ProductVariant, line.variant_id)
+                    if line.variant_id is not None
+                    else None
+                )
+                if line.variant_id is not None and (
+                    variant is None
+                    or variant.product_id != product.id
+                    or variant.seller_id != product.seller_id
+                    or not variant.is_active
+                ):
+                    raise CheckoutError(
+                        "ERR_PRODUCT_UNAVAILABLE",
+                        f"Product variant {line.variant_id} is no longer available.",
+                    )
+                if (
+                    variant is None
+                    and session.exec(
+                        select(ProductVariant.id).where(
+                            ProductVariant.product_id == product.id,
+                        )
+                    ).first()
+                    is not None
+                ):
+                    raise CheckoutError(
+                        "ERR_PRODUCT_UNAVAILABLE",
+                        f"Choose an active variant for product {product.name}.",
+                    )
                 if product.seller_id == buyer_id:
                     raise CheckoutError(
                         "ERR_SELF_PURCHASE",
                         "Sellers cannot purchase their own products.",
                         status=400,
                     )
+                inventory = variant or product
+                inventory_model = ProductVariant if variant is not None else Product
                 changed = session.exec(
-                    update(Product)
+                    update(inventory_model)
                     .where(
-                        Product.id == product.id,
-                        Product.version == product.version,
-                        Product.is_active.is_(True),
-                        Product.stock_quantity - Product.reserved_stock >= line.quantity,
+                        inventory_model.id == inventory.id,
+                        inventory_model.version == inventory.version,
+                        inventory_model.is_active.is_(True),
+                        inventory_model.stock_quantity - inventory_model.reserved_stock
+                        >= line.quantity,
                     )
                     .values(
-                        stock_quantity=Product.stock_quantity - line.quantity,
-                        version=Product.version + 1,
+                        stock_quantity=inventory_model.stock_quantity - line.quantity,
+                        version=inventory_model.version + 1,
                     )
                     .execution_options(synchronize_session=False)
                 )
@@ -196,8 +273,15 @@ def checkout(
                     OrderItem(
                         seller_order_id=sellers[product.seller_id],
                         product_id=product.id,
+                        variant_id=variant.id if variant else None,
                         quantity=line.quantity,
-                        unit_price=product.price,
+                        unit_price=inventory.price,
+                        product_name_snapshot=product.name,
+                        variant_name_snapshot=variant.name if variant else None,
+                        product_image_snapshot=(
+                            variant.image_url or product.image_url if variant else product.image_url
+                        ),
+                        snapshot_initialized=True,
                     )
                 )
                 # Atomic sales_count increment avoiding ORM read-modify-write lost updates
@@ -223,7 +307,7 @@ def checkout(
                             set_={"sales_count": ProductMetadata.sales_count + line.quantity},
                         )
                     )
-                order.total_amount += product.price * line.quantity
+                order.total_amount += inventory.price * line.quantity
                 removed = session.exec(
                     delete(CartItem)
                     .where(

@@ -797,15 +797,20 @@ implementation"). This table lists every code the code raises, checked by
 | `400 Bad Request` | `ERR_SELF_PURCHASE` | A seller attempts to add or checkout their own product | Cart, orders |
 | `400 Bad Request` | `ERR_INVALID_TRANSITION` | A seller order status change that the state machine does not allow (section 3.6) | Seller orders |
 | `400 Bad Request` | `ERR_INVALID_STATUS` | The seller order `status` filter is not a known status | Seller orders |
-| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders |
-| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders |
+| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders, seller analytics |
+| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders, seller analytics |
+| `400 Bad Request` | `ERR_INVALID_PERIOD` | An unsupported period grouping is requested | Seller analytics |
+| `400 Bad Request` | `ERR_INVALID_SORT` | An unsupported best-sellers sort field is requested | Seller analytics |
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED` | No bearer token | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_TOKEN` | A malformed, expired or no longer valid token (there is no separate expired-token code) | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_CREDENTIALS` | Wrong email or password | Login |
 | `403 Forbidden` | `ERR_SELLER_REQUIRED` | A buyer calls a seller route | Seller products, seller orders |
 | `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
 | `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
+| `403 Forbidden` | `ERR_ADMIN_REQUIRED` | A non-admin calls a category administration route | Categories |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND` | Unknown or inactive product code | Products, cart |
+| `404 Not Found` | `ERR_CATEGORY_NOT_FOUND` | The requested category does not exist | Categories |
+| `404 Not Found` | `ERR_VARIANT_NOT_FOUND` | The requested product option does not exist or is not owned by the seller | Seller variants |
 | `404 Not Found` | `ERR_REVIEW_NOT_ELIGIBLE` | The order item does not belong to this buyer or product | Reviews |
 | `404 Not Found` | `ERR_REVIEW_NOT_FOUND` | The requested review does not exist | Seller reviews |
 | `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
@@ -815,11 +820,17 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_ADDRESS_CHANGED` | Submitted address version is stale | Addresses, orders |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
 | `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
+| `409 Conflict` | `ERR_CATEGORY_SLUG` | A category slug is already in use | Categories |
+| `409 Conflict` | `ERR_CATEGORY_HAS_CHILDREN` | An active category has active children | Categories |
+| `409 Conflict` | `ERR_CATEGORY_HIERARCHY` | The saved category hierarchy already contains a cycle | Categories |
+| `409 Conflict` | `ERR_VARIANT_SKU_CONFLICT` | An SKU is already used by the seller's shop | Seller variants |
 | `409 Conflict` | `ERR_REVIEW_NOT_COMPLETED` | The seller order has not reached `COMPLETED` | Reviews |
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
+| `422 Unprocessable Entity` | `ERR_CATEGORY_PARENT` | The requested parent category does not exist or is inactive | Categories |
+| `422 Unprocessable Entity` | `ERR_CATEGORY_HIERARCHY` | A category update would create a hierarchy cycle | Categories |
 | `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | A database failure; the response never contains SQL | All routes |
 | `400 Bad Request` | `ERR_PARENT_NOT_FOUND` | Parent category does not exist | Admin categories |
 | `400 Bad Request` | `ERR_CATEGORY_CYCLE` | Category parent assignment would cause a cycle | Admin categories |

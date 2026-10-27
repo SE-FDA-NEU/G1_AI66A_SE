@@ -138,6 +138,8 @@ def test_add_creates_a_line_then_increases_it(api: TestClient, engine: Engine) -
                     "price_at_add": 150_000,
                     "price_changed": False,
                     "product_id": product_id,
+                    "variant_id": None,
+                    "variant_name": None,
                     "product_code": "P-100",
                     "name": "Product P-100",
                     "image_url": "/images/p-100.jpg",

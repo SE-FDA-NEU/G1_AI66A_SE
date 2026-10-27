@@ -472,9 +472,7 @@ def test_cart_is_priced_from_the_current_database_price(engine: Engine) -> None:
     assert snapshot.cart_total == 240_000
 
 
-def bump_line_after_reading(
-    monkeypatch: pytest.MonkeyPatch, engine: Engine, quantity: int
-) -> None:
+def bump_line_after_reading(monkeypatch: pytest.MonkeyPatch, engine: Engine, quantity: int) -> None:
     """Simulate another request that sets the line to `quantity` right after this one reads it."""
     original = cart_module.find_cart_item_for_product
 
@@ -616,15 +614,13 @@ def test_only_busy_or_locked_database_errors_count_as_a_lost_race(
     assert is_lost_race(ValueError("not a database error")) is False
 
 
-def test_database_allows_one_line_per_buyer_and_product(engine: Engine) -> None:
-    """UNIQUE(buyer_id, product_id) refuses a duplicate line even when the service is bypassed."""
+def test_database_allows_one_line_per_buyer_product_and_variant(engine: Engine) -> None:
+    """Partial unique indexes distinguish base-product lines from variant lines."""
     product_id = add_product(engine, "P-100")
 
-    unique_constraints = inspect(engine).get_unique_constraints("cart_items")
-    assert {
-        "name": "uq_cart_items_buyer_product",
-        "column_names": ["buyer_id", "product_id"],
-    } in unique_constraints
+    unique_indexes = {index["name"] for index in inspect(engine).get_indexes("cart_items")}
+    assert "uq_cart_items_buyer_product_base" in unique_indexes
+    assert "uq_cart_items_buyer_product_variant" in unique_indexes
     with Session(engine) as session:
         session.add(CartItem(buyer_id=BUYER_ID, product_id=product_id, quantity=1))
         session.add(CartItem(buyer_id=OTHER_BUYER_ID, product_id=product_id, quantity=1))

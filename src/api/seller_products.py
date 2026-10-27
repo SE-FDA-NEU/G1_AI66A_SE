@@ -112,3 +112,27 @@ def update_seller_product(
     session.commit()
     session.refresh(product)
     return SellerProductResponse(data=SellerProduct.model_validate(product, from_attributes=True))
+
+
+@router.delete("/{product_id}", response_model=SellerProductResponse)
+def deactivate_seller_product(
+    product_id: int, seller: SellerUser, session: SessionDep
+) -> SellerProductResponse:
+    """Withdraw a listing without deleting the product row referenced by order history."""
+    product = session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_detail("ERR_PRODUCT_NOT_FOUND", "Product not found."),
+        )
+    if product.seller_id != seller.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_RESOURCE_OWNER", "You do not own this product."),
+        )
+    product.is_active = False
+    product.version += 1
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return SellerProductResponse(data=SellerProduct.model_validate(product, from_attributes=True))

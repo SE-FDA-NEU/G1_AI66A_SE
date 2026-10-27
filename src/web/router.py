@@ -90,6 +90,6 @@ def confirmation_page(order_id: int) -> FileResponse:
 @router.get("/order/{order_id}", response_class=FileResponse, include_in_schema=False)
 @router.get("/orders/{order_id}", response_class=FileResponse, include_in_schema=False)
 def order_tracker_page(order_id: int | None = None) -> FileResponse:
-    """Serve the order tracker page (US: /order/:id)."""
+    """Serve the order tracking and return/refund management page."""
     del order_id
     return FileResponse(PAGES_DIR / "order.html")

@@ -29,6 +29,10 @@ class Order(SQLModel, table=True):
 
     status: str = Field(max_length=30)
 
+    payment_status: str = Field(default="PAID", max_length=30)
+
+    escrow_status: str = Field(default="HELD", max_length=30)
+
     recipient_name: str = Field(max_length=100)
 
     delivery_address: str

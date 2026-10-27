@@ -44,6 +44,8 @@ const transitions = {
     { status: "COMPLETED", label: "Mark completed" },
   ],
   DELIVERED: [{ status: "COMPLETED", label: "Mark completed" }],
+  RETURN_REQUESTED: [],
+  RETURNED_REFUNDED: [],
   COMPLETED: [],
   CANCELLED: [],
 };
@@ -111,9 +113,13 @@ function createOrderCard(order) {
   items.className = "order-card__items";
   order.items.forEach((item) => {
     const line = document.createElement("li");
-    line.textContent = `${item.product_name} × ${item.quantity} (${item.total_price.toLocaleString("vi-VN")} ₫)`;
+    const purchasedName = item.variant_name
+      ? `${item.product_name} · ${item.variant_name}`
+      : item.product_name;
+    line.textContent = `${purchasedName} × ${item.quantity} (${item.total_price.toLocaleString("vi-VN")} ₫)`;
     items.append(line);
   });
+  card.append(items);
   if (order.tracking_number) {
     const tracking = document.createElement("p");
     tracking.className = "order-card__tracking";
@@ -122,8 +128,14 @@ function createOrderCard(order) {
   }
   const trackLink = document.createElement("a");
   trackLink.href = `/order/${order.order_id}`;
-  trackLink.textContent = `Track Order (parent #${order.order_id})`;
+  trackLink.textContent = order.status === "RETURN_REQUESTED"
+    ? `⚠️ Review Return & Refund (Order #${order.order_id})`
+    : `Track Order (parent #${order.order_id})`;
   trackLink.className = "order-card__tracker-link";
+  if (order.status === "RETURN_REQUESTED") {
+    trackLink.style.color = "#ea580c";
+    trackLink.style.fontWeight = "bold";
+  }
   card.append(trackLink);
   transitions[order.status]?.forEach((transition) => {
     const button = document.createElement("button");
