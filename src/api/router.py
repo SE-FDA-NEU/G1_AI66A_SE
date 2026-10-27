@@ -1,4 +1,3 @@
-
 """Main API router combining all v1 route endpoints."""
 
 from fastapi import APIRouter
@@ -15,6 +14,7 @@ from src.api.returns import router as returns_router
 from src.api.reviews import router as reviews_router
 from src.api.seller_orders import router as seller_orders_router
 from src.api.seller_products import router as seller_products_router
+from src.api.seller_variants import router as seller_variants_router
 from src.api.sellers import router as sellers_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -32,4 +32,5 @@ api_router.include_router(reviews_router)
 api_router.include_router(notifications_router)
 api_router.include_router(seller_orders_router)
 api_router.include_router(seller_products_router)
+api_router.include_router(seller_variants_router)
 api_router.include_router(sellers_router)
