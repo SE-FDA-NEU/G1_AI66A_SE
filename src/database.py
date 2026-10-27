@@ -70,6 +70,13 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"
                     )
                 )
+            if "status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'"
+                    )
+                )
 
         if "cart_items" in tables:
             columns = {c["name"] for c in inspector.get_columns("cart_items")}

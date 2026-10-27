@@ -4,6 +4,7 @@
 from fastapi import APIRouter
 
 from src.api.addresses import router as addresses_router
+from src.api.admin import router as admin_router
 from src.api.auth import router as auth_router
 from src.api.cart import router as cart_router
 from src.api.categories import router as categories_router
@@ -31,3 +32,4 @@ api_router.include_router(notifications_router)
 api_router.include_router(seller_orders_router)
 api_router.include_router(seller_products_router)
 api_router.include_router(sellers_router)
+api_router.include_router(admin_router)

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Products - Seller Dashboard</title>
+    <link rel="stylesheet" href="/static/products.css">
+    <link rel="stylesheet" href="/static/admin-portal.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="admin-header">
+        <div class="admin-header-content">
+            <div class="admin-brand">
+                <a href="/products" class="brand-link">Mini Marketplace</a>
+                <span class="admin-badge" style="background-color: #10b981;">Seller Center</span>
+            </div>
+            <div class="admin-user-info">
+                <a href="/seller/orders" class="btn btn-secondary btn-sm" style="color: #0f172a;">Orders</a>
+                <a href="/seller/products/new" class="btn btn-primary btn-sm">+ New Listing</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="admin-container">
+        <div class="portal-views" style="min-height: auto;">
+            <div class="view-header">
+                <div>
+                    <h2>My Store Products</h2>
+                    <p class="subtitle">Manage store inventory, catalog compliance, and listing availability.</p>
+                </div>
+                <a href="/seller/products/new" class="btn btn-primary">+ Add New Product</a>
+            </div>
+
+            <div class="table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Product Name</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Status / Moderation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="seller-products-tbody">
+                        <tr><td colspan="5" class="text-center">Loading products...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const tbody = document.getElementById('seller-products-tbody');
+            const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+            if (!token) {
+                window.location.href = '/login?next=/seller/products';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Not logged in');
+                const user = await res.json();
+                const u = user.data || user;
+
+                // Load products owned by this seller
+                const pRes = await fetch(`/api/v1/products?seller_id=${u.id}&limit=100`);
+                if (!pRes.ok) throw new Error('Failed to load store products');
+                const pData = await pRes.json();
+                const products = pData.data || [];
+
+                tbody.innerHTML = '';
+                if (!products.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No products listed in your store yet.</td></tr>';
+                    return;
+                }
+
+                products.forEach(p => {
+                    const tr = document.createElement('tr');
+                    
+                    const tdCode = document.createElement('td');
+                    tdCode.textContent = p.code;
+                    tr.appendChild(tdCode);
+
+                    const tdName = document.createElement('td');
+                    const strong = document.createElement('strong');
+                    strong.textContent = p.name;
+                    tdName.appendChild(strong);
+                    tr.appendChild(tdName);
+
+                    const tdPrice = document.createElement('td');
+                    tdPrice.textContent = `${Number(p.price).toLocaleString('vi-VN')} ₫`;
+                    tr.appendChild(tdPrice);
+
+                    const tdStock = document.createElement('td');
+                    tdStock.textContent = p.stock_quantity;
+                    tr.appendChild(tdStock);
+
+                    const tdStatus = document.createElement('td');
+                    const badge = document.createElement('span');
+                    if (p.is_active) {
+                        badge.className = 'badge badge-active';
+                        badge.textContent = 'Active (On Sale)';
+                    } else {
+                        badge.className = 'badge badge-inactive';
+                        badge.textContent = 'Deactivated by Policy';
+                    }
+                    tdStatus.appendChild(badge);
+                    tr.appendChild(tdStatus);
+
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${err.message}</td></tr>`;
+            }
+        });
+    </script>
+</body>
+</html>
