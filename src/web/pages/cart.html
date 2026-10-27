@@ -13,6 +13,8 @@
     <nav class="site-nav" aria-label="Main navigation">
       <a href="/products">Products</a>
       <a id="cart-link" href="/cart" aria-current="page">Cart</a>
+      <a id="my-orders-link" href="/orders">My orders</a>
+      <a id="seller-orders-link" href="/seller/orders" hidden>Seller orders</a>
       <a href="/notifications">Notifications</a>
       <button id="logout-button" class="button" type="button">Log out</button>
     </nav>
@@ -47,6 +49,10 @@
     <section id="cart-empty" class="state" hidden>
       <p class="state__message">Your cart is empty.</p>
       <p class="cart-total">Total: <strong id="cart-empty-total"></strong></p>
+      <div id="recent-order-note" style="margin: 1.5rem 0; padding: 1.25rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; text-align: center;" hidden>
+        <p style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #1e3a8a; font-weight: 500;">Looking for an order you just placed?</p>
+        <a id="track-recent-order-link" class="button" href="/orders" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 0.6rem 1.25rem; border-radius: 6px; font-weight: 600;">📦 Track Your Orders</a>
+      </div>
       <a class="button" href="/products">Continue shopping</a>
     </section>
 
