@@ -1326,10 +1326,12 @@ keep today's hash and pricing until the checkout UI (#136) sends quotes.
 Design only. `payment_status` and `escrow_status` already exist on `orders` and
 `seller_orders` (PR #170), but there is no payment method, recorded result or settlement
 yet. The proposed contract for #148–#150 is in
-[US20 payments and settlement](us20-payments.md): four tracked methods with no provider,
-the five #112 payment statuses (no `PARTIALLY_REFUNDED`), escrow `HELD`, `PAUSED`,
-`RELEASED` and `VOIDED`, seller net `B_s − floor(B_s × rate_bps / 10000)` with no
-deduction for platform-funded discounts, a release guard (`COMPLETED`, paid, held) that
-runs once on every completion path, refunds recorded once through `payment_events`, and
-a local operator command for demo results. Legacy bodies are recorded as COD until the
-checkout UI (#149) sends a method.
+[US20 payments and settlement](us20-payments.md). It covers four tracked methods with no
+provider; the five #112 payment statuses (no `PARTIALLY_REFUNDED`); seller net
+`B_s − floor(B_s × rate_bps / 10000)` with no deduction for platform-funded discounts; a
+release guard (`COMPLETED`, paid, held) that runs once on every completion path; refunds
+recorded once through `payment_events`; an event-order matrix with invariants I1–I8; and
+explicit legacy-order rules. The commission rate, COD timing, refund amount, demo-result
+recording, the escrow name `VOIDED` and the analytics keys are pending decisions D1–D6.
+Their owners confirm them before the dependent code merges. Legacy bodies are recorded
+as COD until the checkout UI (#149) sends a method.

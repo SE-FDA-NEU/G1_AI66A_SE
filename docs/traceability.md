@@ -426,4 +426,6 @@ recorded results and settlement are not implemented. Contract proposed in
 |---|---|---|
 | #148 payment fields, validation, escrow and settlement | 1–7, 9, 10 | Transition matrix; event deduplication; release guard on every completion path; refund once; migration fresh, from `17638838` and rerun |
 | #149 payment selector and status display | 2.1, 3, 8 | Method stored and shown; demo methods labelled; no success shown before a recorded result; seller-scoped settlement fields |
-| #150 payment and settlement tests | 4, 6, 8, 11 | Section 11 matrix, reconciliation identity, analytics `settled_income` against seller orders |
+| #150 payment and settlement tests | 4, 6, 8, 10, 11 | Section 11 matrix and criteria R1–R6 and L; section 6.2 pairs in both orders and concurrently; invariants I1–I8 after every step; reconciliation identity |
+
+Pending decisions D1–D6 (section 12 of the contract) must be confirmed by their owners before the code that depends on them merges.

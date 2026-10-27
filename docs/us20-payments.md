@@ -6,7 +6,15 @@ Story #112, tasks #148 (payment fields, state validation, escrow and settlement)
 **Status: contract only.** It is written against `main` at
 `17638838a5eb1369a42df694c0d3b59a17c06d49` (after PR #171). Part of the state already
 exists there (section 1). Everything else is a proposal that the owners of #148–#150
-confirm or amend in their own pull requests. New error codes join `docs/design.md`
+confirm or amend in their own pull requests.
+
+Two kinds of rule appear below. **Binding** rules follow directly from the #112
+acceptance criteria and from code already on `main`: the five payment statuses, release
+only after `COMPLETED` with a recorded payment, no deduction of platform-funded
+discounts, one refund per seller order, and the invariants in section 6.3.
+**Pending** rules carry a decision ID (D1–D6) from section 12. They are proposals until
+the owner named there confirms them in the linked issue, and the behaviour they cover is
+not implemented before that confirmation. New error codes join `docs/design.md`
 section 3.4 only in the PR that first raises them; `tests/test_ui_docs_contract.py`
 requires that table to match the codes in `src/`. This contract needs no new API error
 code.
@@ -38,8 +46,8 @@ directly; #148 moves those assignments into payment-service calls.
 
 | Method | Mode this sprint | Initial `payment_status` | How `PAID` is recorded |
 |---|---|---|---|
-| `COD` | Tracked, no provider | `UNPAID` | For each seller order, when that seller order reaches `DELIVERED`, or `COMPLETED` straight from `SHIPPED`; source `COD_COLLECTED` |
-| `VIETQR` | Tracked demo, no provider | `UNPAID` | The demo operator command (section 7) records `PAID` or `FAILED` for the whole order; source `DEMO_OPERATOR` |
+| `COD` | Tracked, no provider | `UNPAID` | For each seller order, when that seller order reaches `DELIVERED`, or `COMPLETED` straight from `SHIPPED`; source `COD_COLLECTED` (D2) |
+| `VIETQR` | Tracked demo, no provider | `UNPAID` | The demo operator command (section 7) records `PAID` or `FAILED` for the whole order; source `DEMO_OPERATOR` (D4) |
 | `WALLET` | Tracked demo, no provider | `UNPAID` | Same as `VIETQR` |
 | `CARD` | Tracked demo, no provider | `UNPAID` | Same as `VIETQR`. No card data is collected, stored or sent anywhere |
 
@@ -82,7 +90,7 @@ and do not affect the summary of the others.
 | `RELEASED` | The seller net amount is settled income, exactly once (section 5) |
 | `VOIDED` | The seller order was cancelled or its return approved; nothing will be settled |
 
-`VOIDED` replaces the escrow value `REFUNDED` used on `main`, because the escrow of an
+`VOIDED` (decision D5) replaces the escrow value `REFUNDED` used on `main`, because the escrow of an
 unpaid cancelled order was never refunded. The parent `escrow_status` is a display
 summary only, never used for settlement or analytics. It keeps the derivation in
 `sync_parent_order_state()`, with `VOIDED` in place of `REFUNDED`: any `PAUSED` →
@@ -124,9 +132,12 @@ seller_net_amount = B_s - C_s
 ```
 
 The platform-funded discounts (`platform_discount`, `shipping_discount`) are not
-deducted from seller income, and the shipping fee is not seller income. Proposed rate:
-**500 bps (5%)**, a named constant in `src/services/payments.py`, snapshotted on each
-seller order. A later rate change never re-prices stored orders.
+deducted from seller income, and the shipping fee is not seller income. The formula and
+the per-seller-order snapshot are binding. The rate value is decision D1: proposed
+**500 bps (5%)**, held in one named constant in `src/services/payments.py`. Tests take
+the rate from the seller order's snapshot rather than repeating 500, so confirming
+another rate changes only that constant. A later rate change never re-prices stored
+orders.
 
 US16 defines the `seller_orders` snapshot columns `subtotal`, `shop_discount`,
 `platform_discount`, `shipping_fee`, `shipping_discount` and `total_amount`. Whichever of
@@ -177,8 +188,9 @@ WHERE id = :id AND status = 'COMPLETED' AND payment_status = 'PAID'
 
 It runs after every event that can make it true: every completion path (buyer
 confirmation and both seller status routes), a payment result that arrives after
-completion, and a rejected return. Completing an unpaid COD or prepaid order leaves it
-`HELD`; a payment recorded before completion leaves it `HELD` until completion.
+completion, and a rejected return. Completing an unpaid prepaid order leaves it `HELD`
+until its payment arrives; for COD, the completion itself records the payment (section
+2.1). A payment recorded before completion leaves the order `HELD` until completion.
 
 ## 6. Cancellation and refund
 
@@ -190,19 +202,98 @@ completion, and a rejected return. Completing an unpaid COD or prepaid order lea
 | Return approved, seller order `PAID` | `PAID → REFUND_PENDING → REFUNDED`, `refunded_amount = total_amount` | `VOIDED` |
 | Return approved, seller order not `PAID` | Unchanged | `VOIDED` |
 | Return rejected (seller order becomes `COMPLETED` on `main`) | Unchanged | `PAUSED → HELD`, then the release guard |
-| Prepaid result `PAID` arrives after a seller order was cancelled | That share goes `PAID → REFUND_PENDING → REFUNDED` | Stays `VOIDED` |
+| Prepaid result `PAID` arrives after a seller order became `CANCELLED` or `RETURNED_REFUNDED` | That share goes `PAID → REFUND_PENDING → REFUNDED` | Stays `VOIDED` |
 
-A refund is the seller order's full `total_amount`, shipping included. Returns cover a
-whole seller order on `main`, and a cancellation happens before shipment. The refund
-runs once: a conditional update `WHERE payment_status = 'PAID'` plus the unique event key
-`refund:seller-order:{id}`. A retry, or a second route, refunds nothing more. In tracked
-mode the refund succeeds in the same transaction; with a real provider it would stay
-`REFUND_PENDING` until a callback, which is out of scope. Cancelling or refunding one
-shop never refunds another shop's share.
+The refund amount is decision D3: proposed as the seller order's full `total_amount`,
+shipping included. Returns cover a whole seller order on `main`, and a cancellation
+happens before shipment, so no shipping cost has been incurred. Whatever amount D3
+settles on, the refund runs once: a conditional update `WHERE payment_status = 'PAID'`
+plus the unique event key `refund:seller-order:{id}`. A retry, or a second route,
+refunds nothing more. In tracked mode the refund succeeds in the same transaction; with
+a real provider it would stay `REFUND_PENDING` until a callback, which is out of scope.
+Cancelling or refunding one shop never refunds another shop's share.
 
 Cancellation reaches `CANCELLED` through the three paths listed in US16 section 7. The
 payment calls belong in the same shared cancellation function as the voucher restore
 (#128), not in each route.
+
+### 6.1 Events arriving in any order
+
+Payment results, workflow transitions and return decisions arrive from different
+actors, in any order, and sometimes twice. Four rules keep the three levels (event log,
+seller order, parent summary) consistent:
+
+1. **One transaction per event.** The workflow change and its payment effects commit
+   together. For example, the cancelling transaction sets `CANCELLED`, voids the escrow
+   and records the refund, so no committed state is `CANCELLED` with `HELD`.
+2. **Conditional writes.** Every payment and escrow change is an `UPDATE ... WHERE`
+   on the value the handler expects. A rowcount of 0 means another transaction got
+   there first. The handler then re-reads the seller order, applies the row of the
+   matrix below for the state it actually finds, or does nothing. SQLite serializes
+   writers, and the existing busy retry re-runs the whole handler.
+3. **Parent recomputed, never incremented.** At the end of every handler,
+   `sync_parent_payment()` rebuilds the parent `payment_status` and `escrow_status` from
+   all of its seller orders, in the same transaction.
+4. **Terminal values stay.** `payment_status` `REFUNDED` and `escrow_status`
+   `RELEASED` or `VOIDED` never change again. Seller-order status `COMPLETED`,
+   `CANCELLED` or `RETURNED_REFUNDED` cannot move to a state that would release or
+   refund again; returns start only from `DELIVERED` on `main`.
+
+Matrix: state found → event → result. "Ignored" means the event row is written with
+`from_status = to_status` and nothing else changes; "no-op" means a duplicate key, so
+nothing is written.
+
+| Seller order found | Payment `PAID` result | `FAILED` result | Cancellation | Completion | Return approved | Return rejected |
+|---|---|---|---|---|---|---|
+| Not yet shipped, `UNPAID`, `HELD` | `PAID`, stays `HELD` | `FAILED` | `CANCELLED`, `VOIDED`, no refund | — | — | — |
+| Not yet shipped, `PAID`, `HELD` | No-op or ignored | Ignored | `CANCELLED`, `VOIDED`, refund once | — | — | — |
+| `SHIPPED` or `DELIVERED`, `UNPAID`, `HELD` | `PAID`, stays `HELD` | `FAILED` | Not allowed by the workflow | `COMPLETED`, stays `HELD` | — | — |
+| `DELIVERED`, `PAID`, `HELD` | No-op or ignored | Ignored | Not allowed | `COMPLETED`, `RELEASED` | — | — |
+| `COMPLETED`, `UNPAID`, `HELD` | `PAID`, then `RELEASED` | `FAILED`, stays `HELD` | Not allowed | — | — | — |
+| `RETURN_REQUESTED`, any payment, `PAUSED` | `PAID` if it was `UNPAID`, stays `PAUSED` | Ignored if `PAID` | Not allowed | — | `RETURNED_REFUNDED`, `VOIDED`, refund once if `PAID` | `COMPLETED`, `HELD`, then the release guard |
+| `COMPLETED`, `PAID`, `RELEASED` | No-op or ignored | Ignored | Not allowed | — | — | — |
+| `CANCELLED` or `RETURNED_REFUNDED`, not `REFUNDED`, `VOIDED` | `PAID`, then refund once | Ignored | — | — | — | — |
+| `CANCELLED` or `RETURNED_REFUNDED`, `REFUNDED`, `VOIDED` | Ignored | Ignored | — | — | — | — |
+
+"—" means the workflow (US14 transitions and the #170 return rules) never delivers that
+event in that state, and the payment service rejects it with `ERR_INVALID_TRANSITION`
+if a caller tries. The `UNPAID` rows after shipment apply to prepaid methods. For COD,
+reaching `DELIVERED`, or `COMPLETED` straight from `SHIPPED`, is itself the `PAID`
+result (section 2.1). It is recorded in the same transaction as the transition, so a
+COD seller order moves to the `PAID` rows at that moment. Completing a COD order
+therefore releases at once.
+
+### 6.2 Same end state in either order
+
+For each pair below, applying the two events in either order gives the same final
+state. #150 runs every pair in both orders, and also concurrently on two independent
+SQLite connections.
+
+| Events | Final seller order |
+|---|---|
+| `PAID` result and cancellation | `CANCELLED`, `REFUNDED`, `VOIDED`, one `REFUND` event |
+| `PAID` result and completion | `COMPLETED`, `PAID`, `RELEASED`, one release |
+| `PAID` result and return approval | `RETURNED_REFUNDED`, `REFUNDED`, `VOIDED`, one `REFUND` event |
+| `PAID` result and return rejection | `COMPLETED`, `PAID`, `RELEASED`, one release |
+| Two cancellations through different routes | `CANCELLED`, one `REFUND` event if it was paid |
+| `PAID` result twice, same key | Identical to one result |
+
+### 6.3 Invariants
+
+These hold after every committed transaction. #150 checks them after each step of every
+test, not only at the end. I3–I6 apply to non-legacy orders; legacy rows keep values
+stored before US20 (section 10).
+
+| ID | Invariant |
+|---|---|
+| I1 | `escrow_status = 'RELEASED'` ⇒ `status = 'COMPLETED'`, `payment_status = 'PAID'`, `settled_at IS NOT NULL` and the order has a `payment_method` |
+| I2 | `status IN ('CANCELLED', 'RETURNED_REFUNDED')` ⇒ `escrow_status = 'VOIDED'`, so a cancelled or returned seller order is never settled |
+| I3 | A seller order has at most one `REFUND` event (unique key), and `refunded_amount` equals that event's amount, or 0 without one |
+| I4 | `payment_status = 'REFUNDED'` ⇔ a `REFUND` event exists for that seller order |
+| I5 | `refunded_amount <= total_amount` |
+| I6 | The parent `payment_status` and `escrow_status` equal the summary of their seller orders (sections 2.2 and 2.3) |
+| I7 | A seller order counts in `settled_income` ⇔ `escrow_status = 'RELEASED'` |
+| I8 | `payment_method IS NULL` ⇔ the order is legacy (section 10); a legacy order has no payment events and is never `RELEASED` |
 
 ## 7. Recording results
 
@@ -241,7 +332,8 @@ release guard runs.
 `payment_method` and the parent `payment_status`, plus `paid_amount` and
 `refunded_amount` derived from the seller orders. Each `sub_orders[]` entry adds
 `payment_status`, `escrow_status` and `refunded_amount`. The buyer view never shows
-commission or seller net. The seller-scoped view (US16 section 5.2) shows only the
+commission or seller net. Legacy orders follow section 10. The seller-scoped view
+(US16 section 5.2) shows only the
 seller's own sub-order and adds its `commission_amount`, `seller_net_amount` and
 `settled_at`. Labels for #149: `UNPAID` "Awaiting payment" (COD: "Pay on delivery"),
 `PAID` "Paid", `REFUND_PENDING` "Refund in progress", `REFUNDED` "Refunded", `FAILED`
@@ -249,7 +341,7 @@ seller's own sub-order and adds its `commission_amount`, `seller_net_amount` and
 from order details), so both read the same persisted values.
 
 **Analytics.** The US18 `revenue` figure (#169: gross line totals of `COMPLETED` seller
-orders by `completed_at`) stays, and is labelled completed sales. #148 adds, scoped to
+orders by `completed_at`) stays, and is labelled completed sales. #148 adds (decision D6), scoped to
 the seller:
 
 | Figure | Definition | Time basis |
@@ -257,8 +349,9 @@ the seller:
 | `settled_income` | Sum of `seller_net_amount` where `escrow_status = 'RELEASED'` | `settled_at` |
 | `escrow_pending` | Sum of `seller_net_amount` where `payment_status = 'PAID'` and `escrow_status IN ('HELD', 'PAUSED')` | State at request time |
 
-Cancelled, returned-refunded, `VOIDED` and unpaid seller orders never count as settled
-income. Response keys are added with US18's owner before merge.
+Cancelled, returned-refunded, `VOIDED`, unpaid and legacy seller orders never count as
+settled income (I2, I7, section 10). Response keys are added with US18's owner before
+merge.
 
 ## 9. Service interface (#148)
 
@@ -288,35 +381,83 @@ test fails if any module other than `payments.py` assigns `payment_status`,
   (nullable). The US16 snapshot columns follow section 4.
 - `payment_events` is created from SQLModel metadata by `init_db()`.
 - `migrate_db()` adds the missing columns. It maps `escrow_status 'REFUNDED'` to
-  `'VOIDED'` on both tables, and parent `payment_status 'PARTIALLY_REFUNDED'` to
-  `'PAID'`. A rerun changes nothing.
+  `'VOIDED'` on both tables, sets `escrow_status = 'VOIDED'` on seller orders that are
+  already `CANCELLED` or `RETURNED_REFUNDED` (cancellations on `main` left them
+  `HELD`), recomputes the parent escrow summary, and maps parent `payment_status
+  'PARTIALLY_REFUNDED'` to `'PAID'`. Afterwards I2 holds for every row, legacy
+  included. A rerun changes nothing.
 
-**Legacy orders** (`payment_method IS NULL`) were stored with the `PAID` default before
-any payment was recorded, so that value is not evidence. The migration does not rewrite
-it and invents no payment events. Instead, the release guard skips legacy orders, they
-never count as settled income, and the UI shows "Payment not recorded" for them. The
-#170 return flow keeps working on them.
+**Legacy orders.** An order is legacy exactly when `payment_method IS NULL` (I8).
+Checkout always writes a method, a body without one included, so no new order can be
+legacy. Legacy rows were stored with the `PAID` default before anything was recorded,
+so that value is not evidence of payment. The migration leaves the stored value as it
+is and invents no events. Every reader treats a legacy order as follows:
+
+| Area | Legacy behaviour |
+|---|---|
+| Receipt API | `payment_method` is `null`, and `payment_status` (parent and each `sub_orders[]` entry) is returned as `null`, not the stored default. `escrow_status` is returned as stored. `paid_amount` and `refunded_amount` are `null` |
+| Order page and confirmation (#149) | "Payment not recorded (order placed before payment tracking)" instead of a payment badge; no amount paid or refunded is shown |
+| Seller receipt | `commission_amount`, `seller_net_amount` and `settled_at` are `null` |
+| Settlement | The release guard never matches (section 5), so the escrow stays `HELD` and becomes `VOIDED` on cancellation or approved return (I2) |
+| Payment results | The payment service rejects any result or operator command for a legacy order with `ERR_INVALID_TRANSITION`, so no event is ever written for it (I8) |
+| Cancellation or return approval | Status changes as today, escrow becomes `VOIDED`, `payment_status` is left as stored, and no `REFUND` event or `refunded_amount` is written |
+| US18 completed sales (`revenue`) | Unchanged: a legacy `COMPLETED` seller order still counts as gross completed sales, as it does on `main` today |
+| `settled_income` and `escrow_pending` | Never included |
+| Seed data | Demo orders that should show settled income are created with a method and recorded results, not as legacy rows |
 
 ## 11. Acceptance tests (#150 unless noted)
 
 | Story criterion | Required evidence |
 |---|---|
-| AC1 method and initial state stored and shown | Checkout with each method stores it, with `UNPAID` (or `PAID` with `ZERO_TOTAL`); a legacy body is recorded as `COD`; the receipt and order page show both (#149) |
+| AC1 method and initial state stored and shown | Checkout with each method stores it, with `UNPAID` (or `PAID` with `ZERO_TOTAL`); a body without a method is recorded as `COD`; the receipt and order page show both (#149) |
 | AC2 only valid statuses | Every transition in section 2.2 passes and every other one is rejected; `PARTIALLY_REFUNDED` can no longer be written; duplicate event keys change nothing; `FAILED` after `PAID` never regresses |
 | AC3 escrow pending until `COMPLETED` | `PAID` and `DELIVERED` stays `HELD`; return review is `PAUSED`; `escrow_pending` counts them, `settled_income` does not |
 | AC4 seller net at completion | Section 4 example and boundary cases; release once through each completion path; complete-before-paid releases only when the payment arrives; the reconciliation identity holds |
-| AC5 cancellation and refund recorded once | Each row of section 6; two routes or a retry refund once; one shop's refund leaves the other `PAID`; refunded orders never count as settled income or completed sales |
-| Migration | Fresh database, a database from `main` at `17638838`, and a rerun; value mapping; legacy orders never release |
+| AC5 cancellation and refund recorded once | Each row of section 6 and the R criteria below |
+| Event order | Every row of the section 6.1 matrix; every pair in section 6.2 in both orders and concurrently |
+| Legacy orders | The L criterion below, against a database from `main` at `17638838` |
+| Migration | Fresh database, a database from `main` at `17638838`, and a rerun; value mapping; I1–I8 hold afterwards |
 
-## 12. Decisions to confirm
+Refund and settlement safety. These criteria are binding and do not depend on any
+pending decision:
 
-| Decision | Proposal | Confirm in |
-|---|---|---|
-| Commission rate | 500 bps, snapshotted per seller order | #148, with the PO |
-| COD collection | Recorded when the seller order reaches `DELIVERED` (or `COMPLETED` from `SHIPPED`) | #148, #106 owner |
-| Demo results for prepaid methods | Local operator command, no HTTP surface | #148, #149 |
-| Escrow value for cancelled or returned orders | `VOIDED` instead of `REFUNDED` | #148, #109 owner |
-| Parent partial refund | Parent stays `PAID`; amounts and sub-order statuses show the split | #148, #109 owner |
-| Refund amount | Full seller-order `total_amount`, shipping included | #148, #140 |
-| Shipping an unpaid prepaid order | Proposal: block `SHIPPED` while a prepaid seller order is `UNPAID` | #148, #106 owner |
-| Settled income in analytics | New `settled_income` and `escrow_pending`; US18 `revenue` stays gross | #148, US18 owner |
+- **R1.** Given a seller order whose refund is recorded, when the cancellation or return
+  approval is retried, or arrives again through another route, then no second `REFUND`
+  event is written and `refunded_amount` is unchanged.
+- **R2.** Given two refund attempts for one seller order on two independent SQLite
+  connections, when they run concurrently, then exactly one `REFUND` event is
+  committed and the other attempt changes nothing.
+- **R3.** Given a seller order that is `CANCELLED` or `RETURNED_REFUNDED`, when a
+  completion, payment result or release attempt follows, then its escrow stays `VOIDED`
+  and `settled_income` does not change.
+- **R4.** Given a seller order whose return is under review (`PAUSED`), when a payment
+  result arrives or a release is attempted, then nothing is released until the return
+  is rejected.
+- **R5.** Given a seller order that is already `RELEASED`, when any further event
+  arrives, then it is not released again and `settled_income` does not change.
+- **R6.** After every step of every test above, invariants I1–I8 hold.
+- **L.** Given a legacy order: the receipt returns `null` payment fields; completing it
+  never releases; the operator command is rejected; cancelling or approving a return
+  writes no refund; it counts in US18 completed sales but never in `settled_income` or
+  `escrow_pending`.
+
+## 12. Decision register
+
+The rows below are **pending**: proposals, not agreements. An owner confirms a decision
+with a comment in the issue listed. The PR that implements the behaviour links that
+comment and changes the row to *Confirmed*. Until then, the "Blocked until confirmed"
+work is not merged. Everything marked binding in this document is outside this table.
+
+| ID | Decision | Proposal | Reason | Confirm in (owner) | Status | Blocked until confirmed |
+|---|---|---|---|---|---|---|
+| D1 | Commission rate | 500 bps, snapshotted per seller order | AC4 needs a rate; the formula itself is binding | #112 (PO `leducminh290506-eng`), #148 | Pending | Merging the settlement part of #148 |
+| D2 | When COD counts as paid | When the seller order reaches `DELIVERED`, or `COMPLETED` straight from `SHIPPED` | Returns start from `DELIVERED`; recording it later would leave a returned COD order with nothing to refund, although the buyer paid on delivery | #106 and #109 (`teddywristh`), #148 | Pending | The COD collection hook in #148 and the COD rows of #150 |
+| D3 | Refund amount | Full seller-order `total_amount`, shipping included | Returns cover a whole seller order on `main`; cancellation happens before shipment | #109 (`teddywristh`), #140, #148 | Pending | The amount in `refund_seller_order` |
+| D4 | How prepaid demo results are recorded | Local operator command with no HTTP surface | #149 must not show success without a documented result; no public way to mark an order paid | #149 (`teddywristh`), #148 | Pending | The operator command and the #149 demo labels |
+| D5 | Escrow value after cancellation or approved return | `VOIDED` instead of `REFUNDED` | An unpaid cancelled order's escrow was never refunded. Removing `PARTIALLY_REFUNDED` is binding (AC2) and not part of this row | #109 (`teddywristh`) | Pending | The escrow value mapping in the migration and the matching change in `returns.py` |
+| D6 | Settled income in analytics | Add `settled_income` and `escrow_pending`; US18 `revenue` stays gross | AC3 and AC4 need settled income kept apart from completed sales | #110 (`leducminh290506-eng`) | Pending | The analytics response keys |
+
+**Not part of this contract:** blocking `SHIPPED` while a prepaid seller order is
+`UNPAID`. It was proposed in the first revision of this PR. It is a workflow rule for
+#106, and the section 6.1 matrix gives the correct result whether or not it exists.
+Raise it in #106 if the team wants it.
