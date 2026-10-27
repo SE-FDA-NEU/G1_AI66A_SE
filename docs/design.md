@@ -805,7 +805,10 @@ implementation"). This table lists every code the code raises, checked by
 | `403 Forbidden` | `ERR_SELLER_REQUIRED` | A buyer calls a seller route | Seller products, seller orders |
 | `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
 | `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
+| `403 Forbidden` | `ERR_ADMIN_REQUIRED` | A non-admin calls a category administration route | Categories |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND` | Unknown or inactive product code | Products, cart |
+| `404 Not Found` | `ERR_CATEGORY_NOT_FOUND` | The requested category does not exist | Categories |
+| `404 Not Found` | `ERR_VARIANT_NOT_FOUND` | The requested product option does not exist or is not owned by the seller | Seller variants |
 | `404 Not Found` | `ERR_REVIEW_NOT_ELIGIBLE` | The order item does not belong to this buyer or product | Reviews |
 | `404 Not Found` | `ERR_REVIEW_NOT_FOUND` | The requested review does not exist | Seller reviews |
 | `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
@@ -815,11 +818,17 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_ADDRESS_CHANGED` | Submitted address version is stale | Addresses, orders |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
 | `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
+| `409 Conflict` | `ERR_CATEGORY_SLUG` | A category slug is already in use | Categories |
+| `409 Conflict` | `ERR_CATEGORY_HAS_CHILDREN` | An active category has active children | Categories |
+| `409 Conflict` | `ERR_CATEGORY_HIERARCHY` | The saved category hierarchy already contains a cycle | Categories |
+| `409 Conflict` | `ERR_VARIANT_SKU_CONFLICT` | An SKU is already used by the seller's shop | Seller variants |
 | `409 Conflict` | `ERR_REVIEW_NOT_COMPLETED` | The seller order has not reached `COMPLETED` | Reviews |
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
+| `422 Unprocessable Entity` | `ERR_CATEGORY_PARENT` | The requested parent category does not exist or is inactive | Categories |
+| `422 Unprocessable Entity` | `ERR_CATEGORY_HIERARCHY` | A category update would create a hierarchy cycle | Categories |
 | `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | A database failure; the response never contains SQL | All routes |
 | Any | `ERR_BAD_REQUEST`, `ERR_FORBIDDEN`, `ERR_NOT_FOUND`, `ERR_CONFLICT`, `ERR_INTERNAL_SERVER`, `ERR_REQUEST_FAILED` | Fallback codes in `src/main.py` for an `HTTPException` raised without an envelope; no route raises one today | Shared handler |
 
