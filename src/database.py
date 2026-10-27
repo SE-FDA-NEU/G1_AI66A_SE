@@ -179,15 +179,16 @@ def migrate_db(connection: Connection | None = None) -> None:
                     connection.execute(
                         text(
                             "INSERT INTO product_metadata__migration "
-                            "(product_id, category_id, rating, sales_count, created_at) "
-                            "SELECT product_id, category_id, rating, sales_count, created_at "
+                            "(product_id, category_id, rating, review_count, "
+                            "sales_count, created_at) "
+                            "SELECT product_id, category_id, rating, review_count, "
+                            "sales_count, created_at "
                             "FROM product_metadata"
                         )
                     )
                     # 4. Swap tables and recreate index
                     connection.execute(text("DROP TABLE product_metadata"))
                     connection.execute(
-                        text("ALTER TABLE product_metadata__migration RENAME TO product_metadata")
                         text(
                             "ALTER TABLE product_metadata__migration "
                             "RENAME TO product_metadata"
@@ -205,8 +206,8 @@ def migrate_db(connection: Connection | None = None) -> None:
             connection.execute(
                 text(
                     "INSERT INTO product_metadata "
-                    "(product_id, category_id, rating, sales_count, created_at) "
-                    "SELECT p.id, NULL, 0.0, 0, CURRENT_TIMESTAMP "
+                    "(product_id, category_id, rating, review_count, sales_count, created_at) "
+                    "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
                     "FROM products p "
                     "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
                 )
