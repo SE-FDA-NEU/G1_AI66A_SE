@@ -90,7 +90,7 @@ function pageText(node) { return [node.textContent, ...node.children.map(pageTex
 // Grouping, tri-state, exact totals, visible price changes in either direction, unavailable rows.
 const items = [item(1, 10, true), item(2, 10, false), item(3, 20, true,
   {unit_price: 80000, line_total: 80000, price_changed: true}),
-item(4, 20, false, {availability: "unavailable", available_stock: 0}),
+item(4, 20, false, {availability: "variant_required", available_stock: 0}),
 item(5, 20, false, {availability: "insufficient_stock", available_stock: 0}),
 item(6, 30, false, {unit_price: 120000, line_total: 120000, price_changed: true})];
 let page = setup([ok(snapshot(items))]);
@@ -106,6 +106,7 @@ assert.ok(text.includes(`Shop subtotal: ${price(200000)} · Selected: ${price(10
 assert.ok(text.includes(`Price changed: ${price(100000)} when added → ${price(80000)} now.`));
 assert.ok(text.includes(`Price changed: ${price(100000)} when added → ${price(120000)} now.`));
 assert.ok(text.includes("Unavailable for checkout"));
+assert.ok(text.includes("choose an option before adding it again"));
 assert.equal(page.get("checkout-button").disabled, true); // #120 has not advertised capability.
 page.get("checkout-button").dispatch("click");
 assert.deepEqual(page.navigation, []);

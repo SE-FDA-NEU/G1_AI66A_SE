@@ -45,6 +45,7 @@ class VariantCreate(BaseModel):
 
 class VariantUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    expected_version: StrictInt = Field(gt=0)
     sku: StrictStr | None = Field(default=None, min_length=1, max_length=64)
     name: StrictStr | None = Field(default=None, min_length=1, max_length=100)
     price: StrictInt | None = Field(default=None, gt=0, le=1_000_000_000)
@@ -81,8 +82,11 @@ class VariantResponse(BaseModel):
     name: str
     price: int
     stock_quantity: int
+    reserved_stock: int
+    available_stock: int
     image_url: str | None
     is_active: bool
+    version: int
 
     @classmethod
     def from_model(cls, variant: ProductVariant) -> "VariantResponse":
@@ -92,9 +96,12 @@ class VariantResponse(BaseModel):
             sku=variant.sku,
             name=variant.name,
             price=variant.price,
-            stock_quantity=max(variant.stock_quantity - variant.reserved_stock, 0),
+            stock_quantity=variant.stock_quantity,
+            reserved_stock=variant.reserved_stock,
+            available_stock=variant.stock_quantity - variant.reserved_stock,
             image_url=variant.image_url,
             is_active=variant.is_active,
+            version=variant.version,
         )
 
 

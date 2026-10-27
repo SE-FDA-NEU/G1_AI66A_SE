@@ -198,6 +198,7 @@ def migrate_db(connection: Connection | None = None) -> None:
                 ("product_name_snapshot", "VARCHAR(200)"),
                 ("variant_name_snapshot", "VARCHAR(100)"),
                 ("product_image_snapshot", "VARCHAR(2048)"),
+                ("snapshot_initialized", "BOOLEAN NOT NULL DEFAULT FALSE"),
             ):
                 if name not in columns:
                     connection.execute(
@@ -208,15 +209,18 @@ def migrate_db(connection: Connection | None = None) -> None:
                     text(
                         "UPDATE order_items SET product_name_snapshot = "
                         "(SELECT name FROM products WHERE products.id = order_items.product_id) "
-                        "WHERE product_name_snapshot IS NULL"
+                        ", product_image_snapshot = "
+                        "(SELECT image_url FROM products "
+                        "WHERE products.id = order_items.product_id), "
+                        "snapshot_initialized = TRUE "
+                        "WHERE snapshot_initialized = FALSE "
+                        "AND product_name_snapshot IS NULL"
                     )
                 )
                 connection.execute(
                     text(
-                        "UPDATE order_items SET product_image_snapshot = "
-                        "(SELECT image_url FROM products "
-                        "WHERE products.id = order_items.product_id) "
-                        "WHERE product_image_snapshot IS NULL"
+                        "UPDATE order_items SET snapshot_initialized = TRUE "
+                        "WHERE snapshot_initialized = FALSE"
                     )
                 )
 

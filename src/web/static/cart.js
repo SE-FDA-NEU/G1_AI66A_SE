@@ -103,7 +103,7 @@ function isValidCart(cart) {
     Number.isSafeInteger(item.line_total) &&
     item.line_total === item.unit_price * item.quantity &&
     item.price_changed === (item.price_at_add !== item.unit_price) &&
-    ["available", "insufficient_stock", "unavailable"].includes(item.availability) &&
+    ["available", "insufficient_stock", "unavailable", "variant_required"].includes(item.availability) &&
     (item.availability === "available" || !item.is_selected),
   );
   return validItems && new Set(cart.items.map(item => item.cart_item_id)).size === cart.items.length &&
@@ -178,6 +178,9 @@ function itemCountLabel(count) {
 
 /** Explain why a line cannot be bought as it stands; the server decides, the page only shows it. */
 function availabilityWarning(item) {
+  if (item.availability === "variant_required") {
+    return "This product now has options. Open the product page and choose an option before adding it again.";
+  }
   if (item.availability === "unavailable") {
     return "This product is no longer available.";
   }

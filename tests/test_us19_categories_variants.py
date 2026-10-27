@@ -115,6 +115,10 @@ def test_variants_are_shop_owned_and_checkout_keeps_purchase_snapshots(api, engi
     )
     assert first.status_code == 201, first.text
     assert second.status_code == 201, second.text
+    assert first.json()["data"]["version"] == 1
+    assert first.json()["data"]["stock_quantity"] == 2
+    assert first.json()["data"]["reserved_stock"] == 0
+    assert first.json()["data"]["available_stock"] == 2
     duplicate = api.post(
         url,
         json={"sku": "case-black", "name": "Duplicate", "price": 1, "stock_quantity": 1},
@@ -220,6 +224,137 @@ def test_variants_are_shop_owned_and_checkout_keeps_purchase_snapshots(api, engi
         assert [variant.stock_quantity for variant in variants] == [2, 1]
 
 
+def test_variant_updates_require_displayed_version_and_keep_physical_stock(api, engine):
+    product_id = add_product(engine, "P-VERSION")
+    seller = auth(engine, SELLER_ID)
+    url = f"/api/v1/seller/products/{product_id}/variants"
+    created = api.post(
+        url,
+        json={"sku": "VERSION-1", "name": "Original", "price": 100, "stock_quantity": 10},
+        headers=seller,
+    )
+    assert created.status_code == 201
+    variant_id = created.json()["data"]["id"]
+    assert created.json()["data"]["stock_quantity"] == 10
+    assert created.json()["data"]["available_stock"] == 10
+
+    with Session(engine) as session:
+        variant = session.get(ProductVariant, variant_id)
+        assert variant is not None
+        variant.reserved_stock = 3
+        variant.stock_quantity = 9
+        variant.version = 2
+        session.add(variant)
+        session.commit()
+
+    listed = api.get(url, headers=seller).json()["data"][0]
+    assert (
+        listed["stock_quantity"],
+        listed["reserved_stock"],
+        listed["available_stock"],
+        listed["version"],
+    ) == (9, 3, 6, 2)
+
+    missing_version = api.patch(
+        f"{url}/{variant_id}",
+        json={"name": "Unversioned"},
+        headers=seller,
+    )
+    assert missing_version.status_code == 422
+
+    stale = api.patch(
+        f"{url}/{variant_id}",
+        json={"expected_version": 1, "stock_quantity": 7},
+        headers=seller,
+    )
+    assert stale.status_code == 409
+    with Session(engine) as session:
+        variant = session.get(ProductVariant, variant_id)
+        assert variant is not None
+        assert variant.stock_quantity == 9
+
+    updated = api.patch(
+        f"{url}/{variant_id}",
+        json={"expected_version": 2, "name": "Renamed"},
+        headers=seller,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["data"]["name"] == "Renamed"
+    assert updated.json()["data"]["stock_quantity"] == 9
+    assert updated.json()["data"]["version"] == 3
+
+
+def test_existing_base_cart_line_is_deselected_when_variant_is_added(api, engine):
+    add_product(engine, "P-ADDED-OPTION")
+    buyer = auth(engine, BUYER_ID)
+    seller = auth(engine, SELLER_ID)
+    added = api.post(
+        "/api/v1/cart/items",
+        json={"product_code": "P-ADDED-OPTION", "quantity": 1},
+        headers=buyer,
+    )
+    assert added.status_code == 201
+    item_id = added.json()["data"]["items"][0]["cart_item_id"]
+
+    product_id = added.json()["data"]["items"][0]["product_id"]
+    created_variant = api.post(
+        f"/api/v1/seller/products/{product_id}/variants",
+        json={"sku": "NEW-OPTION", "name": "New option", "price": 100, "stock_quantity": 5},
+        headers=seller,
+    )
+    assert created_variant.status_code == 201
+
+    cart = api.get("/api/v1/cart", headers=buyer).json()["data"]
+    line = cart["items"][0]
+    assert line["availability"] == "variant_required"
+    assert line["is_selected"] is False
+    assert cart["selected_total"] == 0
+
+    select_again = api.patch(
+        f"/api/v1/cart/items/{item_id}/select",
+        json={"is_selected": True},
+        headers=buyer,
+    )
+    assert select_again.status_code == 409
+    shop_selection = api.patch(
+        f"/api/v1/cart/select-shop/{SELLER_ID}",
+        json={"is_selected": True},
+        headers=buyer,
+    )
+    assert shop_selection.status_code == 200
+    assert shop_selection.json()["data"]["items"][0]["is_selected"] is False
+    cart = api.get("/api/v1/cart", headers=buyer).json()["data"]
+    assert cart["items"][0]["is_selected"] is False
+
+
+def test_null_purchase_image_stays_null_in_historical_receipt(api, engine):
+    product_id = add_product(engine, "P-NULL-IMAGE")
+    with Session(engine) as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        product.image_url = None
+        session.add(product)
+        session.commit()
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=product_id, quantity=1))
+        session.commit()
+
+    body = CheckoutRequest(
+        recipient_name="Buyer",
+        delivery_address="1 Test Street",
+        phone_number="0912345678",
+    )
+    with Session(engine) as session:
+        order, _ = checkout(session, BUYER_ID, body, "us19-null-image")
+        order_id = order.id
+        product = session.get(Product, product_id)
+        assert product is not None
+        product.image_url = "/images/added-later.jpg"
+        session.add(product)
+        session.commit()
+        saved_receipt = receipt(session, BUYER_ID, order_id)
+        assert saved_receipt.items[0].image_url is None
+
+
 def test_other_shop_cannot_manage_variant(api, engine):
     product_id = add_product(engine, "P-OWNER")
     with Session(engine) as session:
@@ -294,15 +429,62 @@ def test_legacy_cart_and_order_rows_migrate_without_losing_history(tmp_path: Pat
         assert "uq_cart_items_buyer_product_variant" in indexes
         snapshot = connection.execute(
             text(
-                "SELECT product_name_snapshot, product_image_snapshot, variant_id "
+                "SELECT product_name_snapshot, product_image_snapshot, variant_id, "
+                "snapshot_initialized "
                 "FROM order_items WHERE id=21"
             )
         ).one()
-        assert tuple(snapshot) == ("Old name", "old-image.jpg", None)
+        assert tuple(snapshot) == ("Old name", "old-image.jpg", None, 1)
         category = connection.execute(
             text("SELECT is_active FROM categories WHERE id=3")
         ).scalar_one()
         assert category == 1
+    engine.dispose()
+
+
+def test_snapshot_migration_preserves_initialized_null_image_and_backfills_legacy(tmp_path: Path):
+    engine: Engine = create_engine(f"sqlite:///{tmp_path / 'snapshot-null-migration.db'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL, image_url TEXT)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE order_items ("
+                "id INTEGER PRIMARY KEY, product_id INTEGER NOT NULL, quantity INTEGER NOT NULL, "
+                "unit_price INTEGER NOT NULL, variant_id INTEGER, "
+                "product_name_snapshot VARCHAR(200), variant_name_snapshot VARCHAR(100), "
+                "product_image_snapshot VARCHAR(2048), "
+                "snapshot_initialized BOOLEAN NOT NULL DEFAULT FALSE)"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO products VALUES (7, 'Current product', 'new-image.jpg')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO order_items "
+                "(id, product_id, quantity, unit_price, product_name_snapshot, "
+                "product_image_snapshot, snapshot_initialized) "
+                "VALUES (21, 7, 1, 100, 'Saved product name', NULL, FALSE), "
+                "(22, 7, 1, 100, NULL, NULL, FALSE)"
+            )
+        )
+        migrate_db(connection)
+
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, product_name_snapshot, product_image_snapshot, snapshot_initialized "
+                "FROM order_items ORDER BY id"
+            )
+        ).all()
+    assert [tuple(row) for row in rows] == [
+        (21, "Saved product name", None, 1),
+        (22, "Current product", "new-image.jpg", 1),
+    ]
     engine.dispose()
 
 

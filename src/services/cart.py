@@ -83,22 +83,45 @@ def get_available_stock(product: Product, variant: ProductVariant | None = None)
     return item.stock_quantity - item.reserved_stock
 
 
+def product_requires_variant(session: Session, product_id: int) -> bool:
+    return (
+        session.exec(
+            select(ProductVariant.id).where(ProductVariant.product_id == product_id)
+        ).first()
+        is not None
+    )
+
+
 def get_line_availability(
-    product: Product, quantity: int, variant: ProductVariant | None = None
+    product: Product,
+    quantity: int,
+    variant: ProductVariant | None = None,
+    requires_variant: bool = False,
 ) -> CartLineAvailability:
     """Classify `quantity` of `product` against its current availability."""
     if not product.is_active or (variant is not None and not variant.is_active):
         return CartLineAvailability.UNAVAILABLE
+    if requires_variant and variant is None:
+        return CartLineAvailability.VARIANT_REQUIRED
     if quantity > get_available_stock(product, variant):
         return CartLineAvailability.INSUFFICIENT_STOCK
     return CartLineAvailability.AVAILABLE
 
 
 def validate_purchasable_quantity(
-    product: Product, quantity: int, variant: ProductVariant | None = None
+    product: Product,
+    quantity: int,
+    variant: ProductVariant | None = None,
+    requires_variant: bool = False,
 ) -> None:
     """Refuse a cart quantity the product cannot satisfy right now (BR2)."""
-    availability = get_line_availability(product, quantity, variant)
+    availability = get_line_availability(product, quantity, variant, requires_variant)
+    if availability is CartLineAvailability.VARIANT_REQUIRED:
+        raise CartError(
+            CartErrorCode.PRODUCT_UNAVAILABLE,
+            "This product now has options. Choose an option on the product page "
+            "before updating it.",
+        )
     if availability is CartLineAvailability.UNAVAILABLE:
         raise CartError(CartErrorCode.PRODUCT_UNAVAILABLE, PRODUCT_UNAVAILABLE_MESSAGE)
     if availability is CartLineAvailability.INSUFFICIENT_STOCK:
@@ -193,9 +216,12 @@ def to_cart_line(
     product: Product,
     seller: User,
     variant: ProductVariant | None = None,
+    requires_variant: bool = False,
 ) -> CartLine:
     """Price one line from the current product row."""
-    availability = get_line_availability(product, cart_item.quantity, variant)
+    availability = get_line_availability(
+        product, cart_item.quantity, variant, requires_variant
+    )
     current_price = variant.price if variant is not None else product.price
     baseline = cart_item.price_at_add if cart_item.price_at_add is not None else current_price
     return CartLine(
@@ -251,19 +277,28 @@ def build_cart_snapshot(session: Session, buyer_id: int) -> Cart:
         .where(CartItem.buyer_id == buyer_id)
         .order_by(CartItem.id)
     ).all()
+    product_ids = {product.id for _item, product, _seller, _variant in rows}
+    products_with_variants = set(
+        session.exec(
+            select(ProductVariant.product_id).where(
+                ProductVariant.product_id.in_(product_ids)
+            )
+        ).all()
+    ) if product_ids else set()
     lines = []
     for cart_item, product, seller, variant in rows:
+        requires_variant = product.id in products_with_variants
         changes = {}
         if cart_item.price_at_add is None:
             changes["price_at_add"] = variant.price if variant else product.price
         if cart_item.is_selected and (
-            get_line_availability(product, cart_item.quantity, variant)
+            get_line_availability(product, cart_item.quantity, variant, requires_variant)
             != CartLineAvailability.AVAILABLE
         ):
             changes["is_selected"] = False
         if changes:
             update_line_fields(session, cart_item, **changes)
-        line = to_cart_line(cart_item, product, seller, variant)
+        line = to_cart_line(cart_item, product, seller, variant, requires_variant)
         lines.append(line)
     return Cart(
         items=lines,
@@ -357,7 +392,13 @@ class CartService:
                 self.session, buyer_id, product_code, variant_id
             )
             variant = self.session.get(ProductVariant, variant_id) if variant_id else None
-            validate_purchasable_quantity(product, quantity, variant)
+            validate_purchasable_quantity(
+                product,
+                quantity,
+                variant,
+                requires_variant=variant_id is None
+                and product_requires_variant(self.session, product.id),
+            )
             cart_item.quantity = quantity
             self.session.add(cart_item)
             return self._flush_and_snapshot(buyer_id)
@@ -390,7 +431,13 @@ class CartService:
                 raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
             line, product, variant = row
             if selected:
-                validate_purchasable_quantity(product, line.quantity, variant)
+                validate_purchasable_quantity(
+                    product,
+                    line.quantity,
+                    variant,
+                    requires_variant=variant is None
+                    and product_requires_variant(self.session, product.id),
+                )
             update_line_fields(self.session, line, is_selected=selected)
             return self._flush_and_snapshot(buyer_id)
 
@@ -408,9 +455,21 @@ class CartService:
             ).all()
             if not rows:
                 raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
+            products_with_variants = set(
+                self.session.exec(
+                    select(ProductVariant.product_id).where(
+                        ProductVariant.product_id.in_({product.id for _, product, _ in rows})
+                    )
+                ).all()
+            )
             for line, product, variant in rows:
                 available = (
-                    get_line_availability(product, line.quantity, variant)
+                    get_line_availability(
+                        product,
+                        line.quantity,
+                        variant,
+                        requires_variant=product.id in products_with_variants and variant is None,
+                    )
                     == CartLineAvailability.AVAILABLE
                 )
                 update_line_fields(self.session, line, is_selected=selected and available)

@@ -107,10 +107,17 @@ def update_seller_variant(
         raise HTTPException(
             status_code=404, detail=error_detail("ERR_VARIANT_NOT_FOUND", "Variant not found.")
         )
+    if variant.version != body.expected_version:
+        raise HTTPException(
+            status_code=409,
+            detail=error_detail(
+                "ERR_CONCURRENCY_CONFLICT", "The variant changed. Refresh and retry."
+            ),
+        )
     changes = {
         field: value
         for field, value in body.model_dump(exclude_unset=True).items()
-        if value is not None or field == "image_url"
+        if field != "expected_version" and (value is not None or field == "image_url")
     }
     if not changes:
         raise HTTPException(
@@ -129,7 +136,7 @@ def update_seller_variant(
             .where(
                 ProductVariant.id == variant.id,
                 ProductVariant.seller_id == seller.id,
-                ProductVariant.version == variant.version,
+                ProductVariant.version == body.expected_version,
             )
             .values(**changes, version=ProductVariant.version + 1)
             .execution_options(synchronize_session=False)

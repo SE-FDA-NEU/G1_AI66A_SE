@@ -61,6 +61,7 @@ const getElement = (id) => {
 const local = new Map();
 const session = new Map();
 const navigation = [];
+const calls = [];
 const product = {
   id: "41",
   code: "P-VARIANTS",
@@ -101,10 +102,26 @@ const context = vm.createContext({
   Intl,
   atob,
   decodeURIComponent,
-  fetch: async (url) => {
-    const payload = url.includes("/reviews")
-      ? { data: [], rating: 0, review_count: 0 }
-      : product;
+  fetch: async (url, options = {}) => {
+    calls.push({ url, options });
+    let payload = product;
+    if (url.includes("/reviews")) payload = { data: [], rating: 0, review_count: 0 };
+    if (url.includes("/auth/me")) payload = { id: 8, role: "seller" };
+    if (url.includes("/seller/products/") && url.includes("/variants")) {
+      payload = { data: [{
+        id: 11,
+        product_id: 41,
+        sku: "BLACK",
+        name: "Black",
+        price: 30_000,
+        stock_quantity: 10,
+        reserved_stock: 3,
+        available_stock: 7,
+        image_url: "/black.jpg",
+        is_active: true,
+        version: 4,
+      }] };
+    }
     return { ok: true, status: 200, json: async () => payload };
   },
 });
@@ -129,3 +146,22 @@ await getElement("add-to-cart-form").dispatch("submit");
 assert.equal(navigation.length, 1);
 const returnTo = new URL(navigation[0], "http://localhost").searchParams.get("return_to");
 assert.equal(new URL(returnTo, "http://localhost").searchParams.get("variant_id"), "22");
+
+local.set("access_token", `x.${Buffer.from(JSON.stringify({ sub: "8", role: "seller" })).toString("base64url")}.x`);
+await getElement("detail-retry").dispatch("click");
+await tick();
+const sellerVariantRow = getElement("variant-manager-list").children[0];
+assert.ok(sellerVariantRow.children[0].textContent.includes(
+  "Physical: 10 · Reserved: 3 · Available: 7",
+));
+const editForm = sellerVariantRow.children.find(child => child.className === "variant-edit-form");
+const nameInput = editForm.children[1].children[0];
+nameInput.value = "Black revised";
+await editForm.dispatch("submit");
+const updateCall = calls.filter(call => call.url.includes("/variants/11")).at(-1);
+assert.ok(updateCall, "Seller edit submitted a variant PATCH");
+assert.equal(updateCall.options.method, "PATCH");
+assert.deepEqual(JSON.parse(updateCall.options.body), {
+  expected_version: 4,
+  name: "Black revised",
+});

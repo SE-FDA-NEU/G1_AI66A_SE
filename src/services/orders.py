@@ -87,9 +87,17 @@ def receipt(
             OrderLine(
                 **item.model_dump(),
                 product_code=product.code,
-                product_name=item.product_name_snapshot or product.name,
+                product_name=(
+                    item.product_name_snapshot
+                    if item.snapshot_initialized
+                    else item.product_name_snapshot or product.name
+                ),
                 variant_name=item.variant_name_snapshot,
-                image_url=item.product_image_snapshot or product.image_url,
+                image_url=(
+                    item.product_image_snapshot
+                    if item.snapshot_initialized
+                    else item.product_image_snapshot or product.image_url
+                ),
                 line_total=item.quantity * item.unit_price,
                 seller_order_status=sub_order_map[item.seller_order_id].status
                 if item.seller_order_id in sub_order_map
@@ -273,6 +281,7 @@ def checkout(
                         product_image_snapshot=(
                             variant.image_url or product.image_url if variant else product.image_url
                         ),
+                        snapshot_initialized=True,
                     )
                 )
                 # Atomic sales_count increment avoiding ORM read-modify-write lost updates

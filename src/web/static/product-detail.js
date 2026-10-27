@@ -415,14 +415,14 @@ function renderSellerVariant(variant) {
   const row = document.createElement("article");
   row.className = "review-card";
   const summary = document.createElement("p");
-  summary.textContent = `${variant.name} · ${variant.sku} · ${priceFormatter.format(variant.price)} · ${variant.stock_quantity} in stock · ${variant.is_active ? "Active" : "Inactive"}`;
+  summary.textContent = `${variant.name} · ${variant.sku} · ${priceFormatter.format(variant.price)} · Physical: ${variant.stock_quantity} · Reserved: ${variant.reserved_stock} · Available: ${variant.available_stock} · ${variant.is_active ? "Active" : "Inactive"}`;
   const form = document.createElement("form");
   form.className = "variant-edit-form";
   const values = [
     ["SKU", variant.sku, "text"],
     ["Option name", variant.name, "text"],
     ["Price (VND)", variant.price, "number"],
-    ["Stock", variant.stock_quantity, "number"],
+    ["Physical stock", variant.stock_quantity, "number"],
     ["Image URL", variant.image_url || "", "url"],
   ];
   const inputs = [];
@@ -448,13 +448,29 @@ function renderSellerVariant(variant) {
   form.append(save);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await submitVariantUpdate(variant.id, {
-      sku: inputs[0].value,
-      name: inputs[1].value,
+    const values = {
+      sku: inputs[0].value.trim(),
+      name: inputs[1].value.trim(),
       price: Number(inputs[2].value),
       stock_quantity: Number(inputs[3].value),
       image_url: inputs[4].value.trim() || null,
+    };
+    const original = {
+      sku: variant.sku,
+      name: variant.name,
+      price: variant.price,
+      stock_quantity: variant.stock_quantity,
+      image_url: variant.image_url,
+    };
+    const changes = { expected_version: variant.version };
+    Object.keys(values).forEach((field) => {
+      if (values[field] !== original[field]) changes[field] = values[field];
     });
+    if (Object.keys(changes).length === 1) {
+      elements.variantManagerStatus.textContent = "No changes to save.";
+      return;
+    }
+    await submitVariantUpdate(variant.id, changes);
   });
   row.append(summary, form);
   const toggle = document.createElement("button");
@@ -462,7 +478,10 @@ function renderSellerVariant(variant) {
   toggle.className = "button";
   toggle.textContent = variant.is_active ? "Deactivate option" : "Reactivate option";
   toggle.addEventListener("click", () =>
-    submitVariantUpdate(variant.id, { is_active: !variant.is_active }));
+    submitVariantUpdate(variant.id, {
+      expected_version: variant.version,
+      is_active: !variant.is_active,
+    }));
   row.append(toggle);
   return row;
 }

@@ -13,6 +13,7 @@ class CartLineAvailability(StrEnum):
     AVAILABLE = "available"
     INSUFFICIENT_STOCK = "insufficient_stock"
     UNAVAILABLE = "unavailable"
+    VARIANT_REQUIRED = "variant_required"
 
 
 class AddCartItemRequest(BaseModel):

@@ -33,6 +33,7 @@ class OrderItem(SQLModel, table=True):
     product_name_snapshot: str | None = Field(default=None, max_length=200)
     variant_name_snapshot: str | None = Field(default=None, max_length=100)
     product_image_snapshot: str | None = Field(default=None, max_length=2048)
+    snapshot_initialized: bool = Field(default=False)
 
     quantity: int = Field(gt=0)
 

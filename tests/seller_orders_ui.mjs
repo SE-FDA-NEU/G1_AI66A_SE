@@ -8,7 +8,8 @@ const source = await readFile(new URL("../src/web/static/seller-orders.js", impo
 const LOGIN = "/login?return_to=%2Fseller%2Forders";
 const ORDERS = {status: 200, payload: {data: [
   {id: 5, order_id: 5, customer_name: "Nguyen Minh Anh", status: "PENDING", ordered_at: "2026-10-18T10:00:00Z",
-    items: [{id: 9, product_id: 46, product_name: "Demo cart item", product_code: "P-DEMO-CART", quantity: 2, unit_price: 100000, total_price: 200000}]},
+    items: [{id: 9, product_id: 46, product_name: "Demo cart item", variant_name: "Black · Large",
+      product_code: "P-DEMO-CART", quantity: 2, unit_price: 100000, total_price: 200000}]},
   {id: 3, order_id: 3, customer_name: "Demo Buyer", status: "COMPLETED", ordered_at: "2026-10-10T12:00:00Z",
     items: [{id: 3, product_id: 49, product_name: "Demo completed item", product_code: "P-DEMO-COMPLETE", quantity: 3, unit_price: 250000, total_price: 750000}]},
 ], meta: {page: 1, limit: 20, total: 2}}};
@@ -87,6 +88,9 @@ await settle();
 assert.equal(page.calls[0].options.headers.Authorization, "Bearer seller-token");
 assert.equal(page.get("orders-status").textContent, "2 seller orders found.");
 assert.equal(page.cards().length, 2);
+assert.ok(page.cardText(page.cards()[0]).includes(
+  "Demo cart item · Black · Large × 2",
+), page.cardText(page.cards()[0]));
 assert.ok(page.button(page.cards()[0], "Start processing") && page.button(page.cards()[0], "Cancel"));
 assert.equal(page.cards()[1].children.filter(child => child.tagName === "BUTTON").length, 0, "COMPLETED offers no step");
 

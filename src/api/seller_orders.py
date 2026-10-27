@@ -130,10 +130,18 @@ def _seller_order_response(
             id=item.id,
             product_id=item.product_id,
             variant_id=item.variant_id,
-            product_name=item.product_name_snapshot or product.name,
+            product_name=(
+                item.product_name_snapshot
+                if item.snapshot_initialized
+                else item.product_name_snapshot or product.name
+            ),
             variant_name=item.variant_name_snapshot,
             product_code=product.code,
-            image_url=item.product_image_snapshot or product.image_url,
+            image_url=(
+                item.product_image_snapshot
+                if item.snapshot_initialized
+                else item.product_image_snapshot or product.image_url
+            ),
             quantity=item.quantity,
             unit_price=item.unit_price,
             total_price=item.quantity * item.unit_price,
