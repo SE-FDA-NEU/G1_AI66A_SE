@@ -5,12 +5,18 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import select
 
 from src.auth import SellerUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.product import Product
-from src.schemas.seller_products import ProductCreate, SellerProduct, SellerProductResponse
+from src.schemas.seller_products import (
+    ProductCreate,
+    SellerProduct,
+    SellerProductListResponse,
+    SellerProductResponse,
+)
 from src.services.seller_products import SellerProductError, create_product
 
 
@@ -30,6 +36,20 @@ router = APIRouter(prefix="/seller/products", tags=["Seller products"])
 # The validation handler in src/main.py answers this route with field-level errors.
 SELLER_PRODUCTS_PATH = "/api/v1/seller/products"
 CREATE_DATABASE_ERROR_MESSAGE = "Unable to create the product right now. Please try again later."
+
+
+@router.get("", response_model=SellerProductListResponse)
+def list_seller_products(
+    seller: SellerUser,
+    session: SessionDep,
+) -> SellerProductListResponse:
+    """List all products owned by the authenticated seller including active and inactive."""
+    products = session.exec(
+        select(Product).where(Product.seller_id == seller.id).order_by(Product.id.desc())
+    ).all()
+    return SellerProductListResponse(
+        data=[SellerProduct.model_validate(p, from_attributes=True) for p in products]
+    )
 
 
 @router.post(
@@ -105,7 +125,18 @@ def update_seller_product(
         product.stock_quantity = body.stock_quantity
     if body.image_url is not None:
         product.image_url = body.image_url
-    if body.is_active is not None:
+    if product.is_moderated_deactivated:
+        if body.is_active is True:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_detail(
+                    "ERR_PRODUCT_MODERATED",
+                    "This product was deactivated by administrator moderation "
+                    "and cannot be reactivated by the seller.",
+                ),
+            )
+        product.is_active = False
+    elif body.is_active is not None:
         product.is_active = body.is_active
     product.version += 1
     session.add(product)

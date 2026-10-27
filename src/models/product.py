@@ -59,4 +59,6 @@ class Product(SQLModel, table=True):
 
     is_active: bool = True
 
+    is_moderated_deactivated: bool = False
+
     version: int = Field(default=1, ge=1)

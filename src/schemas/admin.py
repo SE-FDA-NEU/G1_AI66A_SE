@@ -3,22 +3,26 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
 # Category Schemas
 # ---------------------------------------------------------------------------
 class CreateCategoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=100)
-    slug: str = Field(min_length=1, max_length=100)
-    parent_id: int | None = None
+    slug: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    parent_id: int | None = Field(default=None, ge=1)
 
 
 class UpdateCategoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    slug: str | None = Field(default=None, min_length=1, max_length=100)
-    parent_id: int | None = None
+    slug: str | None = Field(
+        default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    )
+    parent_id: int | None = Field(default=None, ge=1)
 
 
 class CategoryAdminResponse(BaseModel):
@@ -118,6 +122,7 @@ class ProductAdminResponse(BaseModel):
     price: int
     stock_quantity: int
     is_active: bool
+    is_moderated_deactivated: bool = False
     category_id: int | None = None
     category_name: str | None = None
 
@@ -135,6 +140,7 @@ class ReturnDisputeResponse(BaseModel):
     id: int
     order_id: int
     seller_order_id: int
+    return_request_id: int | None = None
     buyer_id: int
     buyer_name: str | None = None
     seller_id: int

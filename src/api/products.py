@@ -142,6 +142,7 @@ def get_product(
             .where(
                 Product.code == product_code,
                 Product.is_active.is_(True),
+                Product.is_moderated_deactivated.is_(False),
             )
         ).first()
         all_variants = (
@@ -249,7 +250,10 @@ def list_products(
 
     try:
         # Base filter: active products
-        filters = [Product.is_active.is_(True)]
+        filters = [
+            Product.is_active.is_(True),
+            Product.is_moderated_deactivated.is_(False),
+        ]
 
         # Stock availability filter
         if in_stock is True:

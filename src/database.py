@@ -373,11 +373,34 @@ def migrate_db(connection: Connection | None = None) -> None:
                 )
             )
 
+        if "products" in tables:
+            columns = {c["name"] for c in inspector.get_columns("products")}
+            if "is_moderated_deactivated" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE products ADD COLUMN is_moderated_deactivated "
+                        "BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                )
+
         if "return_requests" in tables:
             connection.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_return_requests_seller_order_pending "
                     "ON return_requests(seller_order_id) WHERE status = 'PENDING'"
+                )
+            )
+
+        if "return_disputes" in tables:
+            columns = {c["name"] for c in inspector.get_columns("return_disputes")}
+            if "return_request_id" not in columns:
+                connection.execute(
+                    text("ALTER TABLE return_disputes ADD COLUMN return_request_id INTEGER")
+                )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_return_disputes_seller_order "
+                    "ON return_disputes(seller_order_id)"
                 )
             )
 

@@ -21,7 +21,9 @@ from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.return_dispute import ReturnDispute
+from src.models.return_request import ReturnRequest
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.voucher import Voucher
@@ -31,7 +33,9 @@ from src.models.voucher import Voucher
 def portal_setup():
     """Seed clean state with an admin, seller, and buyer."""
     with Session(engine) as session:
+        adm_users = session.exec(select(User.id).where(User.email.like("adm-%@example.com"))).all()
         session.exec(delete(ReturnDispute))
+        session.exec(delete(ReturnRequest))
         session.exec(delete(AccountAuditLog))
         session.exec(delete(OrderHistory))
         session.exec(delete(Notification))
@@ -39,11 +43,43 @@ def portal_setup():
         session.exec(delete(SellerOrder))
         session.exec(delete(Order))
         session.exec(delete(CartItem))
-        session.exec(delete(ProductMetadata))
-        session.exec(delete(Product).where(Product.code.like("ADM-%")))
+
+        if adm_users:
+            adm_prods = session.exec(
+                select(Product.id).where(
+                    Product.seller_id.in_(adm_users) | Product.code.like("ADM-%")
+                )
+            ).all()
+            if adm_prods:
+                session.exec(delete(ProductMetadata).where(ProductMetadata.product_id.in_(adm_prods)))
+                session.exec(delete(ProductVariant).where(ProductVariant.product_id.in_(adm_prods)))
+                session.exec(delete(Product).where(Product.id.in_(adm_prods)))
+            session.exec(
+                delete(Voucher).where(
+                    Voucher.seller_id.in_(adm_users) | Voucher.code.like("ADM%")
+                )
+            )
+        else:
+            session.exec(
+                delete(ProductMetadata).where(
+                    ProductMetadata.product_id.in_(
+                        select(Product.id).where(Product.code.like("ADM-%"))
+                    )
+                )
+            )
+            session.exec(
+                delete(ProductVariant).where(
+                    ProductVariant.product_id.in_(
+                        select(Product.id).where(Product.code.like("ADM-%"))
+                    )
+                )
+            )
+            session.exec(delete(Product).where(Product.code.like("ADM-%")))
+            session.exec(delete(Voucher).where(Voucher.code.like("ADM%")))
+
         session.exec(delete(Category).where(Category.slug.like("adm-%")))
-        session.exec(delete(Voucher).where(Voucher.code.like("ADM%")))
         session.exec(delete(User).where(User.email.like("adm-%@example.com")))
+        session.commit()
 
         admin = User(
             name="Platform SuperAdmin",
@@ -624,3 +660,671 @@ def test_admin_portal_and_seller_products_pages_served(client: TestClient):
     r3 = client.get("/seller/products")
     assert r3.status_code == 200
     assert "My Store Products" in r3.text
+
+
+# ===========================================================================
+# Regression Tests for Reviewer Feedback
+# ===========================================================================
+
+def test_seller_cannot_undo_admin_moderation_and_catalog_enforces_deactivation(
+    client: TestClient, portal_setup
+):
+    """[P1] Sellers cannot override administrator moderation;
+    catalog, cart, and checkout enforce it.
+    """
+    admin_hdr = _auth(portal_setup["admin_token"])
+    seller_hdr = _auth(portal_setup["seller_token"])
+    buyer_hdr = _auth(portal_setup["buyer_token"])
+
+    # 1. Create a product as seller
+    p_res = client.post(
+        "/api/v1/seller/products",
+        headers=seller_hdr,
+        json={
+            "name": "Moderation Target Keyboard",
+            "description": "Will be moderated",
+            "price": 500000,
+            "stock_quantity": 10,
+            "image_url": "https://example.com/keyboard.jpg",
+        },
+    )
+    assert p_res.status_code == 201
+    prod_id = p_res.json()["data"]["id"]
+    prod_code = p_res.json()["data"]["code"]
+
+    # Product is public
+    cat_res = client.get(f"/api/v1/products/{prod_code}")
+    assert cat_res.status_code == 200
+
+    # 2. Administrator deactivates product for rules violation
+    mod_res = client.patch(
+        f"/api/v1/admin/products/{prod_id}/status",
+        headers=admin_hdr,
+        json={"is_active": False, "moderation_notes": "Violates safety policy"},
+    )
+    assert mod_res.status_code == 200
+    assert mod_res.json()["is_active"] is False
+    assert mod_res.json()["is_moderated_deactivated"] is True
+
+    # 3. Seller attempts to reactivate product via PATCH -> 403 Forbidden
+    seller_patch = client.patch(
+        f"/api/v1/seller/products/{prod_id}",
+        headers=seller_hdr,
+        json={"is_active": True},
+    )
+    assert seller_patch.status_code == 403
+    assert seller_patch.json()["error"]["code"] == "ERR_PRODUCT_MODERATED"
+
+    # Seller attempts to edit name while keeping is_active True -> 403 Forbidden
+    seller_put = client.put(
+        f"/api/v1/seller/products/{prod_id}",
+        headers=seller_hdr,
+        json={"name": "Sneaky Name Change", "is_active": True},
+    )
+    assert seller_put.status_code == 403
+    assert seller_put.json()["error"]["code"] == "ERR_PRODUCT_MODERATED"
+
+    # 4. Catalog query excludes moderated product
+    catalog_list = client.get("/api/v1/products?limit=100").json()
+    assert prod_code not in [p["code"] for p in catalog_list["data"]]
+
+    # Detail query returns 404
+    assert client.get(f"/api/v1/products/{prod_code}").status_code == 404
+
+    # 5. Cart addition is rejected
+    cart_res = client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": prod_code, "quantity": 1},
+    )
+    assert cart_res.status_code == 409
+    assert cart_res.json()["error"]["code"] in ("ERR_PRODUCT_UNAVAILABLE", "ERR_UNAVAILABLE")
+
+    # 6. Administrator reactivates product
+    react_res = client.patch(
+        f"/api/v1/admin/products/{prod_id}/status",
+        headers=admin_hdr,
+        json={"is_active": True, "moderation_notes": "Violation resolved"},
+    )
+    assert react_res.status_code == 200
+    assert react_res.json()["is_active"] is True
+    assert react_res.json()["is_moderated_deactivated"] is False
+
+    # Now seller can manage is_active again
+    seller_deact = client.patch(
+        f"/api/v1/seller/products/{prod_id}",
+        headers=seller_hdr,
+        json={"is_active": False},
+    )
+    assert seller_deact.status_code == 200
+    assert seller_deact.json()["data"]["is_active"] is False
+
+
+def test_account_restriction_enforced_across_order_status_and_return_decisions(
+    client: TestClient, portal_setup
+):
+    """[P1] Account restrictions cannot be bypassed through mutation endpoints using CurrentUser."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+    seller_hdr = _auth(portal_setup["seller_token"])
+    buyer_hdr = _auth(portal_setup["buyer_token"])
+
+    # Setup an order with sub-order
+    with Session(engine) as session:
+        prod = Product(
+            code="ADM-RESTRICT-PROD",
+            seller_id=portal_setup["seller_id"],
+            name="Restricted Test Product",
+            price=200000,
+            stock_quantity=10,
+            is_active=True,
+        )
+        session.add(prod)
+        session.flush()
+
+        order = Order(
+            buyer_id=portal_setup["buyer_id"],
+            status="DELIVERED",
+            total_amount=200000,
+            delivery_address="123 Test St",
+            recipient_name="Buyer",
+            phone_number="0901234567",
+        )
+        session.add(order)
+        session.flush()
+
+        so = SellerOrder(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            status="DELIVERED",
+            subtotal=200000,
+        )
+        session.add(so)
+        session.flush()
+
+        ret_req = ReturnRequest(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_order_id=so.id,  # type: ignore[arg-type]
+            buyer_id=portal_setup["buyer_id"],
+            reason="Item defective",
+            evidence="Evidence link",
+            status="PENDING",
+        )
+        session.add(ret_req)
+        session.commit()
+        ret_id = ret_req.id
+        so_id = so.id
+        ord_id = order.id
+
+    # 1. Administrator restricts the seller
+    restrict_seller = client.patch(
+        f"/api/v1/admin/users/{portal_setup['seller_id']}/status",
+        headers=admin_hdr,
+        json={"status": "RESTRICTED", "reason": "Suspicious activity"},
+    )
+    assert restrict_seller.status_code == 200
+
+    # Seller gets 403 on /seller/orders/{id}/status
+    res_seller_order = client.patch(
+        f"/api/v1/seller/orders/{so_id}/status",
+        headers=seller_hdr,
+        json={"status": "COMPLETED"},
+    )
+    assert res_seller_order.status_code == 403
+    assert res_seller_order.json()["error"]["code"] == "ERR_ACCOUNT_RESTRICTED"
+
+    # Seller also gets 403 on /orders/{id}/status (cannot bypass!)
+    res_order_status = client.patch(
+        f"/api/v1/orders/{ord_id}/status",
+        headers=seller_hdr,
+        json={"status": "COMPLETED"},
+    )
+    assert res_order_status.status_code == 403
+    assert res_order_status.json()["error"]["code"] == "ERR_ACCOUNT_RESTRICTED"
+
+    # Seller also gets 403 on return request decision
+    res_return_decision = client.post(
+        f"/api/v1/return-requests/{ret_id}/decision",
+        headers=seller_hdr,
+        json={"action": "APPROVE", "decision_notes": "Trying to approve while restricted"},
+    )
+    assert res_return_decision.status_code == 403
+    assert res_return_decision.json()["error"]["code"] == "ERR_ACCOUNT_RESTRICTED"
+
+    # 2. Administrator restricts the buyer
+    restrict_buyer = client.patch(
+        f"/api/v1/admin/users/{portal_setup['buyer_id']}/status",
+        headers=admin_hdr,
+        json={"status": "RESTRICTED", "reason": "Chargeback abuse"},
+    )
+    assert restrict_buyer.status_code == 200
+
+    # Buyer cannot confirm delivery or cancel order
+    res_confirm = client.post(f"/api/v1/orders/{ord_id}/confirm", headers=buyer_hdr)
+    assert res_confirm.status_code == 403
+    assert res_confirm.json()["error"]["code"] == "ERR_ACCOUNT_RESTRICTED"
+
+    res_cancel = client.post(f"/api/v1/orders/{ord_id}/cancel", headers=buyer_hdr)
+    assert res_cancel.status_code == 403
+    assert res_cancel.json()["error"]["code"] == "ERR_ACCOUNT_RESTRICTED"
+
+    res_return = client.post(
+        f"/api/v1/orders/{ord_id}/returns",
+        headers=buyer_hdr,
+        json={"reason": "Cannot return while restricted"},
+    )
+    assert res_return.status_code == 403
+    assert res_return.json()["error"]["code"] == "ERR_ACCOUNT_RESTRICTED"
+
+
+def test_dispute_approval_settles_return_lifecycle_payment_escrow_and_atomic_claim(
+    client: TestClient, portal_setup
+):
+    """[P1] Dispute decisions complete the existing return/refund lifecycle atomically."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+    seller_hdr = _auth(portal_setup["seller_token"])
+
+    with Session(engine) as session:
+        prod = Product(
+            code="ADM-DISP-SETTLE",
+            seller_id=portal_setup["seller_id"],
+            name="Settle Product",
+            price=300000,
+            stock_quantity=15,
+            is_active=True,
+        )
+        session.add(prod)
+        session.flush()
+
+        order = Order(
+            buyer_id=portal_setup["buyer_id"],
+            status="RETURN_REQUESTED",
+            payment_status="PAID",
+            escrow_status="PAUSED",
+            total_amount=300000,
+            delivery_address="123 Test St",
+            recipient_name="Buyer",
+            phone_number="0901234567",
+        )
+        session.add(order)
+        session.flush()
+
+        so = SellerOrder(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            status="RETURN_REQUESTED",
+            payment_status="PAID",
+            escrow_status="PAUSED",
+            subtotal=300000,
+        )
+        session.add(so)
+        session.flush()
+
+        item = OrderItem(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_order_id=so.id,  # type: ignore[arg-type]
+            product_id=prod.id,  # type: ignore[arg-type]
+            quantity=2,
+            unit_price=150000,
+            subtotal=300000,
+        )
+        session.add(item)
+        session.flush()
+
+        ret_req = ReturnRequest(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_order_id=so.id,  # type: ignore[arg-type]
+            buyer_id=portal_setup["buyer_id"],
+            reason="Damaged product",
+            evidence="photo.jpg",
+            status="PENDING",
+        )
+        session.add(ret_req)
+        session.commit()
+        ret_id = ret_req.id
+        so_id = so.id
+        ord_id = order.id
+
+    # 1. Create dispute linking to sub-order with return request
+    disp_res = client.post(
+        f"/api/v1/admin/disputes?order_id={ord_id}&seller_order_id={so_id}&reason=Escalated+claim&evidence=docs.pdf",
+        headers=admin_hdr,
+    )
+    assert disp_res.status_code == 201
+    dispute_id = disp_res.json()["id"]
+    assert disp_res.json()["return_request_id"] == ret_id
+
+    # 2. Administrator adjudicates dispute as APPROVE with restock=True
+    dec_res = client.post(
+        f"/api/v1/admin/disputes/{dispute_id}/decision",
+        headers=admin_hdr,
+        json={
+            "action": "APPROVE",
+            "decision_notes": "Admin verified damage",
+            "is_restockable": True,
+        },
+    )
+    assert dec_res.status_code == 200
+    assert dec_res.json()["status"] == "APPROVED"
+
+    # Verify atomic update on ReturnRequest
+    with Session(engine) as session:
+        updated_ret = session.get(ReturnRequest, ret_id)
+        assert updated_ret.status == "APPROVED"
+        assert updated_ret.decided_by_user_id == portal_setup["admin_id"]
+
+        updated_so = session.get(SellerOrder, so_id)
+        assert updated_so.status == "RETURNED_REFUNDED"
+        assert updated_so.payment_status == "REFUNDED"
+        assert updated_so.escrow_status == "REFUNDED"
+
+        updated_ord = session.get(Order, ord_id)
+        assert updated_ord.status == "RETURNED_REFUNDED"
+        assert updated_ord.payment_status == "REFUNDED"
+        assert updated_ord.escrow_status == "REFUNDED"
+
+    # 3. Seller or anyone attempting to decide the ReturnRequest again fails with 400
+    second_decision = client.post(
+        f"/api/v1/return-requests/{ret_id}/decision",
+        headers=seller_hdr,
+        json={"action": "REJECT", "decision_notes": "Attempt double decision"},
+    )
+    assert second_decision.status_code == 400
+    assert second_decision.json()["error"]["code"] == "ERR_INVALID_TRANSITION"
+
+    # Deciding dispute again fails with 400
+    second_dispute_decision = client.post(
+        f"/api/v1/admin/disputes/{dispute_id}/decision",
+        headers=admin_hdr,
+        json={"action": "APPROVE", "decision_notes": "Again", "is_restockable": True},
+    )
+    assert second_dispute_decision.status_code == 400
+    assert second_dispute_decision.json()["error"]["code"] == "ERR_DISPUTE_RESOLVED"
+
+
+def test_variant_dispute_restores_variant_stock_unit_and_decrements_sales_count(
+    client: TestClient, portal_setup
+):
+    """[P1] Variant returns restore stock to the variant inventory unit, not product base stock."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+
+    with Session(engine) as session:
+        prod = Product(
+            code="ADM-VAR-PROD",
+            seller_id=portal_setup["seller_id"],
+            name="Variant Base Product",
+            price=250000,
+            stock_quantity=20,  # Base stock = 20
+            is_active=True,
+        )
+        session.add(prod)
+        session.flush()
+
+        meta = ProductMetadata(
+            product_id=prod.id,  # type: ignore[arg-type]
+            sales_count=10,
+        )
+        session.add(meta)
+        session.flush()
+
+        variant = ProductVariant(
+            product_id=prod.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            sku="ADM-VAR-SKU-1",
+            name="Blue / Large",
+            price=250000,
+            stock_quantity=3,  # Variant stock = 3
+            is_active=True,
+        )
+        session.add(variant)
+        session.flush()
+
+        order = Order(
+            buyer_id=portal_setup["buyer_id"],
+            status="DELIVERED",
+            total_amount=500000,
+            delivery_address="123 Test St",
+            recipient_name="Buyer",
+            phone_number="0901234567",
+        )
+        session.add(order)
+        session.flush()
+
+        so = SellerOrder(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            status="DELIVERED",
+            subtotal=500000,
+        )
+        session.add(so)
+        session.flush()
+
+        # Two-unit variant return
+        item = OrderItem(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_order_id=so.id,  # type: ignore[arg-type]
+            product_id=prod.id,  # type: ignore[arg-type]
+            variant_id=variant.id,
+            quantity=2,
+            unit_price=250000,
+            subtotal=500000,
+        )
+        session.add(item)
+        session.commit()
+        prod_id = prod.id
+        var_id = variant.id
+        ord_id = order.id
+        so_id = so.id
+
+    # Create and approve dispute with restock
+    disp_res = client.post(
+        f"/api/v1/admin/disputes?order_id={ord_id}&seller_order_id={so_id}&reason=Defect&evidence=pic.jpg",
+        headers=admin_hdr,
+    )
+    assert disp_res.status_code == 201
+    dispute_id = disp_res.json()["id"]
+
+    approve_res = client.post(
+        f"/api/v1/admin/disputes/{dispute_id}/decision",
+        headers=admin_hdr,
+        json={"action": "APPROVE", "decision_notes": "Restocking variant", "is_restockable": True},
+    )
+    assert approve_res.status_code == 200
+
+    # Verify inventory: variant stock increased by 2 (3 -> 5), base stock untouched (remains 20)
+    with Session(engine) as session:
+        p_db = session.get(Product, prod_id)
+        v_db = session.get(ProductVariant, var_id)
+        m_stmt = select(ProductMetadata).where(ProductMetadata.product_id == prod_id)
+        m_db = session.exec(m_stmt).first()
+
+        assert p_db.stock_quantity == 20, "Base product stock must not be incremented!"
+        assert v_db.stock_quantity == 5, "Variant stock must increase from 3 to 5 (3 + 2)!"
+        assert m_db.sales_count == 8, "Sales count must decrease by 2 (10 - 2)!"
+
+
+def test_duplicate_disputes_prevented(client: TestClient, portal_setup):
+    """[P1] Creating two disputes for the same sub-order is rejected with 409."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+
+    with Session(engine) as session:
+        prod = Product(
+            code="ADM-DUP-PROD",
+            seller_id=portal_setup["seller_id"],
+            name="Dup Product",
+            price=100000,
+            stock_quantity=5,
+            is_active=True,
+        )
+        session.add(prod)
+        session.flush()
+
+        order = Order(
+            buyer_id=portal_setup["buyer_id"],
+            status="DELIVERED",
+            total_amount=100000,
+            delivery_address="123 Test St",
+            recipient_name="Buyer",
+            phone_number="0901234567",
+        )
+        session.add(order)
+        session.flush()
+
+        so = SellerOrder(
+            order_id=order.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            status="DELIVERED",
+            subtotal=100000,
+        )
+        session.add(so)
+        session.commit()
+        ord_id = order.id
+        so_id = so.id
+
+    # 1. First dispute succeeds -> 201
+    r1 = client.post(
+        f"/api/v1/admin/disputes?order_id={ord_id}&seller_order_id={so_id}&reason=First+claim&evidence=e1",
+        headers=admin_hdr,
+    )
+    assert r1.status_code == 201
+
+    # 2. Second dispute on same sub-order is rejected -> 409 Conflict
+    r2 = client.post(
+        f"/api/v1/admin/disputes?order_id={ord_id}&seller_order_id={so_id}&reason=Second+claim&evidence=e2",
+        headers=admin_hdr,
+    )
+    assert r2.status_code == 409
+    assert r2.json()["error"]["code"] == "ERR_DISPUTE_EXISTS"
+
+
+def test_dispute_creation_validates_order_hierarchy_and_permitted_states(
+    client: TestClient, portal_setup
+):
+    """[P1] Dispute creation rejects mismatched parent-child orders and invalid sub-order states."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+
+    with Session(engine) as session:
+        # Order A
+        order_a = Order(
+            buyer_id=portal_setup["buyer_id"],
+            status="DELIVERED",
+            total_amount=100000,
+            delivery_address="123 Test St",
+            recipient_name="Buyer",
+            phone_number="0901234567",
+        )
+        session.add(order_a)
+        # Order B
+        order_b = Order(
+            buyer_id=portal_setup["buyer_id"],
+            status="CANCELLED",
+            total_amount=100000,
+            delivery_address="123 Test St",
+            recipient_name="Buyer",
+            phone_number="0901234567",
+        )
+        session.add(order_b)
+        session.flush()
+
+        so_a = SellerOrder(
+            order_id=order_a.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            status="DELIVERED",
+            subtotal=100000,
+        )
+        session.add(so_a)
+
+        so_b = SellerOrder(
+            order_id=order_b.id,  # type: ignore[arg-type]
+            seller_id=portal_setup["seller_id"],
+            status="CANCELLED",
+            subtotal=100000,
+        )
+        session.add(so_b)
+        session.commit()
+        ord_b_id = order_b.id
+        so_a_id = so_a.id
+        so_b_id = so_b.id
+
+    # 1. Mismatched order and sub-order (order B with sub-order A) -> 400
+    res_mismatch = client.post(
+        f"/api/v1/admin/disputes?order_id={ord_b_id}&seller_order_id={so_a_id}&reason=Mismatch&evidence=e",
+        headers=admin_hdr,
+    )
+    assert res_mismatch.status_code == 400
+    assert res_mismatch.json()["error"]["code"] == "ERR_SUB_ORDER_MISMATCH"
+
+    # 2. Cancelled sub-order -> 400 (cannot reset cancelled order to RETURN_REQUESTED)
+    res_invalid_state = client.post(
+        f"/api/v1/admin/disputes?order_id={ord_b_id}&seller_order_id={so_b_id}&reason=Invalid&evidence=e",
+        headers=admin_hdr,
+    )
+    assert res_invalid_state.status_code == 400
+    assert res_invalid_state.json()["error"]["code"] == "ERR_INVALID_DISPUTE_STATE"
+
+
+def test_update_voucher_expiry_with_timezone_aware_timestamp(client: TestClient, portal_setup):
+    """[P2] Updating voucher expiry with timezone-aware timestamp does not raise 500."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+
+    # 1. Create a platform voucher
+    v_res = client.post(
+        "/api/v1/admin/vouchers",
+        headers=admin_hdr,
+        json={
+            "code": "ADMTZTEST",
+            "discount_type": "PERCENTAGE",
+            "discount_value": 1500,
+            "min_order_value": 100000,
+            "starts_at": "2026-10-01T00:00:00Z",
+            "ends_at": "2026-11-01T00:00:00Z",
+        },
+    )
+    assert v_res.status_code == 201
+    voucher_id = v_res.json()["id"]
+
+    # 2. Update ends_at with a timezone-aware timestamp with offset (+07:00)
+    update_res = client.patch(
+        f"/api/v1/admin/vouchers/{voucher_id}",
+        headers=admin_hdr,
+        json={"ends_at": "2026-12-31T23:59:59+07:00"},
+    )
+    assert update_res.status_code == 200
+    assert "2026-12-31" in update_res.json()["ends_at"]
+
+
+def test_category_validation_normalizes_whitespace_before_length_and_slug_check(
+    client: TestClient, portal_setup
+):
+    """[P2] Category validation strips whitespace before length and slug regex check."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+
+    # Whitespace-only name and slug -> 422
+    r1 = client.post(
+        "/api/v1/admin/categories",
+        headers=admin_hdr,
+        json={"name": "   ", "slug": "   "},
+    )
+    assert r1.status_code == 422
+
+    # Invalid slug pattern -> 422
+    r2 = client.post(
+        "/api/v1/admin/categories",
+        headers=admin_hdr,
+        json={"name": "Electronics Item", "slug": "Invalid Slug!"},
+    )
+    assert r2.status_code == 422
+
+
+def test_seller_inventory_endpoint_returns_active_and_moderated_products(
+    client: TestClient, portal_setup
+):
+    """[P2] GET /api/v1/seller/products returns seller listings with accurate moderation status."""
+    admin_hdr = _auth(portal_setup["admin_token"])
+    seller_hdr = _auth(portal_setup["seller_token"])
+
+    # Create 2 products
+    p1 = client.post(
+        "/api/v1/seller/products",
+        headers=seller_hdr,
+        json={
+            "name": "Active Listing",
+            "description": "Active",
+            "price": 100000,
+            "stock_quantity": 5,
+            "image_url": "https://example.com/p1.jpg",
+        },
+    ).json()["data"]
+
+    p2 = client.post(
+        "/api/v1/seller/products",
+        headers=seller_hdr,
+        json={
+            "name": "Deactivated Listing",
+            "description": "To be deactivated",
+            "price": 200000,
+            "stock_quantity": 2,
+            "image_url": "https://example.com/p2.jpg",
+        },
+    ).json()["data"]
+
+    # Deactivate p2 via admin moderation
+    client.patch(
+        f"/api/v1/admin/products/{p2['id']}/status",
+        headers=admin_hdr,
+        json={"is_active": False, "moderation_notes": "Policy violation"},
+    )
+
+    # Fetch seller inventory via authenticated endpoint
+    inv_res = client.get("/api/v1/seller/products", headers=seller_hdr)
+    assert inv_res.status_code == 200
+    data = inv_res.json()["data"]
+    items = {item["id"]: item for item in data}
+
+    assert p1["id"] in items
+    assert items[p1["id"]]["is_active"] is True
+    assert items[p1["id"]]["is_moderated_deactivated"] is False
+
+    assert p2["id"] in items
+    assert items[p2["id"]]["is_active"] is False
+    assert items[p2["id"]]["is_moderated_deactivated"] is True
+

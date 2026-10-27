@@ -99,7 +99,11 @@ def get_line_availability(
     requires_variant: bool = False,
 ) -> CartLineAvailability:
     """Classify `quantity` of `product` against its current availability."""
-    if not product.is_active or (variant is not None and not variant.is_active):
+    if (
+        not product.is_active
+        or product.is_moderated_deactivated
+        or (variant is not None and not variant.is_active)
+    ):
         return CartLineAvailability.UNAVAILABLE
     if requires_variant and variant is None:
         return CartLineAvailability.VARIANT_REQUIRED

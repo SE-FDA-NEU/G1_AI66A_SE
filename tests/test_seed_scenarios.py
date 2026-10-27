@@ -139,7 +139,7 @@ def test_demo_cli_on_fresh_sqlite_and_rerun(tmp_path):
     assert "already installed (unchanged)" in run_python(["-m", "src.seed", "--demo"], path)
     with closing(sqlite3.connect(path)) as connection:
         for table, expected in [
-            ("users", 4),
+            ("users", 5),
             ("products", 51),
             ("cart_items", 1),
             ("orders", 4),
@@ -209,7 +209,7 @@ def test_parallel_cli_seeding_on_fresh_database_is_idempotent(tmp_path, demo):
     if demo:
         assert sum("Demo scenarios: added" in output for output in outputs) == 1
     with closing(sqlite3.connect(path)) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 4
+        assert connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 5
         assert connection.execute("SELECT COUNT(*) FROM products").fetchone()[0] == (
             51 if demo else 45
         )

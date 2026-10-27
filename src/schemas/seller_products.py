@@ -122,17 +122,22 @@ class SellerProduct(BaseModel):
     code: str
     seller_id: int
     name: str
-    description: str
+    description: str | None = ""
     price: int
     stock_quantity: int
     reserved_stock: int
-    image_url: str
+    image_url: str | None = None
     is_active: bool
+    is_moderated_deactivated: bool = False
     version: int
 
 
 class SellerProductResponse(BaseModel):
     data: SellerProduct
+
+
+class SellerProductListResponse(BaseModel):
+    data: list[SellerProduct]
 
 
 def field_message(field: str, error: Mapping[str, Any]) -> str:

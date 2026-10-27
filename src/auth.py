@@ -128,6 +128,19 @@ def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def require_active_user(user: CurrentUser) -> User:
+    """Require an authenticated user whose account status is ACTIVE."""
+    if getattr(user, "status", "ACTIVE") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ACCOUNT_RESTRICTED", "This account is restricted."),
+        )
+    return user
+
+
+ActiveCurrentUser = Annotated[User, Depends(require_active_user)]
+
+
 def require_seller(user: CurrentUser) -> User:
     """Require an authenticated seller for seller-only endpoints."""
     if user.role != "seller":

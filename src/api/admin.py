@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import case
 from sqlmodel import select, update
 
 from src.auth import AdminUser
@@ -18,6 +19,7 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.return_dispute import ReturnDispute
+from src.models.return_request import ReturnRequest
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.voucher import Voucher
@@ -36,6 +38,8 @@ from src.schemas.admin import (
     UserAdminResponse,
     VoucherAdminResponse,
 )
+from src.services.inventory import restore_order_item_stock
+from src.services.returns import sync_parent_order_state
 
 logger = logging.getLogger(__name__)
 
@@ -541,7 +545,17 @@ def admin_update_voucher(
     if payload.per_user_limit is not None:
         v.per_user_limit = payload.per_user_limit
     if payload.ends_at is not None:
-        if payload.ends_at <= v.starts_at:
+        starts_at = (
+            v.starts_at.replace(tzinfo=UTC)
+            if v.starts_at.tzinfo is None
+            else v.starts_at.astimezone(UTC)
+        )
+        ends_at = (
+            payload.ends_at.replace(tzinfo=UTC)
+            if payload.ends_at.tzinfo is None
+            else payload.ends_at.astimezone(UTC)
+        )
+        if ends_at <= starts_at:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_detail(
@@ -619,6 +633,7 @@ def admin_list_products(
                 price=p.price,
                 stock_quantity=p.stock_quantity,
                 is_active=p.is_active,
+                is_moderated_deactivated=getattr(p, "is_moderated_deactivated", False),
                 category_id=category.id if category else None,
                 category_name=category.name if category else None,
             )
@@ -642,7 +657,13 @@ def admin_moderate_product(
             detail=error_detail("ERR_PRODUCT_NOT_FOUND", "Product not found."),
         )
 
-    p.is_active = payload.is_active
+    if payload.is_active is False:
+        p.is_moderated_deactivated = True
+        p.is_active = False
+    else:
+        p.is_moderated_deactivated = False
+        p.is_active = True
+    p.version += 1
     session.add(p)
     session.commit()
     session.refresh(p)
@@ -660,6 +681,7 @@ def admin_moderate_product(
         price=p.price,
         stock_quantity=p.stock_quantity,
         is_active=p.is_active,
+        is_moderated_deactivated=p.is_moderated_deactivated,
         category_id=category.id if category else None,
         category_name=category.name if category else None,
     )
@@ -691,6 +713,7 @@ def admin_list_disputes(
                 id=d.id,  # type: ignore[arg-type]
                 order_id=d.order_id,
                 seller_order_id=d.seller_order_id,
+                return_request_id=d.return_request_id,
                 buyer_id=d.buyer_id,
                 buyer_name=buyer.name if buyer else None,
                 seller_id=d.seller_id,
@@ -728,9 +751,49 @@ def admin_create_or_escalate_dispute(
             detail=error_detail("ERR_ORDER_NOT_FOUND", "Order or seller order not found."),
         )
 
+    # 1. Validate parent-child relationship
+    if so.order_id != order.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_detail(
+                "ERR_SUB_ORDER_MISMATCH", "Seller order does not belong to specified order."
+            ),
+        )
+
+    # 2. Validate permitted escalation state
+    if so.status not in ("RETURN_REQUESTED", "DELIVERED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_detail(
+                "ERR_INVALID_DISPUTE_STATE",
+                f"Cannot escalate sub-order in status {so.status} to dispute.",
+            ),
+        )
+
+    # 3. Enforce uniqueness: only 1 dispute per seller order
+    existing = session.exec(
+        select(ReturnDispute).where(ReturnDispute.seller_order_id == so.id)
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error_detail(
+                "ERR_DISPUTE_EXISTS", "A dispute has already been created for this sub-order."
+            ),
+        )
+
+    # 4. Link to underlying return request if present
+    ret_req = session.exec(
+        select(ReturnRequest)
+        .where(ReturnRequest.seller_order_id == so.id)
+        .order_by(ReturnRequest.id.desc())
+    ).first()
+    return_request_id = ret_req.id if ret_req else None
+
     dispute = ReturnDispute(
         order_id=order.id,  # type: ignore[arg-type]
         seller_order_id=so.id,  # type: ignore[arg-type]
+        return_request_id=return_request_id,
         buyer_id=order.buyer_id,
         seller_id=so.seller_id,
         reason=reason.strip(),
@@ -750,6 +813,7 @@ def admin_create_or_escalate_dispute(
         id=dispute.id,  # type: ignore[arg-type]
         order_id=dispute.order_id,
         seller_order_id=dispute.seller_order_id,
+        return_request_id=dispute.return_request_id,
         buyer_id=dispute.buyer_id,
         seller_id=dispute.seller_id,
         reason=dispute.reason,
@@ -778,7 +842,23 @@ def admin_decide_dispute(
             detail=error_detail("ERR_DISPUTE_NOT_FOUND", "Return dispute not found."),
         )
 
-    if dispute.status != "PENDING":
+    now = datetime.now(UTC)
+    target_status = "APPROVED" if payload.action == "APPROVE" else "REJECTED"
+
+    # Atomic conditional update on ReturnDispute to prevent duplicate adjudication
+    changed = session.exec(
+        update(ReturnDispute)
+        .where(ReturnDispute.id == dispute_id, ReturnDispute.status == "PENDING")
+        .values(
+            status=target_status,
+            decided_by_user_id=admin.id,
+            decided_at=now,
+            decision_notes=payload.decision_notes.strip(),
+            is_restockable=payload.is_restockable if payload.action == "APPROVE" else False,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if changed.rowcount != 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_detail(
@@ -786,13 +866,20 @@ def admin_decide_dispute(
             ),
         )
 
-    now = datetime.now(UTC)
-    dispute.status = "APPROVED" if payload.action == "APPROVE" else "REJECTED"
-    dispute.decided_by_user_id = admin.id
-    dispute.decided_at = now
-    dispute.decision_notes = payload.decision_notes.strip()
-    dispute.is_restockable = payload.is_restockable if payload.action == "APPROVE" else False
-    session.add(dispute)
+    # Link dispute to underlying ReturnRequest and close it atomically
+    if dispute.return_request_id:
+        session.exec(
+            update(ReturnRequest)
+            .where(ReturnRequest.id == dispute.return_request_id, ReturnRequest.status == "PENDING")
+            .values(
+                status=target_status,
+                decided_by_user_id=admin.id,
+                decided_at=now,
+                decision_notes=payload.decision_notes.strip(),
+                is_restockable=payload.is_restockable if payload.action == "APPROVE" else False,
+            )
+            .execution_options(synchronize_session=False)
+        )
 
     so = session.get(SellerOrder, dispute.seller_order_id)
     order = session.get(Order, dispute.order_id)
@@ -801,6 +888,8 @@ def admin_decide_dispute(
         old_status = so.status
         if payload.action == "APPROVE":
             so.status = "RETURNED_REFUNDED"
+            so.payment_status = "REFUNDED"
+            so.escrow_status = "REFUNDED"
             session.add(so)
 
             if payload.is_restockable:
@@ -808,11 +897,18 @@ def admin_decide_dispute(
                     select(OrderItem).where(OrderItem.seller_order_id == so.id)
                 ).all()
                 for item in items:
-                    p = session.get(Product, item.product_id)
-                    if p:
-                        p.stock_quantity += item.quantity
-                        p.version += 1
-                        session.add(p)
+                    restore_order_item_stock(session, item)
+                    session.exec(
+                        update(ProductMetadata)
+                        .where(ProductMetadata.product_id == item.product_id)
+                        .values(
+                            sales_count=case(
+                                (ProductMetadata.sales_count - item.quantity < 0, 0),
+                                else_=ProductMetadata.sales_count - item.quantity,
+                            )
+                        )
+                        .execution_options(synchronize_session=False)
+                    )
 
             session.add(
                 OrderHistory(
@@ -825,6 +921,7 @@ def admin_decide_dispute(
             )
         else:
             so.status = "COMPLETED"
+            so.escrow_status = "RELEASED"
             session.add(so)
 
             session.add(
@@ -837,15 +934,8 @@ def admin_decide_dispute(
                 )
             )
 
-        # Sync parent order state
-        sub_orders = session.exec(
-            select(SellerOrder).where(SellerOrder.order_id == order.id)
-        ).all()
-        so_statuses = [s.status for s in sub_orders]
-        if all(s == "RETURNED_REFUNDED" for s in so_statuses):
-            order.status = "RETURNED_REFUNDED"
-        elif all(s == "COMPLETED" for s in so_statuses):
-            order.status = "COMPLETED"
+        # Sync parent order state atomically
+        sync_parent_order_state(session, order)
         session.add(order)
 
         # Notify buyer and seller
@@ -856,7 +946,7 @@ def admin_decide_dispute(
                 order_id=order.id,
                 event_key=f"dispute:{dispute.id}:{action_name}:buyer",
                 message=(
-                    f"Dispute for order #{order.id} was {dispute.status.lower()} "
+                    f"Dispute for order #{order.id} was {target_status.lower()} "
                     "by platform administration."
                 ),
                 target_path=f"/orders/{order.id}",
@@ -869,7 +959,7 @@ def admin_decide_dispute(
                 order_id=order.id,
                 event_key=f"dispute:{dispute.id}:{action_name}:seller",
                 message=(
-                    f"Dispute for sub-order #{so.id} was {dispute.status.lower()} "
+                    f"Dispute for sub-order #{so.id} was {target_status.lower()} "
                     "by platform administration."
                 ),
                 target_path="/seller/orders",
@@ -886,6 +976,7 @@ def admin_decide_dispute(
         id=dispute.id,  # type: ignore[arg-type]
         order_id=dispute.order_id,
         seller_order_id=dispute.seller_order_id,
+        return_request_id=dispute.return_request_id,
         buyer_id=dispute.buyer_id,
         buyer_name=buyer.name if buyer else None,
         seller_id=dispute.seller_id,

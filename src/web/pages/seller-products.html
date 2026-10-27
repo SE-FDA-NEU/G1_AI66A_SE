@@ -70,8 +70,10 @@
                 const user = await res.json();
                 const u = user.data || user;
 
-                // Load products owned by this seller
-                const pRes = await fetch(`/api/v1/products?seller_id=${u.id}&limit=100`);
+                // Load products owned by this seller via authenticated seller endpoint
+                const pRes = await fetch('/api/v1/seller/products', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 if (!pRes.ok) throw new Error('Failed to load store products');
                 const pData = await pRes.json();
                 const products = pData.data || [];
@@ -105,12 +107,15 @@
 
                     const tdStatus = document.createElement('td');
                     const badge = document.createElement('span');
-                    if (p.is_active) {
+                    if (p.is_moderated_deactivated) {
+                        badge.className = 'badge badge-inactive';
+                        badge.textContent = 'Deactivated by Policy';
+                    } else if (p.is_active) {
                         badge.className = 'badge badge-active';
                         badge.textContent = 'Active (On Sale)';
                     } else {
                         badge.className = 'badge badge-inactive';
-                        badge.textContent = 'Deactivated by Policy';
+                        badge.textContent = 'Deactivated';
                     }
                     tdStatus.appendChild(badge);
                     tr.appendChild(tdStatus);

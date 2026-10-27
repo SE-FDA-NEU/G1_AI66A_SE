@@ -193,7 +193,7 @@ def checkout(
             sellers = {}
             for line in lines:
                 product = session.get(Product, line.product_id)
-                if product is None or not product.is_active:
+                if product is None or not product.is_active or product.is_moderated_deactivated:
                     raise CheckoutError(
                         "ERR_PRODUCT_UNAVAILABLE",
                         f"Product {line.product_id} is no longer available.",
@@ -234,15 +234,18 @@ def checkout(
                     )
                 inventory = variant or product
                 inventory_model = ProductVariant if variant is not None else Product
+                reserve_filters = [
+                    inventory_model.id == inventory.id,
+                    inventory_model.version == inventory.version,
+                    inventory_model.is_active.is_(True),
+                    inventory_model.stock_quantity - inventory_model.reserved_stock
+                    >= line.quantity,
+                ]
+                if inventory_model is Product:
+                    reserve_filters.append(Product.is_moderated_deactivated.is_(False))
                 changed = session.exec(
                     update(inventory_model)
-                    .where(
-                        inventory_model.id == inventory.id,
-                        inventory_model.version == inventory.version,
-                        inventory_model.is_active.is_(True),
-                        inventory_model.stock_quantity - inventory_model.reserved_stock
-                        >= line.quantity,
-                    )
+                    .where(*reserve_filters)
                     .values(
                         stock_quantity=inventory_model.stock_quantity - line.quantity,
                         version=inventory_model.version + 1,
