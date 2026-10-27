@@ -161,8 +161,11 @@ async function requestCart(url, method = "GET", body = undefined) {
   }
 }
 
-function cartItemUrl(productCode) {
-  return `${CART_ITEMS_URL}/${encodeURIComponent(productCode)}`;
+function cartItemUrl(productCode, variantId = null) {
+  const path = `${CART_ITEMS_URL}/${encodeURIComponent(productCode)}`;
+  return variantId === null || variantId === undefined
+    ? path
+    : `${path}?variant_id=${encodeURIComponent(variantId)}`;
 }
 
 function formatPrice(amount) {
@@ -207,7 +210,7 @@ function createLineImage(item) {
 function createLineInfo(item) {
   const info = createElement("div", "cart-line__info");
   info.append(
-    createElement("h2", "cart-line__name", item.name),
+    createElement("h2", "cart-line__name", item.variant_name ? `${item.name} · ${item.variant_name}` : item.name),
     createElement("p", "cart-line__price", `${formatPrice(item.unit_price)} each`),
     createElement(
       "p",
@@ -244,7 +247,7 @@ function createStepButton(label, ariaLabel) {
 function createQuantityControl(line, item) {
   const control = createElement("div", "cart-line__quantity");
 
-  const inputId = `quantity-${item.product_code}`;
+  const inputId = `quantity-${item.cart_item_id}`;
   const label = createElement("label", "visually-hidden", `Quantity for ${item.name}`);
   label.htmlFor = inputId;
 
@@ -258,8 +261,8 @@ function createQuantityControl(line, item) {
 
   const decrease = createStepButton("−", `Decrease quantity of ${item.name}`);
   const increase = createStepButton("+", `Increase quantity of ${item.name}`);
-  decrease.id = `decrease-${item.product_code}`;
-  increase.id = `increase-${item.product_code}`;
+  decrease.id = `decrease-${item.cart_item_id}`;
+  increase.id = `increase-${item.cart_item_id}`;
   decrease.dataset.minimum = String(item.quantity <= 1);
 
   decrease.addEventListener("click", () => updateQuantity(line, item, input, item.quantity - 1));
@@ -273,7 +276,7 @@ function createQuantityControl(line, item) {
 function createRemoveButton(line, item) {
   const button = createElement("button", "cart-line__remove", "Remove");
   button.type = "button";
-  button.id = `remove-${item.product_code}`;
+  button.id = `remove-${item.cart_item_id}`;
   button.setAttribute("aria-label", `Remove ${item.name} from cart`);
   button.addEventListener("click", () => removeLine(line, item));
   return button;
@@ -471,7 +474,7 @@ async function updateQuantity(line, item, input, quantity) {
   }
   input.value = String(quantity);
   const updated = await changeLine(line, () =>
-    requestCart(cartItemUrl(item.product_code), "PATCH", { quantity }),
+    requestCart(cartItemUrl(item.product_code, item.variant_id), "PATCH", { quantity }),
   );
   if (!updated) {
     input.value = String(item.quantity);
@@ -479,7 +482,7 @@ async function updateQuantity(line, item, input, quantity) {
 }
 
 function removeLine(line, item) {
-  changeLine(line, () => requestCart(cartItemUrl(item.product_code), "DELETE"));
+  changeLine(line, () => requestCart(cartItemUrl(item.product_code, item.variant_id), "DELETE"));
 }
 
 function showLoadError(error) {
