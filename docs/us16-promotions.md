@@ -104,21 +104,27 @@ voucher.
 
 ### 3.2 Eligibility order and error codes
 
-Checks run in this order, and the first failure is the voucher's result. `now` is the
-server's UTC time; the validity window is `starts_at <= now < ends_at`.
+Each row gives the condition that **rejects** the voucher. The rows are evaluated in
+order, and the first matching row decides the result. `now` is the server's UTC time. A
+voucher is valid only while `starts_at <= now < ends_at`, so `ends_at` itself is already
+expired.
 
-| # | Check | Status | Code |
+| # | Rejected when | Status | Code |
 |---|---|---|---|
-| 1 | The code exists | 404 | `ERR_VOUCHER_NOT_FOUND` |
-| 2 | Scope and type match the slot; a shop voucher belongs to that seller order's seller | 409 | `ERR_VOUCHER_SCOPE_MISMATCH` |
-| 3 | `is_active` | 409 | `ERR_VOUCHER_INACTIVE` |
-| 4 | `now >= starts_at` | 409 | `ERR_VOUCHER_NOT_STARTED` |
-| 5 | `now < ends_at` | 409 | `ERR_VOUCHER_EXPIRED` |
-| 6 | Basis `>= min_order_value` | 409 | `ERR_VOUCHER_MIN_ORDER` |
-| 7 | Global `used_count < usage_limit` | 409 | `ERR_VOUCHER_USAGE_LIMIT` |
-| 8 | The buyer's applied usages `< per_user_limit` | 409 | `ERR_VOUCHER_USER_LIMIT` |
-| 9 | Computed discount `> 0` | 409 | `ERR_VOUCHER_NOT_APPLICABLE` |
-| — | Quote changed since the buyer reviewed it (section 5.3) | 409 | `ERR_QUOTE_STALE` |
+| 1 | No voucher has this code | 404 | `ERR_VOUCHER_NOT_FOUND` |
+| 2 | Scope or type does not match the slot, or a shop voucher belongs to a different seller than the seller order | 409 | `ERR_VOUCHER_SCOPE_MISMATCH` |
+| 3 | `is_active` is false | 409 | `ERR_VOUCHER_INACTIVE` |
+| 4 | `now < starts_at` | 409 | `ERR_VOUCHER_NOT_STARTED` |
+| 5 | `now >= ends_at` | 409 | `ERR_VOUCHER_EXPIRED` |
+| 6 | Basis `< min_order_value` | 409 | `ERR_VOUCHER_MIN_ORDER` |
+| 7 | `usage_limit` is set and `used_count >= usage_limit` | 409 | `ERR_VOUCHER_USAGE_LIMIT` |
+| 8 | `per_user_limit` is set and the buyer's `APPLIED` usages `>= per_user_limit` | 409 | `ERR_VOUCHER_USER_LIMIT` |
+| 9 | Computed discount `= 0` | 409 | `ERR_VOUCHER_NOT_APPLICABLE` |
+| — | `quote_revision` differs from the server's recomputed revision (section 5.3) | 409 | `ERR_QUOTE_STALE` |
+
+Boundary tests for rows 4 and 5: `now = starts_at` passes, `now = starts_at - 1 µs`
+gives `ERR_VOUCHER_NOT_STARTED`, `now = ends_at - 1 µs` passes and `now = ends_at`
+gives `ERR_VOUCHER_EXPIRED`. Tests use an injected clock, not the machine time.
 
 The statuses follow the existing table: an unknown resource is 404, as with
 `ERR_PRODUCT_NOT_FOUND`, and a business state that blocks the action is 409, as with
