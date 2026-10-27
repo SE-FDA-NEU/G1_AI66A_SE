@@ -28,6 +28,12 @@ class OrderItem(SQLModel, table=True):
         index=True,
     )
 
+    variant_id: int | None = Field(default=None, foreign_key="product_variants.id", index=True)
+
+    product_name_snapshot: str | None = Field(default=None, max_length=200)
+    variant_name_snapshot: str | None = Field(default=None, max_length=100)
+    product_image_snapshot: str | None = Field(default=None, max_length=2048)
+
     quantity: int = Field(gt=0)
 
     unit_price: int = Field(gt=0)

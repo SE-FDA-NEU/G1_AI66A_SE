@@ -14,6 +14,7 @@ from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import (
     CheckoutInput,
@@ -86,7 +87,9 @@ def receipt(
             OrderLine(
                 **item.model_dump(),
                 product_code=product.code,
-                product_name=product.name,
+                product_name=item.product_name_snapshot or product.name,
+                variant_name=item.variant_name_snapshot,
+                image_url=item.product_image_snapshot or product.image_url,
                 line_total=item.quantity * item.unit_price,
                 seller_order_status=sub_order_map[item.seller_order_id].status
                 if item.seller_order_id in sub_order_map
@@ -151,6 +154,14 @@ def checkout(
                 .order_by(CartItem.product_id)
             ).all()
             if not lines:
+                session.rollback()
+                existing = session.exec(select(Order).where(Order.request_key == key)).first()
+                if existing is not None:
+                    if existing.buyer_id != buyer_id or existing.request_hash != fingerprint:
+                        raise CheckoutError(
+                            "ERR_IDEMPOTENCY_CONFLICT", "Key was used for another request."
+                        )
+                    return receipt(session, buyer_id, existing.id), False
                 has_cart = session.exec(
                     select(CartItem.id).where(CartItem.buyer_id == buyer_id)
                 ).first()
@@ -179,23 +190,54 @@ def checkout(
                         "ERR_PRODUCT_UNAVAILABLE",
                         f"Product {line.product_id} is no longer available.",
                     )
+                variant = (
+                    session.get(ProductVariant, line.variant_id)
+                    if line.variant_id is not None
+                    else None
+                )
+                if line.variant_id is not None and (
+                    variant is None
+                    or variant.product_id != product.id
+                    or variant.seller_id != product.seller_id
+                    or not variant.is_active
+                ):
+                    raise CheckoutError(
+                        "ERR_PRODUCT_UNAVAILABLE",
+                        f"Product variant {line.variant_id} is no longer available.",
+                    )
+                if (
+                    variant is None
+                    and session.exec(
+                        select(ProductVariant.id).where(
+                            ProductVariant.product_id == product.id,
+                        )
+                    ).first()
+                    is not None
+                ):
+                    raise CheckoutError(
+                        "ERR_PRODUCT_UNAVAILABLE",
+                        f"Choose an active variant for product {product.name}.",
+                    )
                 if product.seller_id == buyer_id:
                     raise CheckoutError(
                         "ERR_SELF_PURCHASE",
                         "Sellers cannot purchase their own products.",
                         status=400,
                     )
+                inventory = variant or product
+                inventory_model = ProductVariant if variant is not None else Product
                 changed = session.exec(
-                    update(Product)
+                    update(inventory_model)
                     .where(
-                        Product.id == product.id,
-                        Product.version == product.version,
-                        Product.is_active.is_(True),
-                        Product.stock_quantity - Product.reserved_stock >= line.quantity,
+                        inventory_model.id == inventory.id,
+                        inventory_model.version == inventory.version,
+                        inventory_model.is_active.is_(True),
+                        inventory_model.stock_quantity - inventory_model.reserved_stock
+                        >= line.quantity,
                     )
                     .values(
-                        stock_quantity=Product.stock_quantity - line.quantity,
-                        version=Product.version + 1,
+                        stock_quantity=inventory_model.stock_quantity - line.quantity,
+                        version=inventory_model.version + 1,
                     )
                     .execution_options(synchronize_session=False)
                 )
@@ -223,8 +265,14 @@ def checkout(
                     OrderItem(
                         seller_order_id=sellers[product.seller_id],
                         product_id=product.id,
+                        variant_id=variant.id if variant else None,
                         quantity=line.quantity,
-                        unit_price=product.price,
+                        unit_price=inventory.price,
+                        product_name_snapshot=product.name,
+                        variant_name_snapshot=variant.name if variant else None,
+                        product_image_snapshot=(
+                            variant.image_url or product.image_url if variant else product.image_url
+                        ),
                     )
                 )
                 # Atomic sales_count increment avoiding ORM read-modify-write lost updates
@@ -250,7 +298,7 @@ def checkout(
                             set_={"sales_count": ProductMetadata.sales_count + line.quantity},
                         )
                     )
-                order.total_amount += product.price * line.quantity
+                order.total_amount += inventory.price * line.quantity
                 removed = session.exec(
                     delete(CartItem)
                     .where(
