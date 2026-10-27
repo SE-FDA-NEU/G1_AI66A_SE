@@ -4,8 +4,8 @@ The caller passes the request session and the authenticated seller id; this modu
 tokens or HTTP requests. It commits or rolls back on its own, so a router must not commit again.
 """
 
-from datetime import UTC, datetime
 import secrets
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select

@@ -71,3 +71,11 @@ def confirmation_page(order_id: int) -> FileResponse:
     """Serve the order confirmation page."""
     del order_id
     return FileResponse(PAGES_DIR / "confirmation.html")
+
+
+@router.get("/orders/{order_id}", response_class=FileResponse, include_in_schema=False)
+@router.get("/order/{order_id}", response_class=FileResponse, include_in_schema=False)
+def order_tracker_page(order_id: int) -> FileResponse:
+    """Serve the order tracking and return/refund management page."""
+    del order_id
+    return FileResponse(PAGES_DIR / "order.html")

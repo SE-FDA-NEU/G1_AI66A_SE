@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Order Details & Returns | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/order.css">
+  <script src="/static/order.js" defer></script>
+</head>
+<body>
+  <header>
+    <a href="/products" class="brand">Mini Marketplace</a>
+    <nav>
+      <a href="/products">Products</a>
+      <a href="/cart">Cart</a>
+      <a href="/notifications">Notifications</a>
+      <a href="/login" id="nav-auth-link">Log in</a>
+    </nav>
+  </header>
+
+  <main class="order-container">
+    <p id="global-status" role="status" aria-live="polite">Loading order details...</p>
+    <div id="global-message" class="notice-box notice-error hidden" role="alert"></div>
+
+    <div id="order-content" class="hidden">
+      <!-- Order Summary Card -->
+      <section class="card" aria-labelledby="order-heading">
+        <div class="order-header-flex">
+          <div>
+            <h1 id="order-heading">Order #<span id="order-id-label"></span></h1>
+            <p class="info-label">Placed on <span id="order-date-label"></span></p>
+          </div>
+          <div class="badges-group">
+            <span id="badge-order-status" class="badge badge-info"></span>
+            <span id="badge-payment-status" class="badge badge-success"></span>
+            <span id="badge-escrow-status" class="badge badge-warning"></span>
+          </div>
+        </div>
+
+        <div class="grid-2col">
+          <div class="info-block">
+            <div class="info-label">Recipient</div>
+            <div id="info-recipient-name" class="info-value"></div>
+            <div id="info-recipient-phone" class="info-value" style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;"></div>
+          </div>
+          <div class="info-block">
+            <div class="info-label">Delivery Address</div>
+            <div id="info-delivery-address" class="info-value"></div>
+          </div>
+        </div>
+
+        <h2>Order Items</h2>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Code</th>
+              <th class="text-right">Price</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody id="items-table-body">
+            <!-- Rendered safely via DOM APIs in order.js -->
+          </tbody>
+        </table>
+
+        <div class="total-row">
+          <span>Total:</span>
+          <span id="order-total-amount"></span>
+        </div>
+      </section>
+
+      <!-- Escrow Notice Card if Paused -->
+      <section id="escrow-paused-notice" class="notice-box notice-warning hidden">
+        <strong>Escrow Notice:</strong> Escrow release is currently paused while a return or refund request is pending review.
+      </section>
+
+      <!-- Return Request Status Card (if exists) -->
+      <section id="return-status-card" class="card hidden">
+        <h2>Return &amp; Refund Request</h2>
+        <div class="order-header-flex">
+          <div>
+            <p class="info-label">Request #<span id="return-req-id"></span></p>
+            <p class="info-label">Submitted on <span id="return-req-date"></span></p>
+          </div>
+          <div>
+            <span id="badge-return-status" class="badge"></span>
+          </div>
+        </div>
+
+        <div class="info-block" style="margin-bottom: 14px;">
+          <div class="info-label">Reason for Request</div>
+          <div id="return-req-reason" class="info-value"></div>
+        </div>
+
+        <div class="info-block" style="margin-bottom: 14px;">
+          <div class="info-label">Supporting Evidence</div>
+          <div id="return-req-evidence" class="info-value"></div>
+        </div>
+
+        <div id="return-resolution-details" class="info-block hidden">
+          <div class="info-label">Resolution Details</div>
+          <div id="return-req-decision-notes" class="info-value"></div>
+          <div id="return-req-restock-status" class="info-value" style="margin-top: 6px; font-weight: 600;"></div>
+        </div>
+
+        <!-- Decision Controls for Seller / Admin -->
+        <div id="reviewer-decision-panel" class="hidden" style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+          <h3 style="font-size: 16px; margin-bottom: 12px;">Review Return Request</h3>
+          <form id="decision-form">
+            <div class="form-group">
+              <label for="decision-notes-input">Decision Notes / Feedback</label>
+              <textarea id="decision-notes-input" rows="3" placeholder="Provide notes regarding approval or rejection..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="decision-restock-checkbox">
+                Item confirmed restockable into inventory
+              </label>
+            </div>
+            <div class="button-group">
+              <button type="button" id="btn-approve-return" class="btn btn-success">Approve Return &amp; Refund</button>
+              <button type="button" id="btn-reject-return" class="btn btn-danger">Reject Request</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Buyer Return Request Form (when order is DELIVERED and no active return request) -->
+      <section id="buyer-return-form-card" class="card hidden">
+        <h2>Request Return or Refund</h2>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
+          If you encountered issues with your delivered items, you may submit a request with supporting evidence.
+        </p>
+
+        <form id="buyer-return-form">
+          <div class="form-group">
+            <label for="return-reason-input">Reason for Return/Refund *</label>
+            <textarea id="return-reason-input" rows="3" required minlength="3" maxlength="500" placeholder="Describe the reason (e.g. damaged on delivery, defective item, incorrect specification)..."></textarea>
+          </div>
+          <div class="form-group">
+            <label for="return-evidence-input">Supporting Evidence *</label>
+            <textarea id="return-evidence-input" rows="4" required minlength="3" maxlength="2000" placeholder="Provide details, descriptions, photo links, or serial numbers as evidence..."></textarea>
+          </div>
+          <button type="submit" id="btn-submit-return" class="btn btn-primary">Submit Return &amp; Refund Request</button>
+        </form>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

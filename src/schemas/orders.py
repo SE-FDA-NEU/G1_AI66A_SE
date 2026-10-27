@@ -40,6 +40,8 @@ class OrderData(BaseModel):
     recipient_name: str
     delivery_address: str
     phone_number: str
+    payment_status: str = "PAID"
+    escrow_status: str = "HELD"
     created_at: datetime
     items: list[OrderLine]
 

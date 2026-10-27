@@ -21,13 +21,25 @@ from src.services.notifications import create_notification
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
-STATUSES = {"PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELLED"}
+STATUSES = {
+    "PENDING",
+    "PROCESSING",
+    "SHIPPED",
+    "DELIVERED",
+    "COMPLETED",
+    "CANCELLED",
+    "RETURN_REQUESTED",
+    "RETURNED_REFUNDED",
+}
 TRANSITIONS: dict[str, set[str]] = {
     "PENDING": {"PROCESSING", "CANCELLED"},
     "PROCESSING": {"SHIPPED"},
-    "SHIPPED": {"COMPLETED"},
+    "SHIPPED": {"DELIVERED", "COMPLETED"},
+    "DELIVERED": {"COMPLETED"},
     "COMPLETED": set(),
     "CANCELLED": set(),
+    "RETURN_REQUESTED": set(),
+    "RETURNED_REFUNDED": set(),
 }
 
 
@@ -56,7 +68,14 @@ class SellerOrderListResponse(BaseModel):
 
 
 class StatusUpdateRequest(BaseModel):
-    status: Literal["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELLED"]
+    status: Literal[
+        "PENDING",
+        "PROCESSING",
+        "SHIPPED",
+        "DELIVERED",
+        "COMPLETED",
+        "CANCELLED",
+    ]
 
 
 class StatusUpdateResponse(BaseModel):
@@ -271,7 +290,13 @@ def update_seller_order_status(
             parent.status = "COMPLETED"
         elif statuses == {"CANCELLED"}:
             parent.status = "CANCELLED"
-        elif statuses & {"PROCESSING", "SHIPPED", "COMPLETED"}:
+        elif statuses == {"RETURNED_REFUNDED"}:
+            parent.status = "RETURNED_REFUNDED"
+        elif "RETURN_REQUESTED" in statuses:
+            parent.status = "RETURN_REQUESTED"
+        elif statuses == {"DELIVERED"}:
+            parent.status = "DELIVERED"
+        elif statuses & {"PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"}:
             parent.status = "PROCESSING"
         else:
             parent.status = "PENDING"

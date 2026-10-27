@@ -9,6 +9,7 @@ from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.return_request import ReturnRequest
 from src.models.review import Review
 from src.models.seller_order import SellerOrder
 from src.models.user import User
@@ -26,4 +27,5 @@ __all__ = [
     "OrderItem",
     "Review",
     "Notification",
+    "ReturnRequest",
 ]

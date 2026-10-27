@@ -96,12 +96,37 @@ def migrate_db(connection: Connection | None = None) -> None:
             for name in ("request_key", "request_hash"):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(64)"))
+            if "payment_status" not in columns:
+                connection.execute(
+                    text("ALTER TABLE orders ADD COLUMN payment_status VARCHAR(30) DEFAULT 'PAID'")
+                )
+            if "escrow_status" not in columns:
+                connection.execute(
+                    text("ALTER TABLE orders ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'")
+                )
             connection.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_orders_request_key "
                     "ON orders (request_key)"
                 )
             )
+
+        if "seller_orders" in tables:
+            columns = {c["name"] for c in inspector.get_columns("seller_orders")}
+            if "payment_status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE seller_orders "
+                        "ADD COLUMN payment_status VARCHAR(30) DEFAULT 'PAID'"
+                    )
+                )
+            if "escrow_status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE seller_orders "
+                        "ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'"
+                    )
+                )
 
         if "notifications" in tables:
             columns = {c["name"] for c in inspector.get_columns("notifications")}
