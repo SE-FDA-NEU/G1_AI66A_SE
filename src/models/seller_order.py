@@ -29,6 +29,10 @@ class SellerOrder(SQLModel, table=True):
 
     status: str = Field(max_length=30)
 
+    payment_status: str = Field(default="PAID", max_length=30)
+
+    escrow_status: str = Field(default="HELD", max_length=30)
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC)
     )

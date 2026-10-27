@@ -30,6 +30,8 @@ STATUSES = {
     "DELIVERED",
     "COMPLETED",
     "CANCELLED",
+    "RETURN_REQUESTED",
+    "RETURNED_REFUNDED",
 }
 TRANSITIONS: dict[str, set[str]] = {
     "PENDING": {"CONFIRMED", "PROCESSING", "CANCELLED"},
@@ -40,6 +42,8 @@ TRANSITIONS: dict[str, set[str]] = {
     "DELIVERED": {"COMPLETED"},
     "COMPLETED": set(),
     "CANCELLED": set(),
+    "RETURN_REQUESTED": set(),
+    "RETURNED_REFUNDED": set(),
 }
 
 
@@ -327,6 +331,10 @@ def update_seller_order_status(
             parent.completed_at = datetime.now(UTC)
         elif statuses == {"CANCELLED"}:
             parent.status = "CANCELLED"
+        elif statuses == {"RETURNED_REFUNDED"}:
+            parent.status = "RETURNED_REFUNDED"
+        elif "RETURN_REQUESTED" in statuses:
+            parent.status = "RETURN_REQUESTED"
         elif statuses == {"DELIVERED"}:
             parent.status = "DELIVERED"
             parent.delivered_at = datetime.now(UTC)

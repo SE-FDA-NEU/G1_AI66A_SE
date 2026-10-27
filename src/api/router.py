@@ -11,6 +11,7 @@ from src.api.health import router as health_router
 from src.api.notifications import router as notifications_router
 from src.api.orders import router as orders_router
 from src.api.products import router as products_router
+from src.api.returns import router as returns_router
 from src.api.reviews import router as reviews_router
 from src.api.seller_orders import router as seller_orders_router
 from src.api.seller_products import router as seller_products_router
@@ -26,6 +27,7 @@ api_router.include_router(cart_router)
 api_router.include_router(categories_router)
 api_router.include_router(products_router)
 api_router.include_router(orders_router)
+api_router.include_router(returns_router)
 api_router.include_router(reviews_router)
 api_router.include_router(notifications_router)
 api_router.include_router(seller_orders_router)

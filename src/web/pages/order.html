@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Order Tracker — Mini Marketplace</title>
+  <title>Order Details & Returns — Order Tracker | Mini Marketplace</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <link rel="stylesheet" href="/static/order.css">
@@ -37,11 +37,18 @@
           Please note that these are accurate but not guaranteed estimates. Delivery date is subject to change without advanced notice.
         </p>
       </div>
+      <!-- Order Switcher for viewing any past order -->
+      <div id="order-switcher-wrap" class="order-switcher-wrap" hidden style="margin: 14px auto; text-align: center;">
+        <label for="order-select" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-right: 8px;">Select Order:</label>
+        <select id="order-select" class="ios-select" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; font-size: 14px; background: #fff; cursor: pointer;"></select>
+      </div>
       <div class="live-pill-wrap">
         <span id="live-indicator" class="live-indicator" hidden>
           <span class="live-dot"></span> Live updating
         </span>
         <span id="order-status-badge" class="badge">Loading...</span>
+        <span id="badge-payment-status" class="badge" hidden></span>
+        <span id="badge-escrow-status" class="badge" hidden></span>
       </div>
       <p id="order-meta" class="text-muted" style="display:none;"></p>
     </section>
@@ -100,54 +107,40 @@
 
           <div class="step-line" style="display:none;"></div>
 
-          <!-- Step 2: Confirmed / In Production -->
-          <div class="step" id="step-confirmed">
+          <!-- Step 2: Processing -->
+          <div class="step" id="step-processing">
             <div class="step-icon-circle">
-              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
               </svg>
             </div>
             <div class="step-label">In Production</div>
-            <div class="step-date" id="step-confirmed-date">—</div>
+            <div class="step-date" id="step-processing-date">—</div>
           </div>
 
           <div class="step-line" style="display:none;"></div>
 
-          <!-- Step 3: Shipped / Ocean Transit -->
+          <!-- Step 3: Shipped / On the way -->
           <div class="step" id="step-shipped">
             <div class="step-icon-circle">
-              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 17h20v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2zM4 17l2-10h12l2 10M12 7V3M9 3h6"/>
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="1" y="3" width="15" height="13"/>
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/>
+                <circle cx="18.5" cy="18.5" r="2.5"/>
               </svg>
             </div>
-            <div class="step-label">Ocean Transit</div>
+            <div class="step-label">On The Way</div>
             <div class="step-date" id="step-shipped-date">—</div>
           </div>
 
           <div class="step-line" style="display:none;"></div>
 
-          <!-- Step 4: Final Mile -->
-          <div class="step" id="step-delivered">
-            <div class="step-icon-circle">
-              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="1" y="3" width="14" height="13"></rect>
-                <polygon points="15 8 19 8 22 11 22 16 15 16 15 8"></polygon>
-                <circle cx="5" cy="19" r="2.5"></circle>
-                <circle cx="18" cy="19" r="2.5"></circle>
-              </svg>
-            </div>
-            <div class="step-label">Shipping Final Mile</div>
-            <div class="step-date" id="step-delivered-date">—</div>
-          </div>
-
-          <div class="step-line" style="display:none;"></div>
-
-          <!-- Step 5: Delivered / Completed -->
+          <!-- Step 4: Delivered -->
           <div class="step" id="step-completed">
             <div class="step-icon-circle">
-              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 12 20 22 4 22 4 12"/>
                 <rect x="2" y="7" width="20" height="5"/>
                 <line x1="12" y1="22" x2="12" y2="7"/>
@@ -277,6 +270,86 @@
         <button id="seller-reject-cancel-btn" type="button" class="ios-btn ios-btn-secondary" hidden>Reject Cancellation</button>
         <button id="seller-cancel-btn" type="button" class="ios-btn ios-btn-danger" hidden>Cancel Order</button>
       </div>
+    </section>
+
+    <!-- Escrow Notice Card if Paused -->
+    <section id="escrow-paused-notice" class="ios-card notice-box notice-warning" hidden style="background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 16px; border-radius: 14px; margin-top: 16px;">
+      <strong>Escrow Notice:</strong> Escrow release is currently paused while a return or refund request is pending review.
+    </section>
+
+    <!-- Return Request Status Card (if exists) -->
+    <section id="return-status-card" class="ios-card" hidden style="margin-top: 16px;">
+      <div class="card-header-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 class="section-subheading" style="margin-bottom: 0;">RETURN &amp; REFUND REQUEST</h3>
+        <span id="badge-return-status" class="badge"></span>
+      </div>
+      <!-- Container for displaying multiple return requests per seller order -->
+      <div id="return-requests-list" style="margin-bottom: 12px;"></div>
+
+      <div id="return-single-request-details">
+        <div class="info-block" style="margin-bottom: 12px;">
+          <p class="order-metric-label" style="font-size: 13px; color: var(--ios-text-muted);">Request #<span id="return-req-id"></span> &middot; Submitted on <span id="return-req-date"></span></p>
+        </div>
+        <div class="info-block" style="margin-bottom: 12px;">
+          <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Reason for Request</div>
+          <div id="return-req-reason" class="info-value" style="font-weight: 500; margin-top: 4px;"></div>
+        </div>
+        <div class="info-block" style="margin-bottom: 12px;">
+          <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Supporting Evidence</div>
+          <div id="return-req-evidence" class="info-value" style="margin-top: 4px; white-space: pre-wrap;"></div>
+        </div>
+        <div id="return-resolution-details" class="info-block" hidden style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ios-border);">
+          <div class="order-metric-label" style="font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); text-transform: uppercase;">Resolution Details</div>
+          <div id="return-req-decision-notes" class="info-value" style="margin-top: 4px;"></div>
+          <div id="return-req-restock-status" class="info-value" style="margin-top: 6px; font-weight: 600; color: var(--ios-green);"></div>
+        </div>
+
+        <!-- Decision Controls for Seller / Admin -->
+        <div id="reviewer-decision-panel" hidden style="margin-top: 16px; border-top: 1px solid var(--ios-border); padding-top: 16px;">
+          <h4 style="font-size: 15px; margin-bottom: 10px; font-weight: 600;">Review Return Request</h4>
+          <form id="decision-form">
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label for="decision-notes-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Decision Notes / Feedback</label>
+              <textarea id="decision-notes-input" rows="3" class="ios-textarea" placeholder="Provide notes regarding approval or rejection..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                <input type="checkbox" id="decision-restock-checkbox">
+                Item confirmed restockable into inventory
+              </label>
+            </div>
+            <div class="action-buttons">
+              <button type="button" id="btn-approve-return" class="ios-btn ios-btn-primary" style="background: #16a34a;">Approve Return &amp; Refund</button>
+              <button type="button" id="btn-reject-return" class="ios-btn ios-btn-danger">Reject Request</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Buyer Return Request Form (when order is DELIVERED and no active return request) -->
+    <section id="buyer-return-form-card" class="ios-card" hidden style="margin-top: 16px;">
+      <div class="card-header-row">
+        <h3 class="section-subheading">REQUEST RETURN OR REFUND</h3>
+      </div>
+      <p style="color: var(--ios-text-secondary); font-size: 14px; margin-bottom: 16px;">
+        If you encountered issues with your delivered items, you may submit a request with supporting evidence.
+      </p>
+      <form id="buyer-return-form">
+        <div id="return-seller-order-group" class="form-group" style="margin-bottom: 12px;" hidden>
+          <label for="return-seller-order-select" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Select Sub-Order to Return *</label>
+          <select id="return-seller-order-select" class="ios-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px; background: white;"></select>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label for="return-reason-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Reason for Return/Refund *</label>
+          <textarea id="return-reason-input" rows="3" required minlength="3" maxlength="500" class="ios-textarea" placeholder="Describe the reason (e.g. damaged on delivery, defective item, incorrect specification)..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label for="return-evidence-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Supporting Evidence *</label>
+          <textarea id="return-evidence-input" rows="4" required minlength="3" maxlength="2000" class="ios-textarea" placeholder="Provide details, descriptions, photo links, or serial numbers as evidence..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
+        </div>
+        <button type="submit" id="btn-submit-return" class="ios-btn ios-btn-primary">Submit Return &amp; Refund Request</button>
+      </form>
     </section>
 
     <div class="nav-footer">

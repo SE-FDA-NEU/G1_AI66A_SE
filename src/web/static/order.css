@@ -919,3 +919,94 @@ body.ios-theme {
     font-size: 1.3rem;
   }
 }
+
+/* ==========================================================================
+   Badges & Notices for Return & Refund
+   ========================================================================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-info {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-success {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.badge-warning {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.badge-danger {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.badge-purple {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+
+.notice-box {
+  padding: 1rem 1.25rem;
+  border-radius: var(--ios-radius-sm);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.notice-warning {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.notice-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.notice-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.ios-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--ios-border);
+  border-radius: var(--ios-radius-sm);
+  font-family: inherit;
+  font-size: 0.92rem;
+  color: var(--ios-text-primary);
+  background: #ffffff;
+  resize: vertical;
+}
+
+.ios-textarea:focus {
+  outline: none;
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}

@@ -199,12 +199,12 @@ def list_products(
 
     # AC3: Sort validation
     if sort is not None and sort not in ALLOWED_SORTS:
+        allowed_str = ", ".join(sorted(ALLOWED_SORTS))
         raise HTTPException(
             status_code=422,
             detail=error_detail(
                 "ERR_VALIDATION",
-                f"Invalid sort option '{sort}'. "
-                f"Allowed options: {', '.join(sorted(ALLOWED_SORTS))}.",
+                f"Invalid sort option '{sort}'. Allowed options: {allowed_str}.",
             ),
         )
 

@@ -44,6 +44,8 @@ const transitions = {
     { status: "COMPLETED", label: "Mark completed" },
   ],
   DELIVERED: [{ status: "COMPLETED", label: "Mark completed" }],
+  RETURN_REQUESTED: [],
+  RETURNED_REFUNDED: [],
   COMPLETED: [],
   CANCELLED: [],
 };
@@ -122,8 +124,14 @@ function createOrderCard(order) {
   }
   const trackLink = document.createElement("a");
   trackLink.href = `/order/${order.order_id}`;
-  trackLink.textContent = `Track Order (parent #${order.order_id})`;
+  trackLink.textContent = order.status === "RETURN_REQUESTED"
+    ? `⚠️ Review Return & Refund (Order #${order.order_id})`
+    : `Track Order (parent #${order.order_id})`;
   trackLink.className = "order-card__tracker-link";
+  if (order.status === "RETURN_REQUESTED") {
+    trackLink.style.color = "#ea580c";
+    trackLink.style.fontWeight = "bold";
+  }
   card.append(trackLink);
   transitions[order.status]?.forEach((transition) => {
     const button = document.createElement("button");

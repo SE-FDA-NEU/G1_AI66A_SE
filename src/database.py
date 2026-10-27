@@ -96,6 +96,14 @@ def migrate_db(connection: Connection | None = None) -> None:
             for name in ("request_key", "request_hash"):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(64)"))
+            if "payment_status" not in columns:
+                connection.execute(
+                    text("ALTER TABLE orders ADD COLUMN payment_status VARCHAR(30) DEFAULT 'PAID'")
+                )
+            if "escrow_status" not in columns:
+                connection.execute(
+                    text("ALTER TABLE orders ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'")
+                )
             for name in ("tracking_number",):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(100)"))
@@ -111,6 +119,21 @@ def migrate_db(connection: Connection | None = None) -> None:
 
         if "seller_orders" in tables:
             columns = {c["name"] for c in inspector.get_columns("seller_orders")}
+            if "payment_status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE seller_orders "
+                        "ADD COLUMN payment_status VARCHAR(30) DEFAULT 'PAID'"
+                    )
+                )
+            if "escrow_status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE seller_orders "
+                        "ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'"
+                    )
+                )
+
             for name in ("tracking_number",):
                 if name not in columns:
                     connection.execute(
@@ -210,6 +233,14 @@ def migrate_db(connection: Connection | None = None) -> None:
                     "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
                     "FROM products p "
                     "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+                )
+            )
+
+        if "return_requests" in tables:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_return_requests_seller_order_pending "
+                    "ON return_requests(seller_order_id) WHERE status = 'PENDING'"
                 )
             )
 
