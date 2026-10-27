@@ -387,3 +387,16 @@ The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for 
 | US07 Update product info and stock | [#19](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/19) | P1 | /seller/products/:productId/edit, /seller/products | @minhnm162 | Not implemented |
 | US09 Seller revenue analytics | [#21](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/21) | P1 | /seller/analytics | @QuangMinhQu | Not implemented |
 | US10 Seller best-selling products | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | P2 | /seller/analytics/products | @QuangMinhQu | Not implemented (depends on US09) |
+
+
+## US13 implementation (#105, #122–#125)
+
+| Task | Implementation | Verification |
+|---|---|---|
+| #122 model/API | UserAddress, addresses schema/service/router; owner/version predicates, partial default index | tests/test_addresses.py: CRUD, persistence, auth, isolation, strict validation, init upgrade, rollback, file SQLite concurrency |
+| #123 UI | /checkout address book, independent form, selector, manual mode, field guidance, delete confirmation | tests/addresses_ui.mjs; browser evidence in docs/us13-addresses.md |
+| #124 snapshot | resolve_delivery_snapshot after replay, explicit Order fields, legacy/saved union | tests/test_checkout_addresses.py: edit/delete/replay, stale/foreign address, legacy hash, partial cart, rollback and same-key concurrency |
+| #125 integration | Node checks in CI; API/database/checkout regressions | tests/test_checkout.py, tests/test_us12.py, tests/test_database.py; docs/us13-addresses.md |
+
+No implementation PR number is recorded until a real PR exists. Story closure and
+review remain GitHub workflow steps after this implementation is reviewed.

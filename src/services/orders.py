@@ -15,7 +15,14 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
-from src.schemas.orders import CheckoutRequest, OrderData, OrderLine
+from src.schemas.orders import (
+    CheckoutInput,
+    CheckoutRequest,
+    DeliverySnapshot,
+    OrderData,
+    OrderLine,
+)
+from src.services.addresses import AddressError, owned_address
 from src.services.notifications import create_notification
 
 
@@ -54,8 +61,26 @@ def receipt(session: Session, buyer_id: int, order_id: int) -> OrderData:
     )
 
 
+def resolve_delivery_snapshot(
+    session: Session, buyer_id: int, body: CheckoutInput
+) -> DeliverySnapshot:
+    if isinstance(body, CheckoutRequest):
+        return DeliverySnapshot(**body.model_dump())
+    try:
+        address = owned_address(session, buyer_id, body.address_id, body.address_version)
+    except AddressError as exc:
+        raise CheckoutError(exc.code, exc.message, exc.status) from exc
+    return DeliverySnapshot(
+        recipient_name=address.recipient_name,
+        phone_number=address.phone_number,
+        delivery_address=", ".join(
+            (address.detailed_address, address.ward, address.district, address.province)
+        ),
+    )
+
+
 def checkout(
-    session: Session, buyer_id: int, body: CheckoutRequest, key: str
+    session: Session, buyer_id: int, body: CheckoutInput, key: str
 ) -> tuple[OrderData, bool]:
     """Own the request session transaction; auth may already have begun it."""
     fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
@@ -68,6 +93,7 @@ def checkout(
                         "ERR_IDEMPOTENCY_CONFLICT", "Key was used for another request."
                     )
                 return receipt(session, buyer_id, existing.id), False
+            snapshot = resolve_delivery_snapshot(session, buyer_id, body)
             lines = session.exec(
                 select(CartItem)
                 .where(CartItem.buyer_id == buyer_id, CartItem.is_selected.is_(True))
@@ -88,7 +114,9 @@ def checkout(
                 status="PENDING",
                 request_key=key,
                 request_hash=fingerprint,
-                **body.model_dump(),
+                recipient_name=snapshot.recipient_name,
+                phone_number=snapshot.phone_number,
+                delivery_address=snapshot.delivery_address,
             )
             session.add(order)
             session.flush()

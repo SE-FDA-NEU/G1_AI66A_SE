@@ -70,6 +70,7 @@ jobs:
         run: |
           node tests/cart_ui.mjs
           node tests/checkout_ui.mjs
+          node tests/addresses_ui.mjs
           node tests/seller_products_ui.mjs
           node tests/seller_orders_ui.mjs
           node tests/product_detail_ui.mjs

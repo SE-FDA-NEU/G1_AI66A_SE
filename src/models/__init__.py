@@ -13,10 +13,12 @@ from src.models.return_request import ReturnRequest
 from src.models.review import Review
 from src.models.seller_order import SellerOrder
 from src.models.user import User
+from src.models.user_address import UserAddress
 
 __all__ = [
     "Base",
     "User",
+    "UserAddress",
     "Category",
     "Product",
     "ProductMetadata",

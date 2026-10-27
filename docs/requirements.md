@@ -293,3 +293,16 @@ flowchart TD
     R_SellerAnalytics -->|"View product breakdown"| R_SellerRankings["/seller/analytics/products<br/>(Best-Selling Rankings)"]
     R_SellerOrders -->|"Update order status to COMPLETED"| R_SellerAnalytics
 ```
+
+
+## US13 — Address book and delivery snapshots (#105)
+
+A buyer can persist, edit and delete six-field delivery addresses and choose a default
+at checkout. Every operation is scoped to the authenticated buyer. The first address
+becomes default; subsequent addresses do so only on request. At most one default is
+allowed, including concurrent writes. Deleting/clearing it may leave zero defaults.
+Checkout initially selects the default, or the smallest ID if none exists; selecting
+an address for one order does not change the default. Manual delivery entry remains
+available. Orders keep the recipient, phone and full delivery address unchanged after
+source edits/deletions. Stale address versions require review. Field errors include
+repair guidance; deletion requires confirmation. See [acceptance mapping](us13-addresses.md).

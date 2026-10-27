@@ -416,8 +416,19 @@ def test_other_routes_keep_their_validation_error_shape(api, engine):
     assert cart.json() == {
         "error": {"code": "ERR_VALIDATION", "message": "The request contains invalid fields."}
     }
+    # US13 adds field guidance to checkout; cart/catalog/login keep the old envelope.
+    assert order.status_code == 422
     assert order.json() == {
-        "error": {"code": "ERR_VALIDATION", "message": "Invalid checkout fields: phone_number."}
+        "error": {
+            "code": "ERR_VALIDATION",
+            "message": "Please correct the highlighted fields.",
+            "fields": {
+                "phone_number": [
+                    "Phone number must contain 7 to 15 digits; "
+                    "use only +, spaces, (), or - as separators."
+                ]
+            },
+        }
     }
     for response in (catalog, login):
         assert response.status_code == 422
@@ -538,9 +549,7 @@ def test_a_database_failure_answers_500_without_details(api, engine, monkeypatch
     assert stored(engine) == []
 
 
-def test_an_unrelated_constraint_failure_is_not_treated_as_a_code_collision(
-    engine, monkeypatch
-):
+def test_an_unrelated_constraint_failure_is_not_treated_as_a_code_collision(engine, monkeypatch):
     with engine.begin() as connection:
         connection.execute(
             text(

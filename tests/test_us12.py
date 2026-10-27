@@ -115,10 +115,24 @@ def test_select_shop_rolls_back_all_rows_when_an_update_fails(engine, monkeypatc
     with Session(engine) as session:
         first_product = session.exec(select(Product).where(Product.code == "P-100")).one()
         second_product = session.exec(select(Product).where(Product.code == "P-200")).one()
-        session.add_all([
-            CartItem(buyer_id=2, product_id=first_product.id, quantity=1, is_selected=False, price_at_add=100),
-            CartItem(buyer_id=2, product_id=second_product.id, quantity=1, is_selected=False, price_at_add=200),
-        ])
+        session.add_all(
+            [
+                CartItem(
+                    buyer_id=2,
+                    product_id=first_product.id,
+                    quantity=1,
+                    is_selected=False,
+                    price_at_add=100,
+                ),
+                CartItem(
+                    buyer_id=2,
+                    product_id=second_product.id,
+                    quantity=1,
+                    is_selected=False,
+                    price_at_add=200,
+                ),
+            ]
+        )
         session.commit()
 
     original = cart_service.update_line_fields
@@ -136,7 +150,9 @@ def test_select_shop_rolls_back_all_rows_when_an_update_fails(engine, monkeypatc
         with pytest.raises(RuntimeError, match="simulated"):
             cart_service.CartService(session).select_shop(2, 1, True)
     with Session(engine) as session:
-        rows = session.exec(select(CartItem).where(CartItem.buyer_id == 2).order_by(CartItem.id)).all()
+        rows = session.exec(
+            select(CartItem).where(CartItem.buyer_id == 2).order_by(CartItem.id)
+        ).all()
         assert [row.is_selected for row in rows] == [False, False]
 
 
