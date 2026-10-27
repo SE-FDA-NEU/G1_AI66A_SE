@@ -122,6 +122,30 @@ class SellerProduct(BaseModel):
     code: str
     seller_id: int
     name: str
+    description: str
+    price: int
+    stock_quantity: int
+    reserved_stock: int
+    image_url: str
+    is_active: bool
+    version: int
+
+
+class SellerProductResponse(BaseModel):
+    data: SellerProduct
+
+
+class SellerProductListResponse(BaseModel):
+    data: list[SellerProduct]
+
+
+class SellerInventoryProduct(BaseModel):
+    """Product representation for seller inventory management with moderation state."""
+
+    id: int
+    code: str
+    seller_id: int
+    name: str
     description: str | None = ""
     price: int
     stock_quantity: int
@@ -132,12 +156,8 @@ class SellerProduct(BaseModel):
     version: int
 
 
-class SellerProductResponse(BaseModel):
-    data: SellerProduct
-
-
-class SellerProductListResponse(BaseModel):
-    data: list[SellerProduct]
+class SellerInventoryListResponse(BaseModel):
+    data: list[SellerInventoryProduct]
 
 
 def field_message(field: str, error: Mapping[str, Any]) -> str:

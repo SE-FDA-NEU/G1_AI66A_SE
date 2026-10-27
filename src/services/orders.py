@@ -193,7 +193,11 @@ def checkout(
             sellers = {}
             for line in lines:
                 product = session.get(Product, line.product_id)
-                if product is None or not product.is_active or product.is_moderated_deactivated:
+                meta = session.exec(
+                    select(ProductMetadata).where(ProductMetadata.product_id == line.product_id)
+                ).first()
+                is_mod = bool(meta and meta.is_moderated_deactivated)
+                if product is None or not product.is_active or is_mod:
                     raise CheckoutError(
                         "ERR_PRODUCT_UNAVAILABLE",
                         f"Product {line.product_id} is no longer available.",
@@ -241,8 +245,6 @@ def checkout(
                     inventory_model.stock_quantity - inventory_model.reserved_stock
                     >= line.quantity,
                 ]
-                if inventory_model is Product:
-                    reserve_filters.append(Product.is_moderated_deactivated.is_(False))
                 changed = session.exec(
                     update(inventory_model)
                     .where(*reserve_filters)

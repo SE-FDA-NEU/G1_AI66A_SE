@@ -1278,7 +1278,7 @@ def test_category_validation_normalizes_whitespace_before_length_and_slug_check(
 def test_seller_inventory_endpoint_returns_active_and_moderated_products(
     client: TestClient, portal_setup
 ):
-    """[P2] GET /api/v1/seller/products returns seller listings with accurate moderation status."""
+    """[P2] GET /api/v1/seller/inventory returns seller listings with accurate moderation status."""
     admin_hdr = _auth(portal_setup["admin_token"])
     seller_hdr = _auth(portal_setup["seller_token"])
 
@@ -1315,7 +1315,7 @@ def test_seller_inventory_endpoint_returns_active_and_moderated_products(
     )
 
     # Fetch seller inventory via authenticated endpoint
-    inv_res = client.get("/api/v1/seller/products", headers=seller_hdr)
+    inv_res = client.get("/api/v1/seller/inventory", headers=seller_hdr)
     assert inv_res.status_code == 200
     data = inv_res.json()["data"]
     items = {item["id"]: item for item in data}

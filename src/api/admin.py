@@ -633,7 +633,7 @@ def admin_list_products(
                 price=p.price,
                 stock_quantity=p.stock_quantity,
                 is_active=p.is_active,
-                is_moderated_deactivated=getattr(p, "is_moderated_deactivated", False),
+                is_moderated_deactivated=bool(meta.is_moderated_deactivated) if meta else False,
                 category_id=category.id if category else None,
                 category_name=category.name if category else None,
             )
@@ -657,19 +657,25 @@ def admin_moderate_product(
             detail=error_detail("ERR_PRODUCT_NOT_FOUND", "Product not found."),
         )
 
+    meta = session.exec(select(ProductMetadata).where(ProductMetadata.product_id == p.id)).first()
+    if not meta:
+        meta = ProductMetadata(product_id=p.id)
+        session.add(meta)
+
     if payload.is_active is False:
-        p.is_moderated_deactivated = True
+        meta.is_moderated_deactivated = True
         p.is_active = False
     else:
-        p.is_moderated_deactivated = False
+        meta.is_moderated_deactivated = False
         p.is_active = True
     p.version += 1
     session.add(p)
+    session.add(meta)
     session.commit()
     session.refresh(p)
+    session.refresh(meta)
 
     seller = session.get(User, p.seller_id)
-    meta = session.exec(select(ProductMetadata).where(ProductMetadata.product_id == p.id)).first()
     category = session.get(Category, meta.category_id) if meta and meta.category_id else None
     return ProductAdminResponse(
         id=p.id,  # type: ignore[arg-type]
@@ -681,7 +687,7 @@ def admin_moderate_product(
         price=p.price,
         stock_quantity=p.stock_quantity,
         is_active=p.is_active,
-        is_moderated_deactivated=p.is_moderated_deactivated,
+        is_moderated_deactivated=meta.is_moderated_deactivated,
         category_id=category.id if category else None,
         category_name=category.name if category else None,
     )

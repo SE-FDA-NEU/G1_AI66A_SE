@@ -71,7 +71,7 @@
                 const u = user.data || user;
 
                 // Load products owned by this seller via authenticated seller endpoint
-                const pRes = await fetch('/api/v1/seller/products', {
+                const pRes = await fetch('/api/v1/seller/inventory', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!pRes.ok) throw new Error('Failed to load store products');

@@ -17,6 +17,7 @@ from sqlmodel import Session, select
 
 from src.models.cart_item import CartItem
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.user import User
 from src.schemas.cart import Cart, CartLine, CartLineAvailability
@@ -97,11 +98,13 @@ def get_line_availability(
     quantity: int,
     variant: ProductVariant | None = None,
     requires_variant: bool = False,
+    is_moderated: bool = False,
 ) -> CartLineAvailability:
     """Classify `quantity` of `product` against its current availability."""
     if (
         not product.is_active
-        or product.is_moderated_deactivated
+        or is_moderated
+        or getattr(product, "is_moderated_deactivated", False)
         or (variant is not None and not variant.is_active)
     ):
         return CartLineAvailability.UNAVAILABLE
@@ -221,10 +224,11 @@ def to_cart_line(
     seller: User,
     variant: ProductVariant | None = None,
     requires_variant: bool = False,
+    is_moderated: bool = False,
 ) -> CartLine:
     """Price one line from the current product row."""
     availability = get_line_availability(
-        product, cart_item.quantity, variant, requires_variant
+        product, cart_item.quantity, variant, requires_variant, is_moderated=is_moderated
     )
     current_price = variant.price if variant is not None else product.price
     baseline = cart_item.price_at_add if cart_item.price_at_add is not None else current_price
@@ -274,14 +278,15 @@ def build_cart_snapshot(session: Session, buyer_id: int) -> Cart:
     `availability`; they are never removed or shrunk silently.
     """
     rows = session.exec(
-        select(CartItem, Product, User, ProductVariant)
+        select(CartItem, Product, User, ProductVariant, ProductMetadata.is_moderated_deactivated)
         .join(Product, Product.id == CartItem.product_id)
         .join(User, User.id == Product.seller_id)
         .outerjoin(ProductVariant, ProductVariant.id == CartItem.variant_id)
+        .outerjoin(ProductMetadata, ProductMetadata.product_id == Product.id)
         .where(CartItem.buyer_id == buyer_id)
         .order_by(CartItem.id)
     ).all()
-    product_ids = {product.id for _item, product, _seller, _variant in rows}
+    product_ids = {product.id for _item, product, _seller, _variant, _is_mod in rows}
     products_with_variants = set(
         session.exec(
             select(ProductVariant.product_id).where(
@@ -290,19 +295,23 @@ def build_cart_snapshot(session: Session, buyer_id: int) -> Cart:
         ).all()
     ) if product_ids else set()
     lines = []
-    for cart_item, product, seller, variant in rows:
+    for cart_item, product, seller, variant, is_mod in rows:
         requires_variant = product.id in products_with_variants
         changes = {}
         if cart_item.price_at_add is None:
             changes["price_at_add"] = variant.price if variant else product.price
         if cart_item.is_selected and (
-            get_line_availability(product, cart_item.quantity, variant, requires_variant)
+            get_line_availability(
+                product, cart_item.quantity, variant, requires_variant, is_moderated=bool(is_mod)
+            )
             != CartLineAvailability.AVAILABLE
         ):
             changes["is_selected"] = False
         if changes:
             update_line_fields(session, cart_item, **changes)
-        line = to_cart_line(cart_item, product, seller, variant, requires_variant)
+        line = to_cart_line(
+            cart_item, product, seller, variant, requires_variant, is_moderated=bool(is_mod)
+        )
         lines.append(line)
     return Cart(
         items=lines,
@@ -333,6 +342,11 @@ class CartService:
 
         def change() -> AddItemResult:
             product = find_product(self.session, product_code)
+            meta = self.session.exec(
+                select(ProductMetadata).where(ProductMetadata.product_id == product.id)
+            ).first()
+            if meta and meta.is_moderated_deactivated:
+                raise CartError(CartErrorCode.PRODUCT_UNAVAILABLE, PRODUCT_UNAVAILABLE_MESSAGE)
             if product.seller_id == buyer_id:
                 raise CartError(
                     CartErrorCode.SELF_PURCHASE,

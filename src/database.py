@@ -363,22 +363,35 @@ def migrate_db(connection: Connection | None = None) -> None:
 
         # Backfill ProductMetadata for any existing products that lack metadata
         if "products" in tables and "product_metadata" in tables:
-            connection.execute(
-                text(
-                    "INSERT INTO product_metadata "
-                    "(product_id, category_id, rating, review_count, sales_count, created_at) "
-                    "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
-                    "FROM products p "
-                    "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+            columns = {c["name"] for c in inspector.get_columns("product_metadata")}
+            if "is_moderated_deactivated" in columns:
+                connection.execute(
+                    text(
+                        "INSERT INTO product_metadata "
+                        "(product_id, category_id, rating, review_count, "
+                        "sales_count, created_at, is_moderated_deactivated) "
+                        "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP, FALSE "
+                        "FROM products p "
+                        "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+                    )
                 )
-            )
+            else:
+                connection.execute(
+                    text(
+                        "INSERT INTO product_metadata "
+                        "(product_id, category_id, rating, review_count, sales_count, created_at) "
+                        "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
+                        "FROM products p "
+                        "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+                    )
+                )
 
-        if "products" in tables:
-            columns = {c["name"] for c in inspector.get_columns("products")}
+        if "product_metadata" in tables:
+            columns = {c["name"] for c in inspector.get_columns("product_metadata")}
             if "is_moderated_deactivated" not in columns:
                 connection.execute(
                     text(
-                        "ALTER TABLE products ADD COLUMN is_moderated_deactivated "
+                        "ALTER TABLE product_metadata ADD COLUMN is_moderated_deactivated "
                         "BOOLEAN NOT NULL DEFAULT FALSE"
                     )
                 )

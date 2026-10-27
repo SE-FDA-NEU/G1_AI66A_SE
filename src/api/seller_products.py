@@ -11,10 +11,12 @@ from src.auth import SellerUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.schemas.seller_products import (
     ProductCreate,
+    SellerInventoryListResponse,
+    SellerInventoryProduct,
     SellerProduct,
-    SellerProductListResponse,
     SellerProductResponse,
 )
 from src.services.seller_products import SellerProductError, create_product
@@ -32,24 +34,44 @@ class ProductUpdate(BaseModel):
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/seller/products", tags=["Seller products"])
+inventory_router = APIRouter(prefix="/seller/inventory", tags=["Seller inventory"])
 
 # The validation handler in src/main.py answers this route with field-level errors.
 SELLER_PRODUCTS_PATH = "/api/v1/seller/products"
 CREATE_DATABASE_ERROR_MESSAGE = "Unable to create the product right now. Please try again later."
 
 
-@router.get("", response_model=SellerProductListResponse)
-def list_seller_products(
+@inventory_router.get("", response_model=SellerInventoryListResponse)
+def list_seller_inventory(
     seller: SellerUser,
     session: SessionDep,
-) -> SellerProductListResponse:
-    """List all products owned by the authenticated seller including active and inactive."""
-    products = session.exec(
-        select(Product).where(Product.seller_id == seller.id).order_by(Product.id.desc())
+) -> SellerInventoryListResponse:
+    """List products owned by authenticated seller with moderation status."""
+    results = session.exec(
+        select(Product, ProductMetadata.is_moderated_deactivated)
+        .outerjoin(ProductMetadata, ProductMetadata.product_id == Product.id)
+        .where(Product.seller_id == seller.id)
+        .order_by(Product.id.desc())
     ).all()
-    return SellerProductListResponse(
-        data=[SellerProduct.model_validate(p, from_attributes=True) for p in products]
-    )
+    items = []
+    for prod, is_mod in results:
+        items.append(
+            SellerInventoryProduct(
+                id=prod.id,
+                code=prod.code,
+                seller_id=prod.seller_id,
+                name=prod.name,
+                description=prod.description or "",
+                price=prod.price,
+                stock_quantity=prod.stock_quantity,
+                reserved_stock=prod.reserved_stock,
+                image_url=prod.image_url,
+                is_active=prod.is_active,
+                is_moderated_deactivated=bool(is_mod),
+                version=prod.version,
+            )
+        )
+    return SellerInventoryListResponse(data=items)
 
 
 @router.post(
@@ -125,7 +147,11 @@ def update_seller_product(
         product.stock_quantity = body.stock_quantity
     if body.image_url is not None:
         product.image_url = body.image_url
-    if product.is_moderated_deactivated:
+    meta = session.exec(
+        select(ProductMetadata).where(ProductMetadata.product_id == product.id)
+    ).first()
+    is_moderated = meta.is_moderated_deactivated if meta else False
+    if is_moderated:
         if body.is_active is True:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

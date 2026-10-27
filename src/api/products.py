@@ -142,7 +142,10 @@ def get_product(
             .where(
                 Product.code == product_code,
                 Product.is_active.is_(True),
-                Product.is_moderated_deactivated.is_(False),
+                or_(
+                    ProductMetadata.is_moderated_deactivated.is_(False),
+                    ProductMetadata.is_moderated_deactivated.is_(None),
+                ),
             )
         ).first()
         all_variants = (
@@ -252,7 +255,10 @@ def list_products(
         # Base filter: active products
         filters = [
             Product.is_active.is_(True),
-            Product.is_moderated_deactivated.is_(False),
+            or_(
+                ProductMetadata.is_moderated_deactivated.is_(False),
+                ProductMetadata.is_moderated_deactivated.is_(None),
+            ),
         ]
 
         # Stock availability filter
