@@ -19,6 +19,7 @@ class AddCartItemRequest(BaseModel):
     """Body of `POST /api/v1/cart/items`."""
 
     product_code: str = Field(min_length=1, max_length=PRODUCT_CODE_MAX_LENGTH)
+    variant_id: StrictInt | None = Field(default=None, gt=0)
     # StrictInt refuses true, 1.5 and "2"; zero and negatives are left to the service.
     quantity: StrictInt
 
@@ -44,6 +45,8 @@ class CartLine(BaseModel):
     price_at_add: int
     price_changed: bool
     product_id: int
+    variant_id: int | None = None
+    variant_name: str | None = None
     product_code: str
     name: str
     image_url: str | None
