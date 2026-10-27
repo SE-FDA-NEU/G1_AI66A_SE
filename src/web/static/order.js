@@ -79,6 +79,8 @@ const elements = {
   mapBtnSat: document.getElementById("map-btn-sat"),
   mapViewport: document.getElementById("delivery-map-viewport"),
   mapTargetLabel: document.getElementById("map-target-label"),
+  orderSwitcherWrap: document.getElementById("order-switcher-wrap"),
+  orderSelect: document.getElementById("order-select"),
   // Badges & Escrow
   badgePaymentStatus: document.getElementById("badge-payment-status"),
   badgeEscrowStatus: document.getElementById("badge-escrow-status"),
@@ -114,7 +116,16 @@ function getCurrentUser() {
   const token = getToken();
   if (!token) return null;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    let b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const jsonStr = decodeURIComponent(
+      Array.prototype.map
+        .call(atob(b64), function (c) {
+          return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+        })
+        .join("")
+    );
+    const payload = JSON.parse(jsonStr);
     return { id: Number(payload.sub), role: payload.role };
   } catch {
     return null;
@@ -617,8 +628,9 @@ window.addEventListener("load", () => {
   }
 });
 
-async function loadOrder() {
-  const id = getOrderId();
+async function loadOrder(specifiedId) {
+  const id = specifiedId || getOrderId();
+  const user = getCurrentUser();
   elements.errorMsg.hidden = true;
   elements.statusMsg.hidden = false;
   elements.statusMsg.textContent = "Loading order details...";
@@ -626,29 +638,51 @@ async function loadOrder() {
 
   try {
     let payload = null;
+    let availableOrders = [];
+
+    if (user && user.role === "buyer") {
+      try {
+        const listPayload = await request("/api/v1/orders");
+        if (Array.isArray(listPayload)) {
+          availableOrders = listPayload.map((o) => o.data);
+        }
+      } catch (_) {}
+    } else if (user && user.role === "seller") {
+      try {
+        const soPayload = await request("/api/v1/seller/orders?limit=50");
+        if (soPayload && Array.isArray(soPayload.data)) {
+          availableOrders = soPayload.data.map((so) => ({
+            id: so.order_id,
+            total_amount: so.items.reduce((s, it) => s + it.total_price, 0),
+            status: so.status,
+          }));
+        }
+      } catch (_) {}
+    }
+
     if (id) {
       payload = await request(`/api/v1/orders/${encodeURIComponent(id)}`);
     } else {
-      const user = getCurrentUser();
-      if (user && user.role === "seller") {
-        window.location.replace("/seller/orders");
-        return;
-      }
-      const listPayload = await request("/api/v1/orders");
-      if (!listPayload || !listPayload.length) {
+      if (availableOrders.length > 0) {
+        const targetId = availableOrders[0].id;
+        payload = await request(`/api/v1/orders/${encodeURIComponent(targetId)}`);
+        history.replaceState(null, "", `/order/${targetId}`);
+      } else {
+        if (user && user.role === "seller") {
+          window.location.replace("/seller/orders");
+          return;
+        }
         elements.statusMsg.hidden = true;
         elements.errorMsg.hidden = false;
         elements.errorMsg.textContent = "You do not have any orders yet. Start shopping to place an order!";
         return;
       }
-      payload = listPayload[0];
-      if (payload && payload.data && payload.data.id) {
-        history.replaceState(null, "", `/order/${payload.data.id}`);
-      }
     }
-    if (!payload) return;
+
+    if (!payload || !payload.data) return;
     elements.statusMsg.hidden = true;
     renderOrder(payload.data);
+    updateOrderSwitcher(availableOrders, payload.data.id);
     startPolling(payload.data.id);
   } catch (err) {
     elements.statusMsg.hidden = true;
@@ -656,6 +690,33 @@ async function loadOrder() {
     elements.errorMsg.textContent = err.message;
     elements.retryBtn.hidden = false;
   }
+}
+
+function updateOrderSwitcher(orders, currentId) {
+  if (!elements.orderSwitcherWrap || !elements.orderSelect) return;
+  if (!orders || orders.length <= 1) {
+    elements.orderSwitcherWrap.hidden = true;
+    return;
+  }
+  elements.orderSelect.replaceChildren();
+  const seen = new Set();
+  orders.forEach((o) => {
+    if (seen.has(o.id)) return;
+    seen.add(o.id);
+    const opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = `Order #${o.id} — ${money(o.total_amount)} (${o.status.replace("_", " ")})`;
+    if (String(o.id) === String(currentId)) {
+      opt.selected = true;
+    }
+    elements.orderSelect.appendChild(opt);
+  });
+  elements.orderSwitcherWrap.hidden = false;
+  elements.orderSelect.onchange = (e) => {
+    const nextId = e.target.value;
+    history.pushState(null, "", `/order/${nextId}`);
+    loadOrder(nextId);
+  };
 }
 
 async function handleAction(newStatus, confirmPrompt, extraData = {}) {
