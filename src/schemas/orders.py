@@ -55,6 +55,10 @@ class OrderData(BaseModel):
     payment_status: str = "PAID"
     escrow_status: str = "HELD"
     created_at: datetime
+    tracking_number: str | None = None
+    shipped_at: datetime | None = None
+    delivered_at: datetime | None = None
+    completed_at: datetime | None = None
     items: list[OrderLine]
 
 

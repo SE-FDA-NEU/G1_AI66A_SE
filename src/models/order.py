@@ -39,6 +39,14 @@ class Order(SQLModel, table=True):
 
     phone_number: str = Field(max_length=20)
 
+    tracking_number: str | None = Field(default=None, max_length=100)
+
+    shipped_at: datetime | None = None
+
+    delivered_at: datetime | None = None
+
+    completed_at: datetime | None = None
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC)
     )

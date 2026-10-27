@@ -384,6 +384,8 @@ function renderCart(cart) {
   if (cart.items.length === 0) {
     elements.lines.replaceChildren();
     elements.emptyTotal.textContent = formatPrice(cart.cart_total);
+    const note = document.getElementById("recent-order-note");
+    if (note) note.hidden = false;
     showState("empty", "Your cart is empty.");
     return;
   }
@@ -512,4 +514,30 @@ elements.logout.addEventListener("click", () => {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.location.assign("/products");
 });
+
+function getUserFromToken() {
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return { id: Number(payload.sub), role: payload.role };
+  } catch {
+    return null;
+  }
+}
+
+function configureNavigation() {
+  const user = getUserFromToken();
+  const myOrders = document.getElementById("my-orders-link");
+  const sellerOrders = document.getElementById("seller-orders-link");
+  if (user && user.role === "seller") {
+    if (myOrders) myOrders.hidden = true;
+    if (sellerOrders) sellerOrders.hidden = false;
+  } else {
+    if (myOrders) myOrders.hidden = !user;
+    if (sellerOrders) sellerOrders.hidden = true;
+  }
+}
+
+configureNavigation();
 loadCart();

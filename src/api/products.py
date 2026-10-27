@@ -204,8 +204,7 @@ def list_products(
             status_code=422,
             detail=error_detail(
                 "ERR_VALIDATION",
-                f"Invalid sort option '{sort}'. Allowed options: "
-                f"{', '.join(sorted(ALLOWED_SORTS))}.",
+                f"Invalid sort option '{sort}'. Allowed options: {allowed_str}.",
             ),
         )
 

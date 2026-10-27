@@ -360,9 +360,9 @@ def test_sort_rating_desc(client: TestClient, sample_catalog):
 def test_pagination_returns_total_items_total_pages_current_page(
     client: TestClient, sample_catalog
 ):
-    """
-    API metadata conforms to US11 specification containing total_items, total_pages,
-    current_page.
+    """API metadata conforms to US11 specification
+
+    containing total_items, total_pages, current_page.
     """
     res = client.get("/api/v1/products?limit=2&page=2&sort=price_asc")
     assert res.status_code == 200

@@ -1,373 +1,857 @@
-/**
- * Order Tracking & Return/Refund Page Logic
- */
+"use strict";
 
-(function () {
-  "use strict";
+const money = (n) =>
+  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(n);
 
-  const token = localStorage.getItem("token");
-  const pathParts = window.location.pathname.split("/").filter(Boolean);
-  const orderId = pathParts[pathParts.length - 1];
+const formatDate = (isoStr) => {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  return d.toLocaleDateString("vi-VN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
-  const statusEl = document.getElementById("global-status");
-  const messageEl = document.getElementById("global-message");
-  const contentEl = document.getElementById("order-content");
+const formatMetricDate = (isoStr) => {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
 
-  const orderIdLabel = document.getElementById("order-id-label");
-  const orderDateLabel = document.getElementById("order-date-label");
-  const badgeOrderStatus = document.getElementById("badge-order-status");
-  const badgePaymentStatus = document.getElementById("badge-payment-status");
-  const badgeEscrowStatus = document.getElementById("badge-escrow-status");
+const statusNames = {
+  PENDING: "Order Placed",
+  CONFIRMED: "In Production",
+  PROCESSING: "In Production",
+  CANCELLATION_REQUESTED: "Cancellation Requested",
+  SHIPPED: "Ocean Transit",
+  DELIVERED: "Shipping Final Mile",
+  COMPLETED: "Delivered",
+  CANCELLED: "Order Cancelled",
+  RETURN_REQUESTED: "Return Requested",
+  RETURNED_REFUNDED: "Returned and Refunded",
+};
 
-  const recipientNameEl = document.getElementById("info-recipient-name");
-  const recipientPhoneEl = document.getElementById("info-recipient-phone");
-  const deliveryAddressEl = document.getElementById("info-delivery-address");
-  const itemsTableBody = document.getElementById("items-table-body");
-  const orderTotalEl = document.getElementById("order-total-amount");
+const elements = {
+  title: document.getElementById("order-title"),
+  statusBadge: document.getElementById("order-status-badge"),
+  liveIndicator: document.getElementById("live-indicator"),
+  meta: document.getElementById("order-meta"),
+  statusMsg: document.getElementById("status-message"),
+  errorMsg: document.getElementById("error-message"),
+  milestonesCard: document.getElementById("milestones-card"),
+  actionsCard: document.getElementById("actions-card"),
+  actionHint: document.getElementById("action-hint"),
+  // Buyer action buttons
+  cancelBtn: document.getElementById("cancel-btn"),
+  reqCancelBtn: document.getElementById("req-cancel-btn"),
+  confirmDeliveryBtn: document.getElementById("confirm-delivery-btn"),
+  // Seller action buttons
+  sellerConfirmBtn: document.getElementById("seller-confirm-btn"),
+  sellerShipBtn: document.getElementById("seller-ship-btn"),
+  sellerDeliverBtn: document.getElementById("seller-deliver-btn"),
+  sellerApproveCancelBtn: document.getElementById("seller-approve-cancel-btn"),
+  sellerRejectCancelBtn: document.getElementById("seller-reject-cancel-btn"),
+  sellerCancelBtn: document.getElementById("seller-cancel-btn"),
+  sellerOrdersLink: document.getElementById("seller-orders-link"),
+  myOrdersLink: document.getElementById("my-orders-link"),
+  detailsCard: document.getElementById("details-card"),
+  recipientName: document.getElementById("recipient-name"),
+  phoneNumber: document.getElementById("phone-number"),
+  deliveryAddress: document.getElementById("delivery-address"),
+  itemsCard: document.getElementById("items-card"),
+  itemsList: document.getElementById("items-list"),
+  orderTotal: document.getElementById("order-total"),
+  retryBtn: document.getElementById("retry-btn"),
+  trackingInfo: document.getElementById("tracking-info"),
+  trackingNumberVal: document.getElementById("tracking-number-val"),
+  // New Metric Summary & Status Elements
+  summaryMetricsBar: document.getElementById("summary-metrics-bar"),
+  orderPlacedVal: document.getElementById("order-placed-val"),
+  orderTotalVal: document.getElementById("order-total-val"),
+  orderShipToVal: document.getElementById("order-ship-to-val"),
+  orderIdVal: document.getElementById("order-id-val"),
+  statusHeadlineName: document.getElementById("status-headline-name"),
+  estDeliveryVal: document.getElementById("est-delivery-val"),
+  stepperProgressBar: document.getElementById("stepper-progress-bar"),
+  mapBtnVector: document.getElementById("map-btn-vector"),
+  mapBtnSat: document.getElementById("map-btn-sat"),
+  mapViewport: document.getElementById("delivery-map-viewport"),
+  mapTargetLabel: document.getElementById("map-target-label"),
+  // Badges & Escrow
+  badgePaymentStatus: document.getElementById("badge-payment-status"),
+  badgeEscrowStatus: document.getElementById("badge-escrow-status"),
+  escrowNotice: document.getElementById("escrow-paused-notice"),
+  // Return / Refund elements
+  returnStatusCard: document.getElementById("return-status-card"),
+  returnReqId: document.getElementById("return-req-id"),
+  returnReqDate: document.getElementById("return-req-date"),
+  badgeReturnStatus: document.getElementById("badge-return-status"),
+  returnReqReason: document.getElementById("return-req-reason"),
+  returnReqEvidence: document.getElementById("return-req-evidence"),
+  returnResolutionDetails: document.getElementById("return-resolution-details"),
+  returnReqDecisionNotes: document.getElementById("return-req-decision-notes"),
+  returnReqRestockStatus: document.getElementById("return-req-restock-status"),
+  reviewerPanel: document.getElementById("reviewer-decision-panel"),
+  btnApproveReturn: document.getElementById("btn-approve-return"),
+  btnRejectReturn: document.getElementById("btn-reject-return"),
+  decisionNotesInput: document.getElementById("decision-notes-input"),
+  decisionRestockCheckbox: document.getElementById("decision-restock-checkbox"),
+  buyerReturnFormCard: document.getElementById("buyer-return-form-card"),
+  buyerReturnForm: document.getElementById("buyer-return-form"),
+  returnReasonInput: document.getElementById("return-reason-input"),
+  returnEvidenceInput: document.getElementById("return-evidence-input"),
+};
 
-  const escrowNoticeEl = document.getElementById("escrow-paused-notice");
-  const returnStatusCard = document.getElementById("return-status-card");
-  const returnReqIdEl = document.getElementById("return-req-id");
-  const returnReqDateEl = document.getElementById("return-req-date");
-  const badgeReturnStatus = document.getElementById("badge-return-status");
-  const returnReqReasonEl = document.getElementById("return-req-reason");
-  const returnReqEvidenceEl = document.getElementById("return-req-evidence");
-  const returnResolutionDetails = document.getElementById("return-resolution-details");
-  const returnDecisionNotesEl = document.getElementById("return-req-decision-notes");
-  const returnRestockStatusEl = document.getElementById("return-req-restock-status");
+let currentOrder = null;
 
-  const reviewerPanel = document.getElementById("reviewer-decision-panel");
-  const btnApprove = document.getElementById("btn-approve-return");
-  const btnReject = document.getElementById("btn-reject-return");
-  const decisionNotesInput = document.getElementById("decision-notes-input");
-  const decisionRestockCheckbox = document.getElementById("decision-restock-checkbox");
+function getToken() {
+  return localStorage.getItem("access_token") || localStorage.getItem("token");
+}
 
-  const buyerReturnFormCard = document.getElementById("buyer-return-form-card");
-  const buyerReturnForm = document.getElementById("buyer-return-form");
-  const returnReasonInput = document.getElementById("return-reason-input");
-  const returnEvidenceInput = document.getElementById("return-evidence-input");
-
-  let currentOrder = null;
-  let activeReturnRequest = null;
-  let currentUser = null;
-
-  function showMessage(text, isSuccess) {
-    if (!text) {
-      messageEl.classList.add("hidden");
-      messageEl.textContent = "";
-      return;
-    }
-    messageEl.textContent = text;
-    messageEl.className = isSuccess ? "notice-box notice-success" : "notice-box notice-error";
-    messageEl.classList.remove("hidden");
-  }
-
-  function formatCurrency(amount) {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(amount);
-  }
-
-  function formatDate(isoString) {
-    if (!isoString) return "-";
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return isoString;
-    }
-  }
-
-  function setBadge(el, text, type) {
-    el.textContent = text;
-    el.className = "badge";
-    if (type === "success") el.classList.add("badge-success");
-    else if (type === "warning") el.classList.add("badge-warning");
-    else if (type === "danger") el.classList.add("badge-danger");
-    else if (type === "purple") el.classList.add("badge-purple");
-    else el.classList.add("badge-info");
-  }
-
-  async function fetchCurrentUser() {
-    if (!token) return null;
-    try {
-      const res = await fetch("/api/v1/auth/me", {
-        headers: { Authorization: "Bearer " + token },
-      });
-      if (res.ok) {
-        const body = await res.json();
-        return body.data;
-      }
-    } catch {
-      // Ignore auth fetch failure
-    }
+function getCurrentUser() {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return { id: Number(payload.sub), role: payload.role };
+  } catch {
     return null;
   }
+}
 
-  async function loadOrder() {
-    if (!token) {
-      statusEl.textContent = "Please log in to view this order.";
-      const authLink = document.getElementById("nav-auth-link");
-      if (authLink) {
-        authLink.href = "/login?return_to=" + encodeURIComponent(window.location.pathname);
-      }
-      return;
+function getOrderId() {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last === "orders" || last === "order" ? null : last;
+}
+
+async function request(url, options = {}) {
+  const token = getToken();
+  if (!token) {
+    window.location.replace(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
+    return null;
+  }
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new Error("Network error. Please check your connection and retry.");
+  }
+  if (response.status === 401) {
+    localStorage.removeItem("access_token");
+    window.location.replace(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
+    return null;
+  }
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "Failed to complete request.");
+  }
+  return payload;
+}
+
+function updateStepper(order) {
+  const status = order.status;
+  const steps = [
+    { id: "step-ordered", line: null, dateId: "step-ordered-date", date: order.created_at },
+    { id: "step-confirmed", line: 0, dateId: "step-confirmed-date", date: null },
+    { id: "step-shipped", line: 1, dateId: "step-shipped-date", date: order.shipped_at },
+    { id: "step-delivered", line: 2, dateId: "step-delivered-date", date: order.delivered_at },
+    { id: "step-completed", line: 3, dateId: "step-completed-date", date: order.completed_at },
+  ];
+
+  const statusWeights = {
+    PENDING: 1,
+    CONFIRMED: 2,
+    PROCESSING: 2,
+    CANCELLATION_REQUESTED: 2,
+    SHIPPED: 3,
+    DELIVERED: 4,
+    COMPLETED: 5,
+    CANCELLED: 0,
+  };
+
+  const progressPercent = {
+    0: 0,
+    1: 0,
+    2: 25,
+    3: 50,
+    4: 75,
+    5: 100,
+  };
+
+  const currentWeight = statusWeights[status] || 1;
+
+  steps.forEach((step, index) => {
+    const el = document.getElementById(step.id);
+    if (!el) return;
+    el.classList.remove("active", "done");
+    const stepNum = index + 1;
+    if (status === "CANCELLED") {
+      // no steps marked active
+    } else if (stepNum < currentWeight) {
+      el.classList.add("done");
+    } else if (stepNum === currentWeight) {
+      el.classList.add("active");
     }
 
-    statusEl.textContent = "Loading order details...";
-    currentUser = await fetchCurrentUser();
+    if (step.date) {
+      const dateEl = document.getElementById(step.dateId);
+      if (dateEl) dateEl.textContent = formatMetricDate(step.date);
+    }
+  });
 
+  if (elements.stepperProgressBar) {
+    const pct = status === "CANCELLED" ? 0 : (progressPercent[currentWeight] ?? 0);
+    elements.stepperProgressBar.style.width = `${pct}%`;
+  }
+
+  if (order.tracking_number) {
+    elements.trackingInfo.hidden = false;
+    elements.trackingNumberVal.textContent = order.tracking_number;
+  } else {
+    elements.trackingInfo.hidden = true;
+  }
+}
+
+function updateActions(order) {
+  const user = getCurrentUser();
+  const isSeller = Boolean(user && user.role === "seller");
+
+  if (elements.sellerOrdersLink) {
+    elements.sellerOrdersLink.hidden = !isSeller;
+  }
+  if (elements.myOrdersLink) {
+    elements.myOrdersLink.hidden = isSeller;
+  }
+
+  // Reset all buttons
+  elements.cancelBtn.hidden = true;
+  elements.reqCancelBtn.hidden = true;
+  elements.confirmDeliveryBtn.hidden = true;
+
+  elements.sellerConfirmBtn.hidden = true;
+  elements.sellerShipBtn.hidden = true;
+  elements.sellerDeliverBtn.hidden = true;
+  elements.sellerApproveCancelBtn.hidden = true;
+  elements.sellerRejectCancelBtn.hidden = true;
+  elements.sellerCancelBtn.hidden = true;
+  elements.actionHint.textContent = "";
+
+  const st = order.status;
+
+  if (isSeller) {
+    // Seller action controls
+    if (st === "PENDING") {
+      elements.actionsCard.hidden = false;
+      elements.sellerConfirmBtn.hidden = false;
+      elements.sellerCancelBtn.hidden = false;
+      elements.actionHint.textContent = "New buyer order. Review and confirm to begin order fulfillment.";
+    } else if (st === "CONFIRMED" || st === "PROCESSING") {
+      elements.actionsCard.hidden = false;
+      elements.sellerShipBtn.hidden = false;
+      elements.sellerCancelBtn.hidden = false;
+      elements.actionHint.textContent = "Order is confirmed. When packaged, enter tracking number to ship.";
+    } else if (st === "CANCELLATION_REQUESTED") {
+      elements.actionsCard.hidden = false;
+      elements.sellerApproveCancelBtn.hidden = false;
+      elements.sellerRejectCancelBtn.hidden = false;
+      elements.actionHint.textContent = "Buyer requested cancellation. Approve to cancel and restore stock, or reject.";
+    } else if (st === "SHIPPED") {
+      elements.actionsCard.hidden = false;
+      elements.sellerDeliverBtn.hidden = false;
+      elements.actionHint.textContent = "Package is in transit. Mark as delivered once carrier confirms delivery.";
+    } else {
+      elements.actionsCard.hidden = true;
+    }
+  } else {
+    // Buyer action controls: clean, minimal, only show what the buyer is strictly authorized to perform
+    if (st === "PENDING") {
+      elements.actionsCard.hidden = false;
+      elements.cancelBtn.hidden = false;
+      elements.actionHint.textContent = "Your order is pending confirmation. You may cancel it if you changed your mind.";
+    } else if (st === "CONFIRMED" || st === "PROCESSING") {
+      elements.actionsCard.hidden = false;
+      elements.reqCancelBtn.hidden = false;
+      elements.actionHint.textContent = "Your order is being prepared. You can request a cancellation from the seller.";
+    } else if (st === "DELIVERED") {
+      elements.actionsCard.hidden = false;
+      elements.confirmDeliveryBtn.hidden = false;
+      elements.actionHint.textContent = "Your package has been delivered! Please inspect the items and confirm receipt below.";
+    } else {
+      elements.actionsCard.hidden = true;
+    }
+  }
+}
+
+let pollTimer = null;
+
+function startPolling(orderId) {
+  if (pollTimer) clearInterval(pollTimer);
+  if (!orderId) return;
+
+  pollTimer = setInterval(async () => {
     try {
-      const orderRes = await fetch("/api/v1/orders/" + encodeURIComponent(orderId), {
-        headers: { Authorization: "Bearer " + token },
-      });
-
-      if (!orderRes.ok) {
-        const err = await orderRes.json().catch(() => ({}));
-        statusEl.textContent = "";
-        showMessage(err.error ? err.error.message : "Unable to load order details.", false);
-        return;
+      const payload = await request(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+      if (payload && payload.data) {
+        const updated = payload.data;
+        if (
+          !currentOrder ||
+          currentOrder.status !== updated.status ||
+          currentOrder.tracking_number !== updated.tracking_number
+        ) {
+          renderOrder(updated);
+        }
+        if (["COMPLETED", "CANCELLED"].includes(updated.status)) {
+          clearInterval(pollTimer);
+          if (elements.liveIndicator) elements.liveIndicator.hidden = true;
+        }
       }
+    } catch (_) {}
+  }, 4000);
+}
 
-      const orderData = await orderRes.json();
-      currentOrder = orderData.data;
+function renderOrder(order) {
+  currentOrder = order;
 
-      // Also fetch return requests
-      const returnsRes = await fetch("/api/v1/orders/" + encodeURIComponent(orderId) + "/returns", {
-        headers: { Authorization: "Bearer " + token },
-      });
+  if (elements.title) elements.title.textContent = "ORDER TRACKING PAGE";
+  if (elements.statusBadge) {
+    elements.statusBadge.textContent = order.status.replace("_", " ");
+    elements.statusBadge.className = `badge ${order.status.toLowerCase()}`;
+  }
 
-      let returnRequests = [];
-      if (returnsRes.ok) {
-        const returnsData = await returnsRes.json();
-        returnRequests = returnsData.data || [];
-      }
+  if (elements.liveIndicator) {
+    elements.liveIndicator.hidden = ["COMPLETED", "CANCELLED"].includes(order.status);
+  }
 
-      renderOrder(currentOrder, returnRequests);
-      statusEl.textContent = "";
-      contentEl.classList.remove("hidden");
-    } catch (err) {
-      statusEl.textContent = "";
-      showMessage("Unable to connect to the order service. Please check your connection.", false);
+  // Populate 4-column summary metric bar (exact reference image layout)
+  if (elements.summaryMetricsBar) elements.summaryMetricsBar.hidden = false;
+  if (elements.orderPlacedVal) elements.orderPlacedVal.textContent = formatMetricDate(order.created_at);
+  if (elements.orderTotalVal) elements.orderTotalVal.textContent = money(order.total_amount);
+  if (elements.orderShipToVal) elements.orderShipToVal.textContent = order.recipient_name || "—";
+  if (elements.orderIdVal) elements.orderIdVal.textContent = `#${order.id}`;
+
+  // Populate Status Headline
+  if (elements.statusHeadlineName) {
+    elements.statusHeadlineName.textContent = statusNames[order.status] || order.status;
+    if (order.status === "CANCELLED") {
+      elements.statusHeadlineName.style.color = "#dc2626";
+    } else {
+      elements.statusHeadlineName.style.color = "#16a34a";
     }
   }
 
-  function renderOrder(order, returnRequests) {
-    orderIdLabel.textContent = String(order.id);
-    orderDateLabel.textContent = formatDate(order.created_at);
+  // Populate Estimated Delivery
+  if (elements.estDeliveryVal) {
+    if (order.status === "COMPLETED" && order.completed_at) {
+      elements.estDeliveryVal.textContent = `Completed on ${formatMetricDate(order.completed_at)}`;
+    } else if (order.status === "DELIVERED" && order.delivered_at) {
+      elements.estDeliveryVal.textContent = `Delivered on ${formatMetricDate(order.delivered_at)}`;
+    } else if (order.status === "SHIPPED") {
+      elements.estDeliveryVal.textContent = "Arriving in 1 - 3 business days";
+    } else if (order.status === "CANCELLED") {
+      elements.estDeliveryVal.textContent = "Order cancelled";
+    } else {
+      elements.estDeliveryVal.textContent = "Estimated in 2 - 4 business days";
+    }
+  }
 
-    // Status badges
-    let statusType = "info";
-    if (order.status === "DELIVERED" || order.status === "COMPLETED") statusType = "success";
-    else if (order.status === "RETURN_REQUESTED") statusType = "warning";
-    else if (order.status === "RETURNED_REFUNDED") statusType = "purple";
-    else if (order.status === "CANCELLED") statusType = "danger";
-    setBadge(badgeOrderStatus, order.status.replace("_", " "), statusType);
+  // Recipient details
+  elements.recipientName.textContent = order.recipient_name;
+  elements.phoneNumber.textContent = order.phone_number;
+  elements.deliveryAddress.textContent = order.delivery_address;
+  elements.orderTotal.textContent = money(order.total_amount);
 
-    const paymentType = order.payment_status === "REFUNDED" ? "purple" : "success";
-    setBadge(badgePaymentStatus, "PAYMENT: " + (order.payment_status || "PAID"), paymentType);
+  // Map destination pin label
+  if (elements.mapTargetLabel && order.delivery_address) {
+    const parts = order.delivery_address.split(",").map((s) => s.trim()).filter(Boolean);
+    elements.mapTargetLabel.textContent = parts[parts.length - 1] || "Destination";
+  }
 
-    let escrowType = "info";
-    if (order.escrow_status === "PAUSED") escrowType = "warning";
-    else if (order.escrow_status === "RELEASED") escrowType = "success";
-    else if (order.escrow_status === "REFUNDED") escrowType = "purple";
-    setBadge(badgeEscrowStatus, "ESCROW: " + (order.escrow_status || "HELD"), escrowType);
+  // Table of items (DOM APIs + textContent to prevent stored XSS)
+  const table = document.createElement("table");
+  table.className = "items-table";
 
-    recipientNameEl.textContent = order.recipient_name || "-";
-    recipientPhoneEl.textContent = order.phone_number ? "Phone: " + order.phone_number : "";
-    deliveryAddressEl.textContent = order.delivery_address || "-";
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  const columns = [
+    { title: "Product", align: "left" },
+    { title: "Code", align: "left" },
+    { title: "Unit Price", align: "left" },
+    { title: "Quantity", align: "left" },
+    { title: "Total", align: "right" },
+  ];
+  columns.forEach((col) => {
+    const th = document.createElement("th");
+    th.textContent = col.title;
+    if (col.align === "right") {
+      th.style.textAlign = "right";
+    }
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
 
-    // Safely render table items using DOM APIs without innerHTML interpolation
-    while (itemsTableBody.firstChild) {
-      itemsTableBody.removeChild(itemsTableBody.firstChild);
+  const tbody = document.createElement("tbody");
+  (order.items || []).forEach((item) => {
+    const tr = document.createElement("tr");
+
+    const tdName = document.createElement("td");
+    const strongName = document.createElement("strong");
+    const nameStrong = strongName;
+    nameStrong.textContent = item.product_name;
+    strongName.textContent = item.product_name;
+    tdName.appendChild(strongName);
+    tr.appendChild(tdName);
+
+    const tdCode = document.createElement("td");
+    const codeCell = tdCode;
+    const codeEl = document.createElement("code");
+    codeEl.textContent = item.product_code;
+    codeCell.textContent = item.product_code;
+    codeCell.appendChild(codeEl);
+    tr.appendChild(tdCode);
+
+    const tdPrice = document.createElement("td");
+    tdPrice.textContent = money(item.unit_price);
+    tr.appendChild(tdPrice);
+
+    const tdQty = document.createElement("td");
+    tdQty.textContent = item.quantity;
+    tr.appendChild(tdQty);
+
+    const tdTotal = document.createElement("td");
+    tdTotal.className = "money";
+    tdTotal.textContent = money(item.line_total);
+    tr.appendChild(tdTotal);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  elements.itemsList.replaceChildren(table);
+
+  // Payment and Escrow badges
+  if (elements.badgePaymentStatus) {
+    elements.badgePaymentStatus.hidden = false;
+    elements.badgePaymentStatus.textContent = "Payment: " + (order.payment_status || "PAID");
+    elements.badgePaymentStatus.className = "badge " + (order.payment_status === "REFUNDED" ? "badge-purple" : "badge-success");
+  }
+  if (elements.badgeEscrowStatus) {
+    elements.badgeEscrowStatus.hidden = false;
+    elements.badgeEscrowStatus.textContent = "Escrow: " + (order.escrow_status || "HELD");
+    elements.badgeEscrowStatus.className = "badge " + (
+      order.escrow_status === "PAUSED" ? "badge-warning" :
+      order.escrow_status === "REFUNDED" ? "badge-purple" : "badge-info"
+    );
+  }
+  if (elements.escrowNotice) {
+    elements.escrowNotice.hidden = order.escrow_status !== "PAUSED";
+  }
+
+  loadReturnRequests(order);
+  updateStepper(order);
+  updateActions(order);
+  elements.milestonesCard.hidden = false;
+  elements.detailsCard.hidden = false;
+  elements.itemsCard.hidden = false;
+
+  // Real Leaflet Interactive Map
+  initRealMap(order.delivery_address, order.recipient_name);
+}
+
+let mapInstance = null;
+let vectorTileLayer = null;
+let satTileLayer = null;
+let markerInstance = null;
+
+function initRealMap(address, recipientName) {
+  if (typeof L === "undefined") {
+    // If Leaflet is still loading or offline, fallback to vector graphics preview
+    return;
+  }
+  const container = document.getElementById("leaflet-map");
+  if (!container) return;
+
+  if (!mapInstance) {
+    mapInstance = L.map("leaflet-map", {
+      center: [21.0285, 105.8542],
+      zoom: 14,
+      zoomControl: false,
+    });
+
+    L.control.zoom({ position: "bottomright" }).addTo(mapInstance);
+
+    vectorTileLayer = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
+      }
+    );
+
+    satTileLayer = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
+        maxZoom: 18,
+      }
+    );
+
+    vectorTileLayer.addTo(mapInstance);
+
+    if (elements.mapViewport) {
+      elements.mapViewport.classList.add("leaflet-loaded");
     }
 
-    if (Array.isArray(order.items)) {
-      order.items.forEach(function (item) {
-        const row = document.createElement("tr");
-
-        const nameCell = document.createElement("td");
-        const nameStrong = document.createElement("strong");
-        nameStrong.textContent = item.product_name;
-        nameCell.appendChild(nameStrong);
-        row.appendChild(nameCell);
-
-        const codeCell = document.createElement("td");
-        codeCell.textContent = item.product_code;
-        row.appendChild(codeCell);
-
-        const priceCell = document.createElement("td");
-        priceCell.className = "text-right";
-        priceCell.textContent = formatCurrency(item.unit_price);
-        row.appendChild(priceCell);
-
-        const qtyCell = document.createElement("td");
-        qtyCell.className = "text-right";
-        qtyCell.textContent = String(item.quantity);
-        row.appendChild(qtyCell);
-
-        const totalCell = document.createElement("td");
-        totalCell.className = "text-right";
-        totalCell.textContent = formatCurrency(item.line_total);
-        row.appendChild(totalCell);
-
-        itemsTableBody.appendChild(row);
+    if (elements.mapBtnVector && elements.mapBtnSat) {
+      elements.mapBtnVector.addEventListener("click", () => {
+        elements.mapBtnVector.classList.add("active");
+        elements.mapBtnSat.classList.remove("active");
+        if (mapInstance && mapInstance.hasLayer(satTileLayer)) {
+          mapInstance.removeLayer(satTileLayer);
+          vectorTileLayer.addTo(mapInstance);
+        }
+      });
+      elements.mapBtnSat.addEventListener("click", () => {
+        elements.mapBtnSat.classList.add("active");
+        elements.mapBtnVector.classList.remove("active");
+        if (mapInstance && mapInstance.hasLayer(vectorTileLayer)) {
+          mapInstance.removeLayer(vectorTileLayer);
+          satTileLayer.addTo(mapInstance);
+        }
       });
     }
 
-    orderTotalEl.textContent = formatCurrency(order.total_amount);
-
-    // Escrow paused notice
-    if (order.escrow_status === "PAUSED") {
-      escrowNoticeEl.classList.remove("hidden");
-    } else {
-      escrowNoticeEl.classList.add("hidden");
+    const expandBtn = document.getElementById("map-expand-btn");
+    if (expandBtn) {
+      expandBtn.addEventListener("click", () => {
+        const grid = document.querySelector(".shipping-and-map-grid");
+        if (grid) {
+          grid.classList.toggle("map-expanded");
+          setTimeout(() => mapInstance && mapInstance.invalidateSize(), 300);
+        }
+      });
     }
+  }
 
-    // Return request logic
+  if (address) {
+    geocodeAndPin(address, recipientName);
+  }
+}
+
+async function geocodeAndPin(address, recipientName) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`,
+      { headers: { "Accept-Language": "vi,en" } }
+    );
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      updateMapMarker(lat, lon, address, recipientName);
+      return;
+    }
+  } catch (_) {}
+
+  // Fallback to Vietnam major cities or default coordinates
+  const lower = (address || "").toLowerCase();
+  let defaultCoords = [21.0285, 105.8542]; // Hanoi
+  if (lower.includes("hồ chí minh") || lower.includes("hcm") || lower.includes("sài gòn")) {
+    defaultCoords = [10.7769, 106.7009];
+  } else if (lower.includes("đà nẵng") || lower.includes("da nang")) {
+    defaultCoords = [16.0544, 108.2022];
+  }
+  updateMapMarker(defaultCoords[0], defaultCoords[1], address, recipientName);
+}
+
+function updateMapMarker(lat, lon, address, recipientName) {
+  if (!mapInstance || typeof L === "undefined") return;
+  mapInstance.setView([lat, lon], 14);
+  setTimeout(() => mapInstance && mapInstance.invalidateSize(), 200);
+
+  const applePinIcon = L.divIcon({
+    className: "apple-map-marker-pin",
+    html: `
+      <div style="position:relative; display:flex; align-items:center; justify-content:center;">
+        <div style="position:absolute; width:18px; height:8px; background:rgba(239,68,68,0.35); border-radius:50%; bottom:-4px; filter:blur(1px);"></div>
+        <svg viewBox="0 0 24 24" fill="#ef4444" style="width:34px; height:34px; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -34],
+  });
+
+  if (markerInstance) {
+    markerInstance.setLatLng([lat, lon]);
+  } else {
+    markerInstance = L.marker([lat, lon], { icon: applePinIcon }).addTo(mapInstance);
+  }
+
+  const popupContent = document.createElement("div");
+  const strongEl = document.createElement("strong");
+  strongEl.textContent = recipientName || "Delivery Location";
+  popupContent.appendChild(strongEl);
+  popupContent.appendChild(document.createElement("br"));
+  if (address) {
+    popupContent.appendChild(document.createTextNode(address));
+  }
+  markerInstance.bindPopup(popupContent).openPopup();
+}
+
+window.addEventListener("load", () => {
+  if (currentOrder && currentOrder.delivery_address) {
+    initRealMap(currentOrder.delivery_address, currentOrder.recipient_name);
+  }
+});
+
+async function loadOrder() {
+  const id = getOrderId();
+  elements.errorMsg.hidden = true;
+  elements.statusMsg.hidden = false;
+  elements.statusMsg.textContent = "Loading order details...";
+  elements.retryBtn.hidden = true;
+
+  try {
+    let payload = null;
+    if (id) {
+      payload = await request(`/api/v1/orders/${encodeURIComponent(id)}`);
+    } else {
+      const user = getCurrentUser();
+      if (user && user.role === "seller") {
+        window.location.replace("/seller/orders");
+        return;
+      }
+      const listPayload = await request("/api/v1/orders");
+      if (!listPayload || !listPayload.length) {
+        elements.statusMsg.hidden = true;
+        elements.errorMsg.hidden = false;
+        elements.errorMsg.textContent = "You do not have any orders yet. Start shopping to place an order!";
+        return;
+      }
+      payload = listPayload[0];
+      if (payload && payload.data && payload.data.id) {
+        history.replaceState(null, "", `/order/${payload.data.id}`);
+      }
+    }
+    if (!payload) return;
+    elements.statusMsg.hidden = true;
+    renderOrder(payload.data);
+    startPolling(payload.data.id);
+  } catch (err) {
+    elements.statusMsg.hidden = true;
+    elements.errorMsg.hidden = false;
+    elements.errorMsg.textContent = err.message;
+    elements.retryBtn.hidden = false;
+  }
+}
+
+async function handleAction(newStatus, confirmPrompt, extraData = {}) {
+  if (confirmPrompt && !window.confirm(confirmPrompt)) {
+    return;
+  }
+  const id = (currentOrder && currentOrder.id) || getOrderId();
+  elements.statusMsg.hidden = false;
+  elements.statusMsg.textContent = "Updating order...";
+  elements.errorMsg.hidden = true;
+
+  try {
+    const payload = await request(`/api/v1/orders/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: newStatus, ...extraData }),
+    });
+    if (!payload) return;
+    elements.statusMsg.textContent = "Status updated successfully.";
+    renderOrder(payload.data);
+    startPolling(payload.data.id);
+    setTimeout(() => {
+      elements.statusMsg.hidden = true;
+    }, 4000);
+  } catch (err) {
+    elements.statusMsg.hidden = true;
+    elements.errorMsg.hidden = false;
+    elements.errorMsg.textContent = err.message;
+  }
+}
+
+// Buyer triggers
+elements.cancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLED", "Are you sure you want to cancel this order?")
+);
+
+elements.reqCancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLATION_REQUESTED", "Request cancellation from the seller?")
+);
+
+elements.confirmDeliveryBtn.addEventListener("click", () =>
+  handleAction("COMPLETED", "Confirm that you have received your order in good condition?")
+);
+
+// Seller triggers
+elements.sellerConfirmBtn.addEventListener("click", () =>
+  handleAction("CONFIRMED", "Confirm this order for fulfillment?")
+);
+
+elements.sellerShipBtn.addEventListener("click", () => {
+  const tracking = window.prompt("Enter carrier tracking number:", "TRK-" + Math.floor(100000 + Math.random() * 900000));
+  if (!tracking) return;
+  handleAction("SHIPPED", null, { tracking_number: tracking.trim() });
+});
+
+elements.sellerDeliverBtn.addEventListener("click", () =>
+  handleAction("DELIVERED", "Mark this order as delivered to buyer?")
+);
+
+elements.sellerApproveCancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLED", "Approve buyer cancellation? Restores item inventory to stock.")
+);
+
+elements.sellerRejectCancelBtn.addEventListener("click", () =>
+  handleAction("CONFIRMED", "Reject buyer cancellation and keep order in fulfillment?")
+);
+
+elements.sellerCancelBtn.addEventListener("click", () =>
+  handleAction("CANCELLED", "Cancel this order? Restores item inventory to stock.")
+);
+
+elements.retryBtn.addEventListener("click", loadOrder);
+
+loadOrder();
+
+let activeReturnRequest = null;
+
+async function loadReturnRequests(order) {
+  if (!order || !order.id) return;
+  const user = getCurrentUser();
+  try {
+    const res = await request(`/api/v1/orders/${encodeURIComponent(order.id)}/returns`);
+    const returnRequests = (res && res.data) ? res.data : [];
     activeReturnRequest = returnRequests.length > 0 ? returnRequests[0] : null;
 
     if (activeReturnRequest) {
-      renderReturnCard(activeReturnRequest);
-      returnStatusCard.classList.remove("hidden");
-      buyerReturnFormCard.classList.add("hidden");
-    } else {
-      returnStatusCard.classList.add("hidden");
-      if (order.status === "DELIVERED") {
-        buyerReturnFormCard.classList.remove("hidden");
-      } else {
-        buyerReturnFormCard.classList.add("hidden");
-      }
-    }
-  }
-
-  function renderReturnCard(retReq) {
-    returnReqIdEl.textContent = String(retReq.id);
-    returnReqDateEl.textContent = formatDate(retReq.created_at);
-
-    let retType = "warning";
-    if (retReq.status === "APPROVED") retType = "success";
-    else if (retReq.status === "REJECTED") retType = "danger";
-    setBadge(badgeReturnStatus, retReq.status, retType);
-
-    returnReqReasonEl.textContent = retReq.reason;
-    returnReqEvidenceEl.textContent = retReq.evidence;
-
-    if (retReq.status !== "PENDING") {
-      returnResolutionDetails.classList.remove("hidden");
-      returnDecisionNotesEl.textContent = retReq.decision_notes || "No notes provided.";
-      if (retReq.status === "APPROVED") {
-        returnRestockStatusEl.textContent = retReq.is_restockable
-          ? "Items confirmed restockable; stock quantity has been restored."
-          : "Items not restocked.";
-      } else {
-        returnRestockStatusEl.textContent = "Return request was rejected. Order returned to completion.";
-      }
-      reviewerPanel.classList.add("hidden");
-    } else {
-      returnResolutionDetails.classList.add("hidden");
-      // Check if current user is seller or admin
-      if (currentUser && (currentUser.role === "admin" || currentUser.role === "seller")) {
-        reviewerPanel.classList.remove("hidden");
-      } else {
-        reviewerPanel.classList.add("hidden");
-      }
-    }
-  }
-
-  // Handle buyer return form submission
-  if (buyerReturnForm) {
-    buyerReturnForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      showMessage("", false);
-
-      const reason = returnReasonInput.value.trim();
-      const evidence = returnEvidenceInput.value.trim();
-
-      if (!reason || !evidence) {
-        showMessage("Please enter both a reason and supporting evidence.", false);
-        return;
-      }
-
-      try {
-        const res = await fetch("/api/v1/orders/" + encodeURIComponent(orderId) + "/returns", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + token,
-          },
-          body: JSON.stringify({ reason: reason, evidence: evidence }),
-        });
-
-        const data = await res.json();
-        if (res.ok) {
-          showMessage("Return request submitted successfully. Escrow release is paused until review.", true);
-          loadOrder();
-        } else {
-          showMessage(data.error ? data.error.message : "Failed to submit return request.", false);
+      if (elements.returnStatusCard) {
+        elements.returnStatusCard.hidden = false;
+        if (elements.returnReqId) elements.returnReqId.textContent = String(activeReturnRequest.id);
+        if (elements.returnReqDate) elements.returnReqDate.textContent = formatDate(activeReturnRequest.created_at);
+        if (elements.badgeReturnStatus) {
+          elements.badgeReturnStatus.textContent = activeReturnRequest.status;
+          elements.badgeReturnStatus.className = "badge " + (
+            activeReturnRequest.status === "APPROVED" ? "badge-success" :
+            activeReturnRequest.status === "REJECTED" ? "badge-danger" : "badge-warning"
+          );
         }
-      } catch (err) {
-        showMessage("Unable to submit return request. Please check your connection.", false);
+        if (elements.returnReqReason) elements.returnReqReason.textContent = activeReturnRequest.reason;
+        if (elements.returnReqEvidence) elements.returnReqEvidence.textContent = activeReturnRequest.evidence;
+
+        const returnResolutionDetails = document.getElementById("return-resolution-details");
+        if (activeReturnRequest.status !== "PENDING") {
+          if (returnResolutionDetails) {
+            returnResolutionDetails.hidden = false;
+            if (elements.returnReqDecisionNotes) {
+              elements.returnReqDecisionNotes.textContent = activeReturnRequest.decision_notes || "No notes provided.";
+            }
+            if (elements.returnReqRestockStatus) {
+              elements.returnReqRestockStatus.textContent = activeReturnRequest.status === "APPROVED"
+                ? (activeReturnRequest.is_restockable ? "Items confirmed restockable; inventory restored." : "Items not restocked.")
+                : "Return request was rejected. Order returned to completion.";
+            }
+          }
+          if (elements.reviewerPanel) elements.reviewerPanel.hidden = true;
+        } else {
+          if (returnResolutionDetails) returnResolutionDetails.hidden = true;
+          if (elements.reviewerPanel) {
+            elements.reviewerPanel.hidden = !(user && (user.role === "admin" || user.role === "seller"));
+          }
+        }
       }
-    });
-  }
+      if (elements.buyerReturnFormCard) elements.buyerReturnFormCard.hidden = true;
+    } else {
+      if (elements.returnStatusCard) elements.returnStatusCard.hidden = true;
+      if (elements.buyerReturnFormCard) {
+        elements.buyerReturnFormCard.hidden = !(order.status === "DELIVERED" && user && user.role === "buyer");
+      }
+    }
+  } catch (_) {}
+}
 
-  // Handle reviewer decision (Approve)
-  if (btnApprove) {
-    btnApprove.addEventListener("click", function () {
-      submitDecision("APPROVE");
-    });
-  }
+if (elements.buyerReturnForm) {
+  elements.buyerReturnForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const reason = (elements.returnReasonInput && elements.returnReasonInput.value || "").trim();
+    const evidence = (elements.returnEvidenceInput && elements.returnEvidenceInput.value || "").trim();
+    if (!reason || !evidence) return;
+    const orderId = (currentOrder && currentOrder.id) || getOrderId();
+    if (!orderId) return;
 
-  // Handle reviewer decision (Reject)
-  if (btnReject) {
-    btnReject.addEventListener("click", function () {
-      submitDecision("REJECT");
-    });
-  }
-
-  async function submitDecision(action) {
-    if (!activeReturnRequest) return;
-    showMessage("", false);
-
-    const notes = decisionNotesInput.value.trim();
-    const isRestockable = decisionRestockCheckbox.checked;
+    elements.statusMsg.hidden = false;
+    elements.statusMsg.textContent = "Submitting return request...";
+    elements.errorMsg.hidden = true;
 
     try {
-      const res = await fetch("/api/v1/return-requests/" + encodeURIComponent(activeReturnRequest.id) + "/decision", {
+      const res = await request(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({
-          action: action,
-          decision_notes: notes || null,
-          is_restockable: isRestockable,
-        }),
+        body: JSON.stringify({ reason, evidence }),
       });
-
-      const data = await res.json();
-      if (res.ok) {
-        const msg = action === "APPROVE"
-          ? "Return request approved. Payment has been refunded and inventory updated."
-          : "Return request rejected. Order returned to completion.";
-        showMessage(msg, true);
+      if (res && res.data) {
+        elements.statusMsg.textContent = "Return request submitted. Escrow release paused pending review.";
         loadOrder();
-      } else {
-        showMessage(data.error ? data.error.message : "Failed to submit decision.", false);
+        setTimeout(() => { elements.statusMsg.hidden = true; }, 4000);
       }
     } catch (err) {
-      showMessage("Unable to submit decision. Please check your connection.", false);
+      elements.statusMsg.hidden = true;
+      elements.errorMsg.hidden = false;
+      elements.errorMsg.textContent = err.message;
     }
-  }
+  });
+}
 
-  document.addEventListener("DOMContentLoaded", loadOrder);
-})();
+async function handleReturnDecision(action) {
+  if (!activeReturnRequest) return;
+  const notes = (elements.decisionNotesInput && elements.decisionNotesInput.value || "").trim();
+  const restock = elements.decisionRestockCheckbox ? elements.decisionRestockCheckbox.checked : false;
+
+  elements.statusMsg.hidden = false;
+  elements.statusMsg.textContent = "Submitting decision...";
+  elements.errorMsg.hidden = true;
+
+  try {
+    const res = await request(`/api/v1/return-requests/${encodeURIComponent(activeReturnRequest.id)}/decision`, {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        decision_notes: notes || null,
+        is_restockable: action === "APPROVE" ? restock : false,
+      }),
+    });
+    if (res && res.data) {
+      elements.statusMsg.textContent = action === "APPROVE"
+        ? "Return request approved. Payment refunded and inventory updated."
+        : "Return request rejected. Order returned to completion.";
+      loadOrder();
+      setTimeout(() => { elements.statusMsg.hidden = true; }, 4000);
+    }
+  } catch (err) {
+    elements.statusMsg.hidden = true;
+    elements.errorMsg.hidden = false;
+    elements.errorMsg.textContent = err.message;
+  }
+}
+
+if (elements.btnApproveReturn) {
+  elements.btnApproveReturn.addEventListener("click", () => handleReturnDecision("APPROVE"));
+}
+if (elements.btnRejectReturn) {
+  elements.btnRejectReturn.addEventListener("click", () => handleReturnDecision("REJECT"));
+}

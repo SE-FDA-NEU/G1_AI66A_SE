@@ -33,6 +33,7 @@ ERROR_STATUS: dict[CartErrorCode, int] = {
     CartErrorCode.PRODUCT_UNAVAILABLE: status.HTTP_409_CONFLICT,
     CartErrorCode.STOCK_EXCEEDED: status.HTTP_409_CONFLICT,
     CartErrorCode.CONCURRENCY_CONFLICT: status.HTTP_409_CONFLICT,
+    CartErrorCode.SELF_PURCHASE: status.HTTP_400_BAD_REQUEST,
 }
 
 ProductCodePath = Annotated[

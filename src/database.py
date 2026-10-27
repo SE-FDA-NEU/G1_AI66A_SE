@@ -104,6 +104,12 @@ def migrate_db(connection: Connection | None = None) -> None:
                 connection.execute(
                     text("ALTER TABLE orders ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'")
                 )
+            for name in ("tracking_number",):
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(100)"))
+            for name in ("shipped_at", "delivered_at", "completed_at"):
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} DATETIME"))
             connection.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_orders_request_key "
@@ -128,6 +134,16 @@ def migrate_db(connection: Connection | None = None) -> None:
                     )
                 )
 
+            for name in ("tracking_number",):
+                if name not in columns:
+                    connection.execute(
+                        text(f"ALTER TABLE seller_orders ADD COLUMN {name} VARCHAR(100)")
+                    )
+            for name in ("shipped_at", "delivered_at"):
+                if name not in columns:
+                    connection.execute(
+                        text(f"ALTER TABLE seller_orders ADD COLUMN {name} DATETIME")
+                    )
         if "notifications" in tables:
             columns = {c["name"] for c in inspector.get_columns("notifications")}
             if "target_path" not in columns:

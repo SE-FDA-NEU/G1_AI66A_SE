@@ -23,7 +23,9 @@ router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
 STATUSES = {
     "PENDING",
+    "CONFIRMED",
     "PROCESSING",
+    "CANCELLATION_REQUESTED",
     "SHIPPED",
     "DELIVERED",
     "COMPLETED",
@@ -32,8 +34,10 @@ STATUSES = {
     "RETURNED_REFUNDED",
 }
 TRANSITIONS: dict[str, set[str]] = {
-    "PENDING": {"PROCESSING", "CANCELLED"},
-    "PROCESSING": {"SHIPPED"},
+    "PENDING": {"CONFIRMED", "PROCESSING", "CANCELLED"},
+    "CONFIRMED": {"PROCESSING", "SHIPPED", "CANCELLATION_REQUESTED", "CANCELLED"},
+    "PROCESSING": {"CONFIRMED", "SHIPPED", "CANCELLATION_REQUESTED", "CANCELLED"},
+    "CANCELLATION_REQUESTED": {"CANCELLED", "CONFIRMED", "PROCESSING"},
     "SHIPPED": {"DELIVERED", "COMPLETED"},
     "DELIVERED": {"COMPLETED"},
     "COMPLETED": set(),
@@ -59,6 +63,10 @@ class SellerOrderResponse(BaseModel):
     customer_name: str
     status: str
     ordered_at: datetime
+    tracking_number: str | None = None
+    shipped_at: datetime | None = None
+    delivered_at: datetime | None = None
+    completed_at: datetime | None = None
     items: list[SellerOrderItemResponse]
 
 
@@ -70,12 +78,15 @@ class SellerOrderListResponse(BaseModel):
 class StatusUpdateRequest(BaseModel):
     status: Literal[
         "PENDING",
+        "CONFIRMED",
         "PROCESSING",
+        "CANCELLATION_REQUESTED",
         "SHIPPED",
         "DELIVERED",
         "COMPLETED",
         "CANCELLED",
     ]
+    tracking_number: str | None = None
 
 
 class StatusUpdateResponse(BaseModel):
@@ -129,6 +140,10 @@ def _seller_order_response(
         customer_name=parent_order.recipient_name,
         status=seller_order.status,
         ordered_at=parent_order.created_at,
+        tracking_number=seller_order.tracking_number,
+        shipped_at=seller_order.shipped_at,
+        delivered_at=seller_order.delivered_at,
+        completed_at=seller_order.completed_at,
         items=items,
     )
 
@@ -219,7 +234,13 @@ def update_seller_order_status(
 
     old_status = seller_order.status
     status_values: dict[str, object] = {"status": new_status}
-    if new_status == "COMPLETED":
+    if new_status == "SHIPPED":
+        status_values["shipped_at"] = datetime.now(UTC)
+        if request.tracking_number:
+            status_values["tracking_number"] = request.tracking_number
+    elif new_status == "DELIVERED":
+        status_values["delivered_at"] = datetime.now(UTC)
+    elif new_status == "COMPLETED":
         status_values["completed_at"] = datetime.now(UTC)
     changed = session.exec(
         update(SellerOrder)
@@ -270,13 +291,32 @@ def update_seller_order_status(
                 .execution_options(synchronize_session=False)
             )
 
+    note: str | None = None
+    if old_status == "CANCELLATION_REQUESTED":
+        if new_status == "CANCELLED":
+            note = "Cancellation approved by seller. Stock restored."
+        else:
+            note = "Cancellation rejected by seller."
+    elif new_status == "CANCELLED":
+        note = "Stock restored."
+    elif new_status == "SHIPPED":
+        note = (
+            f"Shipped. Tracking: {request.tracking_number}"
+            if request.tracking_number
+            else "Shipped."
+        )
+    elif new_status == "DELIVERED":
+        note = "Delivered."
+    elif new_status == "CONFIRMED":
+        note = "Confirmed by seller."
+
     session.add(
         OrderHistory(
             seller_order_id=seller_order.id,
             from_status=old_status,
             to_status=new_status,
             changed_by_user_id=seller.id,
-            note="Stock restored." if new_status == "CANCELLED" else None,
+            note=note,
         )
     )
 
@@ -288,6 +328,7 @@ def update_seller_order_status(
     if parent:
         if statuses == {"COMPLETED"}:
             parent.status = "COMPLETED"
+            parent.completed_at = datetime.now(UTC)
         elif statuses == {"CANCELLED"}:
             parent.status = "CANCELLED"
         elif statuses == {"RETURNED_REFUNDED"}:
@@ -296,10 +337,24 @@ def update_seller_order_status(
             parent.status = "RETURN_REQUESTED"
         elif statuses == {"DELIVERED"}:
             parent.status = "DELIVERED"
-        elif statuses & {"PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"}:
+            parent.delivered_at = datetime.now(UTC)
+        elif statuses == {"SHIPPED"}:
+            parent.status = "SHIPPED"
+            parent.shipped_at = datetime.now(UTC)
+        elif statuses == {"CONFIRMED"}:
+            parent.status = "CONFIRMED"
+        elif statuses == {"CANCELLATION_REQUESTED"}:
+            parent.status = "CANCELLATION_REQUESTED"
+        elif statuses & {"PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "COMPLETED"}:
             parent.status = "PROCESSING"
         else:
             parent.status = "PENDING"
+        if seller_order.tracking_number:
+            parent.tracking_number = seller_order.tracking_number
+        if seller_order.shipped_at:
+            parent.shipped_at = seller_order.shipped_at
+        if seller_order.delivered_at:
+            parent.delivered_at = seller_order.delivered_at
         session.add(parent)
         create_notification(
             session,

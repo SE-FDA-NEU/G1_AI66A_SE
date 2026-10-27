@@ -46,6 +46,7 @@ class CartErrorCode(StrEnum):
     STOCK_EXCEEDED = "ERR_STOCK_EXCEEDED"
     CART_ITEM_NOT_FOUND = "ERR_CART_ITEM_NOT_FOUND"
     CONCURRENCY_CONFLICT = "ERR_CONCURRENCY_CONFLICT"
+    SELF_PURCHASE = "ERR_SELF_PURCHASE"
 
 
 class CartError(Exception):
@@ -258,6 +259,11 @@ class CartService:
 
         def change() -> AddItemResult:
             product = find_product(self.session, product_code)
+            if product.seller_id == buyer_id:
+                raise CartError(
+                    CartErrorCode.SELF_PURCHASE,
+                    "You cannot add your own product to your cart.",
+                )
             cart_item = find_cart_item_for_product(self.session, buyer_id, product.id)
             if cart_item is None:
                 validate_purchasable_quantity(product, quantity)
