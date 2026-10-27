@@ -414,3 +414,16 @@ Runtime: **Not implemented.** Contract proposed in
 | #135 pricing and shipping | 2, 4 | Section 2.1 example and 2.2 boundary cases; allocation sums equal the discount |
 | #136 checkout voucher UI | 5.1–5.4 | Quote rendering, apply/remove, stale quote, persisted receipt breakdown on confirmation and `/orders/{orderId}`, seller-scoped breakdown |
 | #137 combo rules | 8 | Deferral or agreed rules recorded before any combo discount |
+
+
+## US20 contract (#112, #148–#150)
+
+Runtime: **Partial.** `payment_status` and `escrow_status` exist since PR #170. Methods,
+recorded results and settlement are not implemented. Contract proposed in
+[docs/us20-payments.md](us20-payments.md); each task PR confirms or amends its part.
+
+| Task | Contract section | Evidence required before closing |
+|---|---|---|
+| #148 payment fields, validation, escrow and settlement | 1–7, 9, 10 | Transition matrix; event deduplication; release guard on every completion path; refund once; migration fresh, from `17638838` and rerun |
+| #149 payment selector and status display | 2.1, 3, 8 | Method stored and shown; demo methods labelled; no success shown before a recorded result; seller-scoped settlement fields |
+| #150 payment and settlement tests | 4, 6, 8, 11 | Section 11 matrix, reconciliation identity, analytics `settled_income` against seller orders |

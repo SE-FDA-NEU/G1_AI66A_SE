@@ -1319,3 +1319,17 @@ checkout verifies, conditional usage counters inside the checkout transaction, a
 restoration rules tied to the US14 cancellation paths (#106, PR #164). Section 3.4 gains the `ERR_VOUCHER_*` and
 `ERR_QUOTE_STALE` codes only in the PR that first raises them. Legacy checkout bodies
 keep today's hash and pricing until the checkout UI (#136) sends quotes.
+
+
+## US20 payments and escrow settlement contract (#112)
+
+Design only. `payment_status` and `escrow_status` already exist on `orders` and
+`seller_orders` (PR #170), but there is no payment method, recorded result or settlement
+yet. The proposed contract for #148–#150 is in
+[US20 payments and settlement](us20-payments.md): four tracked methods with no provider,
+the five #112 payment statuses (no `PARTIALLY_REFUNDED`), escrow `HELD`, `PAUSED`,
+`RELEASED` and `VOIDED`, seller net `B_s − floor(B_s × rate_bps / 10000)` with no
+deduction for platform-funded discounts, a release guard (`COMPLETED`, paid, held) that
+runs once on every completion path, refunds recorded once through `payment_events`, and
+a local operator command for demo results. Legacy bodies are recorded as COD until the
+checkout UI (#149) sends a method.
