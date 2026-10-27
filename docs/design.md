@@ -796,8 +796,10 @@ implementation"). This table lists every code the code raises, checked by
 | `400 Bad Request` | `ERR_INVALID_KEY` | The `Idempotency-Key` has surrounding spaces | Orders |
 | `400 Bad Request` | `ERR_INVALID_TRANSITION` | A seller order status change that the state machine does not allow (section 3.6) | Seller orders |
 | `400 Bad Request` | `ERR_INVALID_STATUS` | The seller order `status` filter is not a known status | Seller orders |
-| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders |
-| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders |
+| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders, seller analytics |
+| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders, seller analytics |
+| `400 Bad Request` | `ERR_INVALID_PERIOD` | An unsupported period grouping is requested | Seller analytics |
+| `400 Bad Request` | `ERR_INVALID_SORT` | An unsupported best-sellers sort field is requested | Seller analytics |
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED` | No bearer token | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_TOKEN` | A malformed, expired or no longer valid token (there is no separate expired-token code) | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_CREDENTIALS` | Wrong email or password | Login |

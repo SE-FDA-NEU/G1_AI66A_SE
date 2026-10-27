@@ -99,7 +99,10 @@ def get_revenue_summary(
     start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
     end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
 
-    # Fetch all completed seller_orders in range for this seller
+    # Fetch all completed seller_orders in range for this seller.
+    # Per docs/design.md line 300 & BR7:
+    # "The selected analytics period is evaluated using seller_orders.completed_at,
+    # not the original marketplace order creation timestamp."
     rows = session.exec(
         select(SellerOrder, Order, OrderItem, Product)
         .join(Order, Order.id == SellerOrder.order_id)
@@ -108,8 +111,8 @@ def get_revenue_summary(
         .where(
             SellerOrder.seller_id == seller_id,
             SellerOrder.status == "COMPLETED",
-            Order.created_at >= start_dt,
-            Order.created_at <= end_dt,
+            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) >= start_dt,
+            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) <= end_dt,
         )
     ).all()
 
@@ -128,8 +131,9 @@ def get_revenue_summary(
             "_order_ids": set(),
         }
 
-    for seller_order, order, item, _product in rows:
-        order_date = order.created_at.date()
+    for seller_order, _order, item, _product in rows:
+        order_dt = seller_order.completed_at or seller_order.created_at
+        order_date = order_dt.date()
         bucket_start = _period_start(order_date, period)
         if bucket_start not in buckets:
             continue
@@ -191,8 +195,8 @@ def get_best_sellers(
         .where(
             SellerOrder.seller_id == seller_id,
             SellerOrder.status == "COMPLETED",
-            Order.created_at >= start_dt,
-            Order.created_at <= end_dt,
+            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) >= start_dt,
+            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) <= end_dt,
         )
         .group_by(Product.id, Product.code, Product.name)
     ).all()

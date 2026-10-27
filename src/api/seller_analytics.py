@@ -6,7 +6,7 @@ Provides three read-only views:
   GET /api/v1/seller/analytics/low-stock    — active products with available stock ≤ threshold
 """
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
