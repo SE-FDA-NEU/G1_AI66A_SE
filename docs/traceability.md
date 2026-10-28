@@ -429,3 +429,18 @@ recorded results and settlement are not implemented. Contract proposed in
 | #150 payment and settlement tests | 4, 6, 8, 10, 11 | Section 11 matrix and criteria R1–R6 and L; section 6.2 pairs in both orders and concurrently; invariants I1–I8 after every step; reconciliation identity |
 
 Pending decisions D1–D6 (section 12 of the contract) must be confirmed by their owners before the code that depends on them merges.
+
+
+## Catalog discovery controls (#116)
+
+Runtime: **Implemented.** The controls on `/products` came with PR #162; this task fixes
+the gaps found during an audit of that work.
+
+| Gap on `main` | Change | Evidence |
+|---|---|---|
+| A catalog request that timed out left the page on the loading skeleton | Only a newer query may silence an aborted request; a timeout shows the error with Retry | `tests/products_ui.mjs`; Chromium: error after 10.4 s, Retry loads 20 cards |
+| Enter in a price field ran the browser's 1,000 ₫ step check, so 155,500 was blocked while Apply accepted it | The form uses `novalidate`; one rule (whole, non-negative, minimum not above maximum) covers Enter, Search and Apply | `tests/products_ui.mjs`; Chromium: Enter with 155500 sends `min_price=155500` |
+| The seller filter needed Apply while the other filters applied on change | The seller filter applies on change and resets to page 1 | `tests/products_ui.mjs` |
+| Back navigation could restore filter values without applying them | The first load reads the restored controls | `tests/products_ui.mjs` |
+| The maximum price field had no accessible name | Both price fields are labelled and point to the price error | Page markup |
+| At 360–390 px every filter took a full row | Short filters share a row: the filter panel is 507 px instead of 677 px, and the page has no horizontal scroll | [Phone](images/catalog/mobile-filters.png), [timeout](images/catalog/mobile-timeout.png), [desktop](images/catalog/desktop-filters.png) |

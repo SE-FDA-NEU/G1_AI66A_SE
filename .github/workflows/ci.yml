@@ -68,6 +68,7 @@ jobs:
 
       - name: Page script checks
         run: |
+          node tests/products_ui.mjs
           node tests/cart_ui.mjs
           node tests/checkout_ui.mjs
           node tests/addresses_ui.mjs

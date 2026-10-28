@@ -23,7 +23,7 @@
     </nav>
     <h1 class="catalog__title">Products</h1>
 
-    <form id="products-search" class="catalog-discovery" role="search">
+    <form id="products-search" class="catalog-discovery" role="search" novalidate>
       <div class="discovery-search">
         <label for="product-search-input">Search products</label>
         <div class="catalog-search__controls">
@@ -51,9 +51,11 @@
         <div class="filter-group filter-group--price">
           <label for="filter-min-price">Price range (₫)</label>
           <div class="price-inputs">
-            <input id="filter-min-price" name="min_price" type="number" min="0" step="1000" placeholder="Min">
+            <input id="filter-min-price" name="min_price" type="number" min="0" step="1000"
+              inputmode="numeric" placeholder="Min" aria-label="Minimum price (₫)" aria-describedby="price-error">
             <span class="price-separator">–</span>
-            <input id="filter-max-price" name="max_price" type="number" min="0" step="1000" placeholder="Max">
+            <input id="filter-max-price" name="max_price" type="number" min="0" step="1000"
+              inputmode="numeric" placeholder="Max" aria-label="Maximum price (₫)" aria-describedby="price-error">
           </div>
           <span id="price-error" class="field-error" role="alert" hidden></span>
         </div>
@@ -69,7 +71,14 @@
           </select>
         </div>
 
-        <div class="filter-group">
+        <div class="filter-group filter-group--checkbox">
+          <label class="checkbox-label" for="filter-in-stock">
+            <input id="filter-in-stock" name="in_stock" type="checkbox" checked>
+            In stock only
+          </label>
+        </div>
+
+        <div class="filter-group filter-group--sort">
           <label for="catalog-sort">Sort by</label>
           <select id="catalog-sort" name="sort">
             <option value="">Default order</option>
@@ -79,13 +88,6 @@
             <option value="price_desc">Price: High to Low</option>
             <option value="rating_desc">Highest rated</option>
           </select>
-        </div>
-
-        <div class="filter-group filter-group--checkbox">
-          <label class="checkbox-label" for="filter-in-stock">
-            <input id="filter-in-stock" name="in_stock" type="checkbox" checked>
-            In stock only
-          </label>
         </div>
 
         <div class="filter-actions">
@@ -122,7 +124,7 @@
     </section>
 
     <section id="products-error" class="state" hidden>
-      <p class="state__message">We could not load the products. Check your connection, then select Retry.</p>
+      <p id="products-error-message" class="state__message">We could not load the products. Check your connection, then select Retry.</p>
       <button id="products-retry" class="button" type="button">Retry</button>
     </section>
   </main>

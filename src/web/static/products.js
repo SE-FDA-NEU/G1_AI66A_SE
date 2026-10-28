@@ -17,6 +17,7 @@ const elements = {
   emptyMessage: document.getElementById("products-empty-message"),
   resetEmpty: document.getElementById("products-reset-empty"),
   error: document.getElementById("products-error"),
+  errorMessage: document.getElementById("products-error-message"),
   retry: document.getElementById("products-retry"),
   search: document.getElementById("products-search"),
   searchInput: document.getElementById("product-search-input"),
@@ -193,6 +194,9 @@ function createProductCard(product) {
 let activeAbortController = null;
 let currentRequestId = 0;
 
+const LOAD_ERROR_MESSAGE = "We could not load the products. Check your connection, then select Retry.";
+const TIMEOUT_MESSAGE = "The catalog is taking too long to respond. Select Retry to try again.";
+
 async function fetchProducts(page, search, signal) {
   const params = new URLSearchParams({
     page: String(page),
@@ -299,10 +303,14 @@ async function loadProducts(page = currentPage) {
     }
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === "AbortError" || requestId !== currentRequestId) {
+    // A newer query aborted this request and will update the page itself.
+    if (requestId !== currentRequestId) {
       return;
     }
-    showState("error", "We could not load the products. Check your connection, then select Retry.");
+    // Only the timeout aborts the current request, so it must end in the error state.
+    const message = error.name === "AbortError" ? TIMEOUT_MESSAGE : LOAD_ERROR_MESSAGE;
+    elements.errorMessage.textContent = message;
+    showState("error", message);
   } finally {
     clearTimeout(timeoutId);
     if (activeAbortController === controller) {
@@ -314,27 +322,31 @@ async function loadProducts(page = currentPage) {
   }
 }
 
-function validatePriceBounds() {
-  const min = elements.filterMinPrice.value.trim();
-  const max = elements.filterMaxPrice.value.trim();
-  if (min !== "" && max !== "") {
-    const minVal = Number(min);
-    const maxVal = Number(max);
-    if (minVal > maxVal) {
-      elements.priceError.textContent = "Minimum price cannot be greater than maximum price.";
-      elements.priceError.hidden = false;
-      return false;
-    }
-  }
-  elements.priceError.textContent = "";
-  elements.priceError.hidden = true;
-  return true;
+function isWholePrice(value) {
+  return value === "" || /^\d+$/.test(value);
 }
 
-function applyCurrentFilters() {
-  if (!validatePriceBounds()) {
-    return;
+function priceBoundsError() {
+  const min = elements.filterMinPrice.value.trim();
+  const max = elements.filterMaxPrice.value.trim();
+  if (!isWholePrice(min) || !isWholePrice(max)) {
+    return "Enter prices as whole numbers of 0 ₫ or more.";
   }
+  if (min !== "" && max !== "" && Number(min) > Number(max)) {
+    return "Minimum price cannot be greater than maximum price.";
+  }
+  return "";
+}
+
+function validatePriceBounds() {
+  const message = priceBoundsError();
+  elements.priceError.textContent = message;
+  elements.priceError.hidden = message === "";
+  return message === "";
+}
+
+/** Copy the visible controls into the applied query, so results always match what is shown. */
+function readFilterControls() {
   currentSearch = elements.searchInput.value.trim();
   currentCategory = elements.filterCategory ? elements.filterCategory.value : "";
   currentSeller = elements.filterSeller ? elements.filterSeller.value : "";
@@ -343,6 +355,13 @@ function applyCurrentFilters() {
   currentRating = elements.filterRating ? elements.filterRating.value : "";
   currentInStock = elements.filterInStock ? elements.filterInStock.checked : true;
   currentSort = elements.catalogSort ? elements.catalogSort.value : "";
+}
+
+function applyCurrentFilters() {
+  if (!validatePriceBounds()) {
+    return;
+  }
+  readFilterControls();
 
   currentPage = 1;
   loadProducts();
@@ -449,6 +468,9 @@ if (elements.catalogSort) {
 if (elements.filterCategory) {
   elements.filterCategory.addEventListener("change", applyCurrentFilters);
 }
+if (elements.filterSeller) {
+  elements.filterSeller.addEventListener("change", applyCurrentFilters);
+}
 if (elements.filterRating) {
   elements.filterRating.addEventListener("change", applyCurrentFilters);
 }
@@ -466,5 +488,11 @@ elements.previous.addEventListener("click", () => loadProducts(currentPage - 1))
 elements.next.addEventListener("click", () => loadProducts(currentPage + 1));
 
 loadFilterOptions();
+// Back navigation can restore the previous control values; load what the controls show.
+readFilterControls();
+if (!validatePriceBounds()) {
+  currentMinPrice = "";
+  currentMaxPrice = "";
+}
 loadProducts();
 configureNavigation();
