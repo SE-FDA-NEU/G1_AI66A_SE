@@ -249,10 +249,16 @@ def list_products(
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(
             status_code=422,
-            detail=error_detail(
-                "ERR_VALIDATION",
-                "Minimum price cannot be greater than maximum price.",
-            ),
+            detail={
+                "error": {
+                    "code": "ERR_VALIDATION",
+                    "message": "Minimum price cannot be greater than maximum price.",
+                    "fields": {
+                        "min_price": ["Minimum price cannot be greater than maximum price."],
+                        "max_price": ["Maximum price cannot be less than minimum price."],
+                    },
+                },
+            },
         )
 
     # AC3: Sort validation
