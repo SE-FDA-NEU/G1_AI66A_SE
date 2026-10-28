@@ -239,6 +239,23 @@ def update_buyer_order_status(
                     "For confirmed orders, please request cancellation.",
                 ),
             )
+        invalid_sub_order = next(
+            (
+                sub_order
+                for sub_order in sub_orders
+                if sub_order.status != "CANCELLED"
+                and not is_allowed_transition("buyer", sub_order.status, new_status)
+            ),
+            None,
+        )
+        if invalid_sub_order is not None:
+            raise HTTPException(
+                400,
+                detail=error_detail(
+                    "ERR_INVALID_TRANSITION",
+                    f"Cannot cancel seller order in {invalid_sub_order.status} state.",
+                ),
+            )
         for sub_order in sub_orders:
             old_sub_status = sub_order.status
             if old_sub_status != "CANCELLED":
