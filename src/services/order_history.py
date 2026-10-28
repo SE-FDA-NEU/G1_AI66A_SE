@@ -8,7 +8,7 @@ from sqlmodel import Session
 from src.models.order_history import OrderHistory
 from src.models.user import User
 from src.repositories.order_history import append_history, list_history
-from src.schemas.order_history import OrderHistoryEntry
+from src.schemas.order_history import OrderHistoryEntry, order_timestamp_utc
 
 
 def record_transition(
@@ -31,7 +31,9 @@ def record_transition(
             changed_by_user_id=actor.id,
             actor_role=actor.role,
             note=note,
-            created_at=occurred_at if occurred_at is not None else datetime.now(UTC),
+            created_at=(
+                order_timestamp_utc(occurred_at) if occurred_at is not None else datetime.now(UTC)
+            ),
         ),
     )
 

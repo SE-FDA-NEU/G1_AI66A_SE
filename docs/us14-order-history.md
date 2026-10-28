@@ -22,8 +22,12 @@ Each `order_history` row records `seller_order_id`, `from_status`, `to_status`,
 - Events are appended inside the existing status-change transaction. Neither the
   service nor repository commits. If audit persistence fails, the transition and
   its milestone changes roll back with the request session.
-- Shipping/delivery history uses the same UTC instant as the corresponding
-  seller-order milestone. Later completion retains the earlier milestones.
+- Shipping/delivery/completion history uses the same UTC instant as the corresponding
+  seller-order milestone. When the last seller completes, the parent completion
+  timestamp uses that same instant. Later completion retains earlier milestones.
+- Timezone-aware audit timestamps are converted to UTC before persistence; naive
+  legacy timestamps are interpreted as UTC. Responses use the same conversion,
+  including the seller listing's `ordered_at`, without discarding known offsets.
 
 ## Existing API extensions
 
@@ -55,6 +59,10 @@ Reads expose history without a new endpoint:
 | Order detail/list and status responses | Each visible `data.sub_orders[]` includes `history` |
 | Seller order list/status response | Each seller-order data object includes `history` |
 | Owning seller's order receipt | Top-level tracking/milestones reflect that seller's sub-order, rather than another shop's latest parent metadata |
+
+Seller receipts also scope item queries to that seller. Both GET receipts and
+status-update responses exclude other shops' item IDs and fulfillment statuses.
+The buyer's own receipt still includes every shop in that order.
 
 An entry has `id`, `seller_order_id`, `from_status`, `to_status`,
 `changed_by_user_id`, `actor_role`, `note` and a UTC `created_at`. No events returns
@@ -114,6 +122,24 @@ role snapshots/history/validation/migration failed), then used to verify the
 change. They use isolated SQLite files and injected clocks/failures, not real
 customer data. Local verification and automated tests do not claim human
 acceptance, external review, a clean-clone run, successful CI or merge.
+
+### Review verification
+
+The review regressions reproduce and fix cross-shop fulfillment items in seller
+receipts, a second clock read for the parent completion timestamp, and audit
+timestamps retaining a non-UTC offset. Tests fail before the fixes and pass after.
+
+Atomicity is verified at three failure points: before recording history, an actual
+SQLite trigger rejecting the history INSERT, and an injected commit failure after
+flushing all pending writes. The latter two cover shipping and cancellation through
+both seller-capable routes, plus buyer cancellation and receipt confirmation. A
+fresh session must see exactly the prior parent/child states, inventory, sales
+counts, milestones, history and notifications. No audit helper commits separately;
+the existing request session rolls back uncommitted writes on failure.
+
+Access tests cover unrelated buyers/sellers, buyer access to seller-only routes,
+and rejected writes. Migration tests preserve the full legacy event, read it
+through the current ORM, then append a new role-bearing event and rerun migration.
 
 AI assistance: OpenAI Codex helped inspect the supplied course slides, draft the
 scoped implementation/tests, and run checks. Human review and the ability to

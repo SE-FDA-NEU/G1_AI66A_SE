@@ -5,6 +5,11 @@ from datetime import UTC, datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
+def order_timestamp_utc(value: datetime) -> datetime:
+    """SQLite stores naive UTC; preserve the instant of timezone-aware values."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 class OrderHistoryEntry(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -20,4 +25,4 @@ class OrderHistoryEntry(BaseModel):
     @field_validator("created_at")
     @classmethod
     def utc_timestamp(cls, value: datetime) -> datetime:
-        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+        return order_timestamp_utc(value)

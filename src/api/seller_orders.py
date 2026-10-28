@@ -16,7 +16,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
-from src.schemas.order_history import OrderHistoryEntry
+from src.schemas.order_history import OrderHistoryEntry, order_timestamp_utc
 from src.schemas.order_status import OrderStatusChange
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
@@ -155,14 +155,16 @@ def _seller_order_response(
         order_id=seller_order.order_id,
         customer_name=parent_order.recipient_name,
         status=seller_order.status,
-        ordered_at=parent_order.created_at,
+        ordered_at=order_timestamp_utc(parent_order.created_at),
         tracking_number=seller_order.tracking_number,
-        shipped_at=seller_order.shipped_at.replace(tzinfo=UTC) if seller_order.shipped_at else None,
+        shipped_at=(
+            order_timestamp_utc(seller_order.shipped_at) if seller_order.shipped_at else None
+        ),
         delivered_at=(
-            seller_order.delivered_at.replace(tzinfo=UTC) if seller_order.delivered_at else None
+            order_timestamp_utc(seller_order.delivered_at) if seller_order.delivered_at else None
         ),
         completed_at=(
-            seller_order.completed_at.replace(tzinfo=UTC) if seller_order.completed_at else None
+            order_timestamp_utc(seller_order.completed_at) if seller_order.completed_at else None
         ),
         history=(
             history if history is not None
@@ -346,7 +348,7 @@ def update_seller_order_status(
     if parent:
         if statuses == {"COMPLETED"}:
             parent.status = "COMPLETED"
-            parent.completed_at = datetime.now(UTC)
+            parent.completed_at = now
         elif statuses == {"CANCELLED"}:
             parent.status = "CANCELLED"
         elif statuses == {"RETURNED_REFUNDED"}:
@@ -355,10 +357,10 @@ def update_seller_order_status(
             parent.status = "RETURN_REQUESTED"
         elif statuses == {"DELIVERED"}:
             parent.status = "DELIVERED"
-            parent.delivered_at = datetime.now(UTC)
+            parent.delivered_at = now
         elif statuses == {"SHIPPED"}:
             parent.status = "SHIPPED"
-            parent.shipped_at = datetime.now(UTC)
+            parent.shipped_at = now
         elif statuses == {"CONFIRMED"}:
             parent.status = "CONFIRMED"
         elif statuses == {"CANCELLATION_REQUESTED"}:
