@@ -279,7 +279,44 @@ review. Auth context is checked before requests and after responses; account cha
 hide/clear old address data and block submit/retry/CRUD. Cross-tab token changes also
 invalidate the view.
 
-## Acceptance evidence â€” 27 October 2026
+## Task #123 follow-up — address UI only
+
+The address book and checkout selector already exist from PR #167. This follow-up
+changes only their frontend behavior, UI tests and this documentation. Address APIs,
+ownership/version rules, database migrations and order snapshots are unchanged.
+
+- Address cards and their Edit/Delete/Set default actions have distinct accessible
+  names identifying the recipient and street. Stable action IDs allow focus to
+  return after the cards are refreshed.
+- Delete confirmation shows the exact recipient, phone and full address as plain
+  text. Cancel receives initial focus, sends no DELETE, clears the confirmation
+  details and returns focus to the initiating Delete button. A failed deletion
+  retains the target and confirmation for review/retry. Opening an address form or
+  starting any address-list refresh invalidates that confirmation, including when
+  the refresh fails. Updated address details require a fresh Delete confirmation;
+  stale Confirm events send no DELETE and do not announce a successful deletion.
+- Cancelling an edit returns to its Edit button. Successful edits return to the
+  refreshed Edit button; adding, deleting or setting a default returns to the
+  checkout address selector. These actions preserve the user's current delivery
+  selection where that address still exists.
+- The existing live address status announces saves and successful changes. Its
+  `tabindex="-1"` also lets failed card actions focus their visible error feedback.
+  Field-level validation continues to preserve entered values and focus the first
+  invalid input. Pending mutations disable address controls and refuse duplicates.
+  Every failed mutation replaces the saving status with error guidance, whether
+  the editor is open or closed. Cancelling after a rejected save cannot leave an
+  indefinite progress message.
+
+Run `node tests/addresses_ui.mjs` and `node tests/checkout_ui.mjs` to verify these
+behaviors alongside saved/manual checkout selection, account isolation and pending
+checkout protection. Review regressions also cover Delete → Edit → Save → stale
+Confirm, refresh success/failure, fresh confirmation of updated details, and 422/
+network errors followed by cancellation. A native Chromium spot check using disposable API fixtures
+also confirmed edit/default/delete focus, targeted delete confirmation and no
+horizontal overflow at 360/768/1280px. This spot check does not replace the existing
+SQLite persistence tests or claim real-user validation.
+
+## Acceptance evidence — 27 October 2026
 
 | Acceptance criterion | Automated evidence | Browser evidence |
 |---|---|---|
@@ -373,4 +410,3 @@ implementation and verification do not claim that another person has reviewed th
   - `ERR_CONCURRENCY_CONFLICT` (409) with 5-attempt retry backoff on database lock/collision.
 - **Automated Verification:**
   - `tests/test_addresses.py`: 32 test cases passed covering CRUD lifecycle, ownership isolation, phone number / visible text validators, concurrent default switching, and database rollback safety.
-

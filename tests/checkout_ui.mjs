@@ -33,7 +33,14 @@ export function setup(responses, saved = null, script = checkoutSource, addressR
   const calls=[], navigations=[];
   const auth = {token:"token"};
   const context = vm.createContext({
-    document:{getElementById(id) {if (!nodes.has(id)) nodes.set(id,element()); return nodes.get(id);}, createElement:element},
+    document:{getElementById(id) {
+      for (const card of nodes.get("address-list")?.children || []) {
+        const control = [card, ...card.children].find(node => node.id === id);
+        if (control) return control;
+      }
+      if (!nodes.has(id)) nodes.set(id,element());
+      return nodes.get(id);
+    }, createElement:element},
     localStorage:{getItem:()=>auth.token},
     sessionStorage:{getItem:key=>storage.get(key)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     location:{pathname:"/checkout/confirmation/1",replace:url=>navigations.push(url),assign:url=>navigations.push(url),reload(){navigations.push("reload");}},

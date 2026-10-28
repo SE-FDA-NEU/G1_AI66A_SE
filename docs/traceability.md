@@ -406,7 +406,7 @@ Scope and reproduction: [US12 cart selection](us12-cart-selection.md).
 | Task | Implementation | Verification |
 |---|---|---|
 | #122 model/API | UserAddress, addresses schema/service/router; owner/version predicates, partial default index | tests/test_addresses.py: CRUD, persistence, auth, isolation, strict validation, init upgrade, rollback, file SQLite concurrency |
-| #123 UI | /checkout address book, independent form, selector, manual mode, field guidance, delete confirmation | tests/addresses_ui.mjs; browser evidence in docs/us13-addresses.md |
+| #123 UI | /checkout address book, independent form, selector, manual mode, field guidance, recipient-specific delete confirmation, distinct action labels, save feedback and focus recovery | tests/addresses_ui.mjs; browser evidence and UI-only follow-up in docs/us13-addresses.md |
 | #124 snapshot | resolve_delivery_snapshot after replay, explicit Order fields, legacy/saved union | tests/test_checkout_addresses.py: edit/delete/replay, stale/foreign address, legacy hash, partial cart, rollback and same-key concurrency |
 | #125 integration | Node checks in CI; API/database/checkout regressions | tests/test_checkout.py, tests/test_us12.py, tests/test_database.py; docs/us13-addresses.md |
 

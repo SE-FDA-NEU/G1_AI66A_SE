@@ -18,7 +18,7 @@
     <h1>Checkout</h1>
     <section id="address-book" hidden aria-labelledby="address-heading">
       <h2 id="address-heading">Delivery address book</h2>
-      <p id="address-status" role="status">Loading addresses...</p>
+      <p id="address-status" role="status" tabindex="-1">Loading addresses...</p>
       <div id="address-list"></div>
       <label for="address-choice">Use for this order
         <select id="address-choice">
@@ -62,8 +62,9 @@
         <button type="submit">Save address</button>
         <button id="cancel-address" type="button">Cancel</button>
       </form>
-      <div id="address-delete" hidden role="group" aria-labelledby="delete-question">
+      <div id="address-delete" hidden role="group" aria-labelledby="delete-question" aria-describedby="delete-address-summary">
         <p id="delete-question">Delete this saved address? Existing orders will keep their delivery details.</p>
+        <p id="delete-address-summary"></p>
         <button id="confirm-delete" type="button">Delete address</button>
         <button id="cancel-delete" type="button">Cancel</button>
       </div>
