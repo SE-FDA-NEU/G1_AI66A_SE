@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Response
-from pydantic import BaseModel
 from sqlalchemy import case, update
 from sqlmodel import select
 
@@ -10,13 +9,14 @@ from src.auth import ActiveCurrentUser, BuyerUser, CurrentUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
+from src.schemas.order_status import OrderStatusChange
 from src.schemas.orders import CheckoutInput, OrderResponse
 from src.services.inventory import restore_order_item_stock
+from src.services.order_history import record_transition
 from src.services.orders import CheckoutError, checkout, receipt
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -33,18 +33,8 @@ TRANSITIONS: dict[str, set[str]] = {
 }
 
 
-class OrderStatusUpdateRequest(BaseModel):
-    status: Literal[
-        "PENDING",
-        "CONFIRMED",
-        "PROCESSING",
-        "CANCELLATION_REQUESTED",
-        "SHIPPED",
-        "DELIVERED",
-        "COMPLETED",
-        "CANCELLED",
-    ]
-    tracking_number: str | None = None
+class OrderStatusUpdateRequest(OrderStatusChange):
+    """Status change with bounded tracking and audit note fields."""
 
 
 # Backward-compatibility alias
@@ -186,14 +176,14 @@ def update_buyer_order_status(
                 note = "Confirmed by seller."
 
             session.add(sub_order)
-            session.add(
-                OrderHistory(
-                    seller_order_id=sub_order.id,
-                    from_status=old_sub_status,
-                    to_status=new_status,
-                    changed_by_user_id=user.id,
-                    note=note,
-                )
+            record_transition(
+                session,
+                seller_order_id=sub_order.id,
+                from_status=old_sub_status,
+                to_status=new_status,
+                actor=user,
+                note=request.note if request.note is not None else note,
+                occurred_at=now,
             )
 
         # Synchronize parent order status and milestones
@@ -273,14 +263,17 @@ def update_buyer_order_status(
                         )
                         .execution_options(synchronize_session=False)
                     )
-                session.add(
-                    OrderHistory(
-                        seller_order_id=sub_order.id,
-                        from_status=old_sub_status,
-                        to_status="CANCELLED",
-                        changed_by_user_id=user.id,
-                        note="Cancelled by buyer. Stock restored.",
-                    )
+                record_transition(
+                    session,
+                    seller_order_id=sub_order.id,
+                    from_status=old_sub_status,
+                    to_status="CANCELLED",
+                    actor=user,
+                    note=(
+                        request.note if request.note is not None
+                        else "Cancelled by buyer. Stock restored."
+                    ),
+                    occurred_at=now,
                 )
         order.status = "CANCELLED"
         session.add(order)
@@ -301,14 +294,17 @@ def update_buyer_order_status(
                 old_sub_status = sub_order.status
                 sub_order.status = "CANCELLATION_REQUESTED"
                 session.add(sub_order)
-                session.add(
-                    OrderHistory(
-                        seller_order_id=sub_order.id,
-                        from_status=old_sub_status,
-                        to_status="CANCELLATION_REQUESTED",
-                        changed_by_user_id=user.id,
-                        note="Cancellation requested by buyer.",
-                    )
+                record_transition(
+                    session,
+                    seller_order_id=sub_order.id,
+                    from_status=old_sub_status,
+                    to_status="CANCELLATION_REQUESTED",
+                    actor=user,
+                    note=(
+                        request.note if request.note is not None
+                        else "Cancellation requested by buyer."
+                    ),
+                    occurred_at=now,
                 )
         order.status = "CANCELLATION_REQUESTED"
         session.add(order)
@@ -330,14 +326,17 @@ def update_buyer_order_status(
                 sub_order.status = "COMPLETED"
                 sub_order.completed_at = now
                 session.add(sub_order)
-                session.add(
-                    OrderHistory(
-                        seller_order_id=sub_order.id,
-                        from_status=old_sub_status,
-                        to_status="COMPLETED",
-                        changed_by_user_id=user.id,
-                        note="Delivery confirmed by buyer.",
-                    )
+                record_transition(
+                    session,
+                    seller_order_id=sub_order.id,
+                    from_status=old_sub_status,
+                    to_status="COMPLETED",
+                    actor=user,
+                    note=(
+                        request.note if request.note is not None
+                        else "Delivery confirmed by buyer."
+                    ),
+                    occurred_at=now,
                 )
         order.status = "COMPLETED"
         order.completed_at = now
