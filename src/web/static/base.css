@@ -226,12 +226,14 @@ button,
 
 button:hover,
 .button:hover {
+  color: #ffffff;
   background-color: var(--color-accent-hover);
   text-decoration: none;
 }
 
 button:active,
 .button:active {
+  color: #ffffff;
   background-color: var(--color-accent-active);
   transform: translateY(1px);
 }
@@ -279,7 +281,13 @@ button.button--danger {
 
 .button--danger:hover,
 button.button--danger:hover {
+  color: #ffffff;
   background-color: #b91c1c;
+}
+
+.button--danger:active,
+button.button--danger:active {
+  color: #ffffff;
 }
 
 .button--link {
@@ -300,6 +308,7 @@ label {
   margin-bottom: 0.35rem;
 }
 
+input:not([type]),
 input[type="text"],
 input[type="search"],
 input[type="email"],
@@ -562,6 +571,7 @@ legend {
     min-height: 44px; /* Ensure 44px minimum touch target on mobile */
   }
 
+  input:not([type]),
   input[type="text"],
   input[type="search"],
   input[type="email"],

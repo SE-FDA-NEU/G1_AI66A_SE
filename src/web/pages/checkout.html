@@ -31,7 +31,7 @@
         <h3 id="address-form-heading">Add address</h3>
         <p>Fields marked * are required.</p>
         <label for="address-recipient_name">Recipient name *
-          <input id="address-recipient_name" name="recipient_name" required maxlength="100" aria-describedby="address-recipient_name-error">
+          <input id="address-recipient_name" name="recipient_name" type="text" required maxlength="100" aria-describedby="address-recipient_name-error">
           <span class="field-error" id="address-recipient_name-error"></span>
         </label>
         <label for="address-phone_number">Phone number *
@@ -39,19 +39,19 @@
           <span class="field-error" id="address-phone_number-error"></span>
         </label>
         <label for="address-province">Province / city *
-          <input id="address-province" name="province" required maxlength="100" aria-describedby="address-province-error">
+          <input id="address-province" name="province" type="text" required maxlength="100" aria-describedby="address-province-error">
           <span class="field-error" id="address-province-error"></span>
         </label>
         <label for="address-district">District *
-          <input id="address-district" name="district" required maxlength="100" aria-describedby="address-district-error">
+          <input id="address-district" name="district" type="text" required maxlength="100" aria-describedby="address-district-error">
           <span class="field-error" id="address-district-error"></span>
         </label>
         <label for="address-ward">Ward *
-          <input id="address-ward" name="ward" required maxlength="100" aria-describedby="address-ward-error">
+          <input id="address-ward" name="ward" type="text" required maxlength="100" aria-describedby="address-ward-error">
           <span class="field-error" id="address-ward-error"></span>
         </label>
         <label for="address-detailed_address">Detailed address *
-          <input id="address-detailed_address" name="detailed_address" required maxlength="500" aria-describedby="address-detailed_address-error">
+          <input id="address-detailed_address" name="detailed_address" type="text" required maxlength="500" aria-describedby="address-detailed_address-error">
           <span class="field-error" id="address-detailed_address-error"></span>
         </label>
         <label class="check">
@@ -75,7 +75,7 @@
         <legend>Enter delivery information manually</legend>
         <p>Fields marked * are required.</p>
         <label for="checkout-recipient_name">Recipient name *
-          <input id="checkout-recipient_name" name="recipient_name" required maxlength="100" aria-describedby="checkout-recipient_name-error" autocomplete="name">
+          <input id="checkout-recipient_name" name="recipient_name" type="text" required maxlength="100" aria-describedby="checkout-recipient_name-error" autocomplete="name">
           <span class="field-error" id="checkout-recipient_name-error"></span>
         </label>
         <label for="checkout-delivery_address">Delivery address *
