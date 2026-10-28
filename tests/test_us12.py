@@ -16,6 +16,7 @@ from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from tests.cart_db import add_product, change_product, create_cart_engine, stored_stock
@@ -941,3 +942,101 @@ def test_edge_case_unselected_cart_row_with_quantity_greater_than_one(api, engin
     assert remaining["items"][0]["price_at_add"] == 200
     assert remaining["items"][0]["line_total"] == 1400
 
+
+def add_variants(engine, code="P-100", prices=(120, 130)):
+    """Variants of one product; each starts with 5 units."""
+    with Session(engine) as session:
+        product = session.exec(select(Product).where(Product.code == code)).one()
+        variants = [
+            ProductVariant(
+                product_id=product.id,
+                seller_id=product.seller_id,
+                sku=f"{code}-{price}",
+                name=f"Option {price}",
+                price=price,
+                stock_quantity=5,
+            )
+            for price in prices
+        ]
+        session.add_all(variants)
+        session.commit()
+        return [variant.id for variant in variants]
+
+
+def add_variant(api, variant_id, code="P-100"):
+    response = api.post(
+        "/api/v1/cart/items",
+        headers=auth(),
+        json={"product_code": code, "quantity": 1, "variant_id": variant_id},
+    )
+    assert response.status_code == 201
+    return next(
+        line["cart_item_id"]
+        for line in response.json()["data"]["items"]
+        if line["variant_id"] == variant_id
+    )
+
+
+def variant_stock(engine, variant_id):
+    with Session(engine) as session:
+        return session.get(ProductVariant, variant_id).stock_quantity
+
+
+def test_selected_variant_is_ordered_and_other_variant_rows_survive(api, engine):
+    chosen, other = add_variants(engine)
+    add_variant(api, chosen)
+    kept = add_variant(api, other)
+    assert select_item(api, kept, False).status_code == 200
+    # An unavailable variant that is not selected must not block the order.
+    with Session(engine) as session:
+        session.get(ProductVariant, other).is_active = False
+        session.commit()
+
+    response = api.post("/api/v1/orders", headers=auth(), json=DELIVERY)
+    assert response.status_code == 201
+    order = response.json()["data"]
+    assert order["total_amount"] == 120
+    with Session(engine) as session:
+        assert [(item.variant_id, item.quantity) for item in session.exec(select(OrderItem))] == [
+            (chosen, 1)
+        ]
+        rows = session.exec(select(CartItem).where(CartItem.buyer_id == 2)).all()
+        assert [(row.id, row.variant_id, row.is_selected) for row in rows] == [(kept, other, False)]
+    assert (variant_stock(engine, chosen), variant_stock(engine, other)) == (4, 5)
+    assert stored_stock(engine, "P-100") == (10, 0)
+
+
+def test_cart_id_reused_for_another_variant_during_checkout_is_a_conflict(api, engine):
+    from src.services.cart import CartService
+
+    ordered, replacement = add_variants(engine)
+    original_id = add_variant(api, ordered)
+    replaced = False
+
+    def replace_before_order(connection, cursor, statement, parameters, context, executemany):
+        # Another request removes the line and adds a different variant after checkout has
+        # read the cart; SQLite hands the new row the freed ID.
+        nonlocal replaced
+        if statement.startswith("INSERT INTO orders") and not replaced:
+            replaced = True
+            with Session(engine) as other:
+                CartService(other).remove_item(2, "P-100", ordered)
+            with Session(engine) as other:
+                result = CartService(other).add_item(2, "P-100", 1, replacement)
+                assert result.cart.items[0].cart_item_id == original_id
+
+    event.listen(engine, "before_cursor_execute", replace_before_order)
+    try:
+        response = api.post("/api/v1/orders", headers=auth(), json=DELIVERY)
+    finally:
+        event.remove(engine, "before_cursor_execute", replace_before_order)
+    assert replaced
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ERR_CONCURRENCY_CONFLICT"
+    assert order_counts(engine) == [0, 0, 0]
+    assert (variant_stock(engine, ordered), variant_stock(engine, replacement)) == (5, 5)
+    with Session(engine) as session:
+        rows = session.exec(select(CartItem).where(CartItem.buyer_id == 2)).all()
+        assert [(row.id, row.variant_id, row.is_selected) for row in rows] == [
+            (original_id, replacement, True)
+        ]
