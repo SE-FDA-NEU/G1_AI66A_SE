@@ -1,9 +1,9 @@
-
 """Main API router combining all v1 route endpoints."""
 
 from fastapi import APIRouter
 
 from src.api.addresses import router as addresses_router
+from src.api.admin import router as admin_router
 from src.api.auth import router as auth_router
 from src.api.cart import router as cart_router
 from src.api.categories import router as categories_router
@@ -13,8 +13,15 @@ from src.api.orders import router as orders_router
 from src.api.products import router as products_router
 from src.api.returns import router as returns_router
 from src.api.reviews import router as reviews_router
+from src.api.seller_analytics import router as seller_analytics_router
 from src.api.seller_orders import router as seller_orders_router
-from src.api.seller_products import router as seller_products_router
+from src.api.seller_products import (
+    inventory_router as seller_inventory_router,
+)
+from src.api.seller_products import (
+    router as seller_products_router,
+)
+from src.api.seller_variants import router as seller_variants_router
 from src.api.sellers import router as sellers_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -30,6 +37,10 @@ api_router.include_router(orders_router)
 api_router.include_router(returns_router)
 api_router.include_router(reviews_router)
 api_router.include_router(notifications_router)
+api_router.include_router(seller_analytics_router)
 api_router.include_router(seller_orders_router)
 api_router.include_router(seller_products_router)
+api_router.include_router(seller_inventory_router)
+api_router.include_router(seller_variants_router)
 api_router.include_router(sellers_router)
+api_router.include_router(admin_router)

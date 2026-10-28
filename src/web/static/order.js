@@ -55,6 +55,7 @@ const elements = {
   sellerRejectCancelBtn: document.getElementById("seller-reject-cancel-btn"),
   sellerCancelBtn: document.getElementById("seller-cancel-btn"),
   sellerOrdersLink: document.getElementById("seller-orders-link"),
+  adminPortalLink: document.getElementById("admin-portal-link"),
   myOrdersLink: document.getElementById("my-orders-link"),
   detailsCard: document.getElementById("details-card"),
   recipientName: document.getElementById("recipient-name"),
@@ -241,9 +242,13 @@ function updateStepper(order) {
 function updateActions(order) {
   const user = getCurrentUser();
   const isSeller = Boolean(user && user.role === "seller");
+  const isAdmin = Boolean(user && user.role === "admin");
 
   if (elements.sellerOrdersLink) {
     elements.sellerOrdersLink.hidden = !isSeller;
+  }
+  if (elements.adminPortalLink) {
+    elements.adminPortalLink.hidden = !isAdmin;
   }
   if (elements.myOrdersLink) {
     elements.myOrdersLink.hidden = isSeller;
@@ -421,10 +426,19 @@ function renderOrder(order) {
     const tr = document.createElement("tr");
 
     const tdName = document.createElement("td");
+    if (item.image_url) {
+      const image = document.createElement("img");
+      image.className = "order-item-image";
+      image.src = item.image_url;
+      image.alt = item.product_name;
+      image.loading = "lazy";
+      tdName.appendChild(image);
+    }
     const strongName = document.createElement("strong");
     const nameStrong = strongName;
     nameStrong.textContent = item.product_name;
     strongName.textContent = item.product_name;
+    if (item.variant_name) strongName.textContent += ` · ${item.variant_name}`;
     tdName.appendChild(strongName);
     if (item.seller_order_id) {
       const subTag = document.createElement("span");

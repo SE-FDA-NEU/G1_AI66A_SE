@@ -11,6 +11,8 @@ const elements = {
   image: document.getElementById("product-image"),
   name: document.getElementById("product-name"),
   price: document.getElementById("product-price"),
+  variantLabel: document.getElementById("variant-label"),
+  variant: document.getElementById("product-variant"),
   rating: document.getElementById("product-rating"),
   description: document.getElementById("product-description"),
   stock: document.getElementById("product-stock"),
@@ -24,6 +26,7 @@ const elements = {
   myOrders: document.getElementById("my-orders-link"),
   sellerNewProduct: document.getElementById("seller-new-product-link"),
   sellerOrders: document.getElementById("seller-orders-link"),
+  adminPortal: document.getElementById("admin-portal-link"),
   reviews: document.getElementById("reviews-section"),
   reviewsSummary: document.getElementById("reviews-summary"),
   reviewsError: document.getElementById("reviews-error"),
@@ -38,9 +41,14 @@ const elements = {
   reviewMediaUrl: document.getElementById("review-media-url"),
   reviewSubmit: document.getElementById("review-submit"),
   reviewFormStatus: document.getElementById("review-form-status"),
+  variantManager: document.getElementById("variant-manager"),
+  variantManagerStatus: document.getElementById("variant-manager-status"),
+  variantCreateForm: document.getElementById("variant-create-form"),
+  variantManagerList: document.getElementById("variant-manager-list"),
 };
 const priceFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 let currentProduct = null;
+let selectedVariantId = null;
 let currentIdentity = null;
 let authRevision = 0;
 
@@ -61,7 +69,9 @@ function getUserFromToken() {
 
 function getReturnPath(selectedQty) {
   const qty = selectedQty !== undefined ? selectedQty : (parseInt(elements.quantity?.value, 10) || 1);
-  return `${window.location.pathname}?quantity=${encodeURIComponent(qty)}`;
+  const params = new URLSearchParams({ quantity: String(qty) });
+  if (selectedVariantId !== null) params.set("variant_id", String(selectedVariantId));
+  return `${window.location.pathname}?${params}`;
 }
 
 function configureNavigation() {
@@ -75,10 +85,20 @@ function configureNavigation() {
 
   const isSeller = Boolean(user && user.role === "seller");
   const isBuyer = Boolean(user && user.role === "buyer");
+  const isAdmin = Boolean(user && user.role === "admin");
 
   if (elements.myOrders) elements.myOrders.hidden = !isBuyer;
   if (elements.sellerNewProduct) elements.sellerNewProduct.hidden = !isSeller;
   if (elements.sellerOrders) elements.sellerOrders.hidden = !isSeller;
+  if (elements.adminPortal) elements.adminPortal.hidden = !isAdmin;
+}
+
+function setProductImage(imageUrl, altText) {
+  elements.image.alt = altText;
+  elements.image.addEventListener("error", () => {
+    elements.image.src = PLACEHOLDER_IMAGE;
+  }, { once: true });
+  elements.image.src = imageUrl || PLACEHOLDER_IMAGE;
 }
 
 function getPreservedQuantity() {
@@ -131,22 +151,49 @@ async function loadProduct() {
       ? `${Number(product.rating).toFixed(1)} ★ (${product.review_count} reviews)`
       : "No reviews yet";
     elements.description.textContent = product.description || "No description available.";
-    elements.image.alt = product.name;
-    elements.image.src = product.image_url || product.thumbnail_url || PLACEHOLDER_IMAGE;
-    elements.image.addEventListener("error", () => { elements.image.src = PLACEHOLDER_IMAGE; }, { once: true });
-    const available = product.stock_quantity > 0;
-    elements.stock.textContent = available ? `In Stock (${product.stock_quantity} available)` : "Out of stock";
+    setProductImage(product.image_url || product.thumbnail_url, product.name);
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    const hasVariants = Boolean(product.has_variants || variants.length);
+    elements.variant.replaceChildren();
+    elements.variantLabel.hidden = !hasVariants;
+    elements.variant.hidden = !hasVariants;
+    variants.forEach((variant) => {
+      const option = document.createElement("option");
+      option.value = String(variant.id);
+      option.textContent = `${variant.name} · ${priceFormatter.format(variant.price)} · ${variant.stock_quantity} available`;
+      elements.variant.append(option);
+    });
+    if (hasVariants && variants.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No active options";
+      option.disabled = true;
+      option.selected = true;
+      elements.variant.append(option);
+    }
+    elements.variant.disabled = variants.length === 0;
+    const requestedVariantId = new URLSearchParams(window.location.search).get("variant_id");
+    const selectedVariant = variants.find((variant) => String(variant.id) === requestedVariantId);
+    const selected = selectedVariant || variants[0] || (
+      hasVariants ? { price: product.price, stock_quantity: 0 } : product
+    );
+    if (variants.length) elements.variant.value = String(selected.id);
+    selectedVariantId = variants.length ? selected.id : null;
+    setProductImage(selected.image_url || product.image_url || product.thumbnail_url, product.name);
+    elements.price.textContent = priceFormatter.format(selected.price);
+    const available = selected.stock_quantity > 0;
+    elements.stock.textContent = available ? `In Stock (${selected.stock_quantity} available)` : "Out of stock";
     elements.stock.className = `product-detail__stock ${available ? "product-detail__stock--available" : "product-detail__stock--unavailable"}`;
-    elements.add.disabled = !available;
-    elements.quantity.max = String(product.stock_quantity);
+    elements.add.disabled = !available || (hasVariants && variants.length === 0);
+    elements.quantity.max = String(selected.stock_quantity);
 
     // Restore and revalidate selected quantity against current stock
     const preservedQty = getPreservedQuantity();
     if (available) {
-      const validQty = Math.min(Math.max(1, preservedQty), product.stock_quantity);
+      const validQty = Math.min(Math.max(1, preservedQty), selected.stock_quantity);
       elements.quantity.value = String(validQty);
-      if (preservedQty > product.stock_quantity) {
-        elements.cartStatus.textContent = `Quantity adjusted to maximum available stock (${product.stock_quantity}).`;
+      if (preservedQty > selected.stock_quantity) {
+        elements.cartStatus.textContent = `Quantity adjusted to maximum available stock (${selected.stock_quantity}).`;
       }
     } else {
       elements.quantity.value = "1";
@@ -173,6 +220,19 @@ elements.quantity.addEventListener("input", () => {
 elements.quantity.addEventListener("change", () => {
   configureNavigation();
 });
+elements.variant.addEventListener("change", () => {
+  const variant = currentProduct?.variants?.find((item) => String(item.id) === elements.variant.value);
+  if (!variant) return;
+  selectedVariantId = variant.id;
+  elements.price.textContent = priceFormatter.format(variant.price);
+  setProductImage(variant.image_url || currentProduct.image_url || currentProduct.thumbnail_url, currentProduct.name);
+  const available = variant.stock_quantity > 0;
+  elements.stock.textContent = available ? `In Stock (${variant.stock_quantity} available)` : "Out of stock";
+  elements.stock.className = `product-detail__stock ${available ? "product-detail__stock--available" : "product-detail__stock--unavailable"}`;
+  elements.add.disabled = !available;
+  elements.quantity.max = String(variant.stock_quantity);
+  elements.quantity.value = available ? String(Math.min(Number(elements.quantity.value) || 1, variant.stock_quantity)) : "1";
+});
 
 elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -193,7 +253,11 @@ elements.form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/v1/cart/items", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ product_code: code, quantity: quantityValue }),
+      body: JSON.stringify({
+        product_code: code,
+        quantity: quantityValue,
+        ...(selectedVariantId !== null ? { variant_id: selectedVariantId } : {}),
+      }),
     });
     const payload = await response.json().catch(() => null);
     if (response.status === 401) {
@@ -316,8 +380,181 @@ async function loadReviews() {
   } catch (error) {
     elements.reviewsError.textContent = error instanceof Error ? error.message : "Unable to load reviews.";
     elements.reviewsError.hidden = false;
+  } finally {
+    await loadSellerVariantControls();
   }
 }
+
+async function loadSellerVariantControls() {
+  const token = localStorage.getItem("access_token");
+  if (
+    !token
+    || currentIdentity?.role !== "seller"
+    || currentIdentity.id !== currentProduct?.seller_id
+  ) {
+    elements.variantManager.hidden = true;
+    elements.variantManagerList.replaceChildren();
+    return;
+  }
+  elements.variantManager.hidden = false;
+  elements.variantManagerStatus.textContent = "Loading product options…";
+  try {
+    const response = await fetch(
+      `/api/v1/seller/products/${encodeURIComponent(currentProduct.id)}/variants`,
+      { headers: { Accept: "application/json", Authorization: "Bearer " + token } },
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to load product options.");
+    elements.variantManagerStatus.textContent = "";
+    elements.variantManagerList.replaceChildren(...payload.data.map(renderSellerVariant));
+  } catch (error) {
+    elements.variantManagerStatus.textContent = error instanceof Error
+      ? error.message
+      : "Unable to load product options.";
+  }
+}
+
+function renderSellerVariant(variant) {
+  const row = document.createElement("article");
+  row.className = "review-card";
+  const summary = document.createElement("p");
+  summary.textContent = `${variant.name} · ${variant.sku} · ${priceFormatter.format(variant.price)} · Physical: ${variant.stock_quantity} · Reserved: ${variant.reserved_stock} · Available: ${variant.available_stock} · ${variant.is_active ? "Active" : "Inactive"}`;
+  const form = document.createElement("form");
+  form.className = "variant-edit-form";
+  const values = [
+    ["SKU", variant.sku, "text"],
+    ["Option name", variant.name, "text"],
+    ["Price (VND)", variant.price, "number"],
+    ["Physical stock", variant.stock_quantity, "number"],
+    ["Image URL", variant.image_url || "", "url"],
+  ];
+  const inputs = [];
+  values.forEach(([labelText, value, type]) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = type;
+    input.value = String(value);
+    input.required = type !== "url";
+    if (type === "number") {
+      input.min = labelText === "Stock" ? "0" : "1";
+      input.step = "1";
+    }
+    label.textContent = labelText;
+    label.append(input);
+    inputs.push(input);
+    form.append(label);
+  });
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.className = "button";
+  save.textContent = "Save changes";
+  form.append(save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const values = {
+      sku: inputs[0].value.trim(),
+      name: inputs[1].value.trim(),
+      price: Number(inputs[2].value),
+      stock_quantity: Number(inputs[3].value),
+      image_url: inputs[4].value.trim() || null,
+    };
+    const original = {
+      sku: variant.sku,
+      name: variant.name,
+      price: variant.price,
+      stock_quantity: variant.stock_quantity,
+      image_url: variant.image_url,
+    };
+    const changes = { expected_version: variant.version };
+    Object.keys(values).forEach((field) => {
+      if (values[field] !== original[field]) changes[field] = values[field];
+    });
+    if (Object.keys(changes).length === 1) {
+      elements.variantManagerStatus.textContent = "No changes to save.";
+      return;
+    }
+    await submitVariantUpdate(variant.id, changes);
+  });
+  row.append(summary, form);
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "button";
+  toggle.textContent = variant.is_active ? "Deactivate option" : "Reactivate option";
+  toggle.addEventListener("click", () =>
+    submitVariantUpdate(variant.id, {
+      expected_version: variant.version,
+      is_active: !variant.is_active,
+    }));
+  row.append(toggle);
+  return row;
+}
+
+async function submitVariantUpdate(variantId, body) {
+  const token = localStorage.getItem("access_token");
+  if (!token || !currentProduct) return;
+  elements.variantManagerStatus.textContent = "Saving product option…";
+  try {
+    const response = await fetch(
+      `/api/v1/seller/products/${encodeURIComponent(currentProduct.id)}/variants/${encodeURIComponent(variantId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to save product option.");
+    elements.variantManagerStatus.textContent = "Product option saved.";
+    await loadSellerVariantControls();
+    await loadProduct();
+  } catch (error) {
+    elements.variantManagerStatus.textContent = error instanceof Error
+      ? error.message
+      : "Unable to save product option.";
+  }
+}
+
+elements.variantCreateForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const token = localStorage.getItem("access_token");
+  if (!token || !currentProduct) return;
+  const body = {
+    sku: document.getElementById("variant-sku").value.trim(),
+    name: document.getElementById("variant-name").value.trim(),
+    price: Number(document.getElementById("variant-price").value),
+    stock_quantity: Number(document.getElementById("variant-stock").value),
+    image_url: document.getElementById("variant-image").value.trim() || null,
+  };
+  elements.variantManagerStatus.textContent = "Adding product option…";
+  try {
+    const response = await fetch(
+      `/api/v1/seller/products/${encodeURIComponent(currentProduct.id)}/variants`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to add product option.");
+    elements.variantCreateForm.reset();
+    elements.variantManagerStatus.textContent = "Product option added.";
+    await loadSellerVariantControls();
+    await loadProduct();
+  } catch (error) {
+    elements.variantManagerStatus.textContent = error instanceof Error
+      ? error.message
+      : "Unable to add product option.";
+  }
+});
 
 function createReviewCard(review) {
   const card = document.createElement("article");

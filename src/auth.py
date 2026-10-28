@@ -128,12 +128,30 @@ def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def require_active_user(user: CurrentUser) -> User:
+    """Require an authenticated user whose account status is ACTIVE."""
+    if getattr(user, "status", "ACTIVE") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ACCOUNT_RESTRICTED", "This account is restricted."),
+        )
+    return user
+
+
+ActiveCurrentUser = Annotated[User, Depends(require_active_user)]
+
+
 def require_seller(user: CurrentUser) -> User:
     """Require an authenticated seller for seller-only endpoints."""
     if user.role != "seller":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=error_detail("ERR_SELLER_REQUIRED", "A seller account is required."),
+        )
+    if getattr(user, "status", "ACTIVE") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ACCOUNT_RESTRICTED", "This account is restricted."),
         )
     return user
 
@@ -148,10 +166,33 @@ def require_buyer(user: CurrentUser) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail=error_detail("ERR_BUYER_REQUIRED", "A buyer account is required."),
         )
+    if getattr(user, "status", "ACTIVE") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ACCOUNT_RESTRICTED", "This account is restricted."),
+        )
     return user
 
 
 BuyerUser = Annotated[User, Depends(require_buyer)]
+
+
+def require_admin(user: CurrentUser) -> User:
+    """Require an authenticated platform administrator."""
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ADMIN_REQUIRED", "An administrator account is required."),
+        )
+    if getattr(user, "status", "ACTIVE") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail("ERR_ACCOUNT_RESTRICTED", "This account is restricted."),
+        )
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]
 
 
 def _b64encode(value: bytes) -> str:

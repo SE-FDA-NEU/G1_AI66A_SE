@@ -14,6 +14,8 @@ from src.errors import error_detail
 from src.models.category import Category
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
+from src.schemas.product_variants import VariantResponse
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +59,19 @@ class ProductResponse(BaseModel):
     rating: float = 0.0
     review_count: int = 0
     sales_count: int = 0
+    variants: list[VariantResponse] = Field(default_factory=list)
+    has_variants: bool = False
 
 
 def get_category_and_descendant_ids(session: Session, category_id: int) -> list[int]:
     """Retrieve the specified category and all descendant category IDs recursively."""
     target = session.get(Category, category_id)
-    if target is None:
+    if target is None or not target.is_active:
         return []
 
-    all_categories = session.exec(select(Category.id, Category.parent_id)).all()
+    all_categories = session.exec(
+        select(Category.id, Category.parent_id).where(Category.is_active.is_(True))
+    ).all()
     children_map: dict[int, list[int]] = defaultdict(list)
     for cat_id, parent_id in all_categories:
         if cat_id is not None and parent_id is not None:
@@ -85,15 +91,26 @@ def get_category_and_descendant_ids(session: Session, category_id: int) -> list[
 def product_response(
     product: Product,
     meta: ProductMetadata | None = None,
+    variants: list[ProductVariant] | None = None,
 ) -> ProductResponse:
     """Map a product and its discovery metadata to the public representation."""
-    available_stock = max(product.stock_quantity - product.reserved_stock, 0)
+    has_variants = variants is not None
+    available_stock = (
+        sum(max(variant.stock_quantity - variant.reserved_stock, 0) for variant in variants)
+        if has_variants
+        else max(product.stock_quantity - product.reserved_stock, 0)
+    )
+    display_price = (
+        min((variant.price for variant in variants), default=product.price)
+        if has_variants
+        else product.price
+    )
     return ProductResponse(
         id=str(product.id),
         code=product.code,
         name=product.name,
         description=product.description,
-        price=float(product.price),
+        price=float(display_price),
         thumbnail_url=product.image_url,
         image_url=product.image_url,
         stock_quantity=available_stock,
@@ -109,6 +126,7 @@ def product_response(
         rating=float(meta.rating if meta and meta.rating is not None else 0.0),
         review_count=int(meta.review_count if meta else 0),
         sales_count=int(meta.sales_count if meta and meta.sales_count is not None else 0),
+        has_variants=has_variants,
     )
 
 
@@ -124,8 +142,21 @@ def get_product(
             .where(
                 Product.code == product_code,
                 Product.is_active.is_(True),
+                or_(
+                    ProductMetadata.is_moderated_deactivated.is_(False),
+                    ProductMetadata.is_moderated_deactivated.is_(None),
+                ),
             )
         ).first()
+        all_variants = (
+            session.exec(
+                select(ProductVariant)
+                .where(ProductVariant.product_id == row[0].id)
+                .order_by(ProductVariant.id)
+            ).all()
+            if row is not None
+            else []
+        )
     except SQLAlchemyError as exc:
         logger.exception("Product query failed for code %s", product_code)
         raise HTTPException(
@@ -138,7 +169,19 @@ def get_product(
             detail=error_detail("ERR_PRODUCT_NOT_FOUND", "Product not found."),
         )
     product, meta = row
-    return product_response(product, meta)
+    result = (
+        product_response(
+            product,
+            meta,
+            [variant for variant in all_variants if variant.is_active],
+        )
+        if all_variants
+        else product_response(product, meta)
+    )
+    result.variants = [
+        VariantResponse.from_model(variant) for variant in all_variants if variant.is_active
+    ]
+    return result
 
 
 @router.get("", response_model=ProductListResponse)
@@ -210,21 +253,45 @@ def list_products(
 
     try:
         # Base filter: active products
-        filters = [Product.is_active.is_(True)]
+        filters = [
+            Product.is_active.is_(True),
+            or_(
+                ProductMetadata.is_moderated_deactivated.is_(False),
+                ProductMetadata.is_moderated_deactivated.is_(None),
+            ),
+        ]
 
         # Stock availability filter
         if in_stock is True:
-            filters.append(Product.stock_quantity > Product.reserved_stock)
+            has_any_variant = (
+                select(ProductVariant.id).where(ProductVariant.product_id == Product.id).exists()
+            )
+            has_available_variant = (
+                select(ProductVariant.id)
+                .where(
+                    ProductVariant.product_id == Product.id,
+                    ProductVariant.is_active.is_(True),
+                    ProductVariant.stock_quantity > ProductVariant.reserved_stock,
+                )
+                .exists()
+            )
+            filters.append(
+                or_(
+                    (~has_any_variant & (Product.stock_quantity > Product.reserved_stock)),
+                    has_available_variant,
+                )
+            )
         # When in_stock is False (or None), all active products are returned
         # (both in-stock and out-of-stock)
 
-        # AC1: Keyword search across product name OR description
+        # AC1: Keyword search across product name OR description OR code
         if search and search.strip():
             term = f"%{search.strip()}%"
             filters.append(
                 or_(
                     Product.name.ilike(term),
                     Product.description.ilike(term),
+                    Product.code.ilike(term),
                 )
             )
 
@@ -241,10 +308,19 @@ def list_products(
             filters.append(Product.seller_id == seller_id)
 
         # AC2: Price range filter
+        variant_price = (
+            select(func.min(ProductVariant.price))
+            .where(
+                ProductVariant.product_id == Product.id,
+                ProductVariant.is_active.is_(True),
+            )
+            .scalar_subquery()
+        )
+        display_price = func.coalesce(variant_price, Product.price)
         if min_price is not None:
-            filters.append(Product.price >= min_price)
+            filters.append(display_price >= min_price)
         if max_price is not None:
-            filters.append(Product.price <= max_price)
+            filters.append(display_price <= max_price)
 
         # AC2: Minimum rating filter
         if min_rating is not None:
@@ -262,9 +338,9 @@ def list_products(
                 Product.id.desc(),
             ]
         elif sort == "price_asc":
-            order_clauses = [Product.price.asc(), Product.id.asc()]
+            order_clauses = [display_price.asc(), Product.id.asc()]
         elif sort == "price_desc":
-            order_clauses = [Product.price.desc(), Product.id.desc()]
+            order_clauses = [display_price.desc(), Product.id.desc()]
         elif sort == "rating_desc":
             order_clauses = [
                 func.coalesce(ProductMetadata.rating, 0.0).desc(),
@@ -291,6 +367,14 @@ def list_products(
             .offset(offset)
             .limit(limit)
         ).all()
+        product_ids = [product.id for product, _meta in rows if product.id is not None]
+        all_variants = (
+            session.exec(
+                select(ProductVariant).where(ProductVariant.product_id.in_(product_ids))
+            ).all()
+            if product_ids
+            else []
+        )
     except HTTPException:
         raise
     except SQLAlchemyError as exc:
@@ -300,8 +384,20 @@ def list_products(
             detail=error_detail("ERR_DATABASE_FAILURE", CATALOG_ERROR_MESSAGE),
         ) from exc
 
+    variants_by_product: dict[int, list[ProductVariant]] = defaultdict(list)
+    for variant in all_variants:
+        if variant.is_active:
+            variants_by_product.setdefault(variant.product_id, []).append(variant)
+    any_variant_ids = {variant.product_id for variant in all_variants}
     return ProductListResponse(
-        data=[product_response(product, meta) for product, meta in rows],
+        data=[
+            product_response(
+                product,
+                meta,
+                variants_by_product.get(product.id, []) if product.id in any_variant_ids else None,
+            )
+            for product, meta in rows
+        ],
         meta=ProductMeta(
             current_page=effective_page,
             limit=limit,

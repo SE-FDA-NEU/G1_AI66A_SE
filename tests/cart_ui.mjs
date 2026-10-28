@@ -90,7 +90,7 @@ function pageText(node) { return [node.textContent, ...node.children.map(pageTex
 // Grouping, tri-state, exact totals, visible price changes in either direction, unavailable rows.
 const items = [item(1, 10, true), item(2, 10, false), item(3, 20, true,
   {unit_price: 80000, line_total: 80000, price_changed: true}),
-item(4, 20, false, {availability: "unavailable", available_stock: 0}),
+item(4, 20, false, {availability: "variant_required", available_stock: 0}),
 item(5, 20, false, {availability: "insufficient_stock", available_stock: 0}),
 item(6, 30, false, {unit_price: 120000, line_total: 120000, price_changed: true})];
 let page = setup([ok(snapshot(items))]);
@@ -106,6 +106,7 @@ assert.ok(text.includes(`Shop subtotal: ${price(200000)} · Selected: ${price(10
 assert.ok(text.includes(`Price changed: ${price(100000)} when added → ${price(80000)} now.`));
 assert.ok(text.includes(`Price changed: ${price(100000)} when added → ${price(120000)} now.`));
 assert.ok(text.includes("Unavailable for checkout"));
+assert.ok(text.includes("choose an option before adding it again"));
 assert.equal(page.get("checkout-button").disabled, true); // #120 has not advertised capability.
 page.get("checkout-button").dispatch("click");
 assert.deepEqual(page.navigation, []);
@@ -206,22 +207,38 @@ assert.equal(page.get("select-item-1"), null);
 page.get("checkout-button").dispatch("click");
 assert.deepEqual(page.navigation, ["/checkout"]);
 
-// Quantity and removal keep using product codes and refresh groups/totals from the response.
+// Quantity and removal distinguish cart lines while retaining product-code routes.
 page = setup([ok(snapshot([item(1, 10, true)])),
   ok(snapshot([item(1, 10, true, {quantity: 2, line_total: 200000})])),
   ok(snapshot([]))]);
 await tick();
-page.get("increase-P-1").focus();
-page.get("increase-P-1").dispatch("click");
+page.get("increase-1").focus();
+page.get("increase-1").dispatch("click");
 await tick();
 assert.equal(page.calls[1].url, "/api/v1/cart/items/P-1");
 assert.deepEqual(JSON.parse(page.calls[1].body), {quantity: 2});
 assert.equal(page.get("cart-total").textContent, price(200000));
-assert.equal(page.focused.id, "increase-P-1");
-page.get("remove-P-1").dispatch("click");
+assert.equal(page.focused.id, "increase-1");
+page.get("remove-1").dispatch("click");
 await tick();
 assert.equal(page.calls[2].method, "DELETE");
 assert.equal(page.get("cart-empty").hidden, false);
+
+// Two options of the same product have separate controls and variant-scoped quantity routes.
+const black = item(1, 10, true, {variant_id: 11, variant_name: "Black"});
+const white = item(2, 10, false, {
+  product_id: 1, product_code: "P-1", variant_id: 22, variant_name: "White",
+});
+page = setup([
+  ok(snapshot([black, white])),
+  ok(snapshot([black, {...white, quantity: 2, line_total: 200000}])),
+]);
+await tick();
+page.get("increase-2").dispatch("click");
+await tick();
+assert.equal(page.calls[1].url, "/api/v1/cart/items/P-1?variant_id=22");
+assert.equal(page.get("quantity-2").value, "2");
+assert.ok(page.text(page.get("cart-lines")).includes("White"));
 
 // Ignore a pending response after switching accounts; never render the old account's data.
 let resolveOld;

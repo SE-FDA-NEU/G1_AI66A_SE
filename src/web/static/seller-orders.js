@@ -113,9 +113,13 @@ function createOrderCard(order) {
   items.className = "order-card__items";
   order.items.forEach((item) => {
     const line = document.createElement("li");
-    line.textContent = `${item.product_name} × ${item.quantity} (${item.total_price.toLocaleString("vi-VN")} ₫)`;
+    const purchasedName = item.variant_name
+      ? `${item.product_name} · ${item.variant_name}`
+      : item.product_name;
+    line.textContent = `${purchasedName} × ${item.quantity} (${item.total_price.toLocaleString("vi-VN")} ₫)`;
     items.append(line);
   });
+  card.append(items);
   if (order.tracking_number) {
     const tracking = document.createElement("p");
     tracking.className = "order-card__tracking";

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, update
 from sqlmodel import select
 
-from src.auth import BuyerUser, CurrentUser
+from src.auth import ActiveCurrentUser, BuyerUser, CurrentUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
@@ -16,6 +16,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutInput, OrderResponse
+from src.services.inventory import restore_order_item_stock
 from src.services.orders import CheckoutError, checkout, receipt
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -101,16 +102,14 @@ def get_order(order_id: int, user: CurrentUser, session: SessionDep) -> OrderRes
 def update_buyer_order_status(
     order_id: int,
     request: OrderStatusUpdateRequest,
-    user: CurrentUser,
+    user: ActiveCurrentUser,
     session: SessionDep,
 ) -> OrderResponse:
     order = session.get(Order, order_id)
     if order is None:
         raise HTTPException(404, detail=error_detail("ERR_ORDER_NOT_FOUND", "Order not found."))
 
-    sub_orders = session.exec(
-        select(SellerOrder).where(SellerOrder.order_id == order.id)
-    ).all()
+    sub_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
 
     new_status = request.status
     now = datetime.now(UTC)
@@ -153,15 +152,7 @@ def update_buyer_order_status(
                     .where(OrderItem.seller_order_id == sub_order.id)
                 ).all()
                 for item, product in items:
-                    session.exec(
-                        update(Product)
-                        .where(Product.id == product.id)
-                        .values(
-                            stock_quantity=Product.stock_quantity + item.quantity,
-                            version=Product.version + 1,
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
+                    restore_order_item_stock(session, item)
                     session.exec(
                         update(ProductMetadata)
                         .where(ProductMetadata.product_id == product.id)
@@ -270,15 +261,7 @@ def update_buyer_order_status(
                     .where(OrderItem.seller_order_id == sub_order.id)
                 ).all()
                 for item, product in items:
-                    session.exec(
-                        update(Product)
-                        .where(Product.id == product.id)
-                        .values(
-                            stock_quantity=Product.stock_quantity + item.quantity,
-                            version=Product.version + 1,
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
+                    restore_order_item_stock(session, item)
                     session.exec(
                         update(ProductMetadata)
                         .where(ProductMetadata.product_id == product.id)
@@ -371,7 +354,7 @@ def update_buyer_order_status(
 @router.post("/{order_id}/cancel", response_model=OrderResponse)
 def cancel_buyer_order(
     order_id: int,
-    user: CurrentUser,
+    user: ActiveCurrentUser,
     session: SessionDep,
 ) -> OrderResponse:
     order = session.get(Order, order_id)
@@ -389,7 +372,7 @@ def cancel_buyer_order(
 @router.post("/{order_id}/confirm", response_model=OrderResponse)
 def confirm_buyer_order_delivery(
     order_id: int,
-    user: CurrentUser,
+    user: ActiveCurrentUser,
     session: SessionDep,
 ) -> OrderResponse:
     return update_buyer_order_status(
@@ -398,3 +381,4 @@ def confirm_buyer_order_delivery(
         user=user,
         session=session,
     )
+

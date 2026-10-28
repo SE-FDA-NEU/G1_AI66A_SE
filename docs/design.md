@@ -797,15 +797,20 @@ implementation"). This table lists every code the code raises, checked by
 | `400 Bad Request` | `ERR_SELF_PURCHASE` | A seller attempts to add or checkout their own product | Cart, orders |
 | `400 Bad Request` | `ERR_INVALID_TRANSITION` | A seller order status change that the state machine does not allow (section 3.6) | Seller orders |
 | `400 Bad Request` | `ERR_INVALID_STATUS` | The seller order `status` filter is not a known status | Seller orders |
-| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders |
-| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders |
+| `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders, seller analytics |
+| `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders, seller analytics |
+| `400 Bad Request` | `ERR_INVALID_PERIOD` | An unsupported period grouping is requested | Seller analytics |
+| `400 Bad Request` | `ERR_INVALID_SORT` | An unsupported best-sellers sort field is requested | Seller analytics |
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED` | No bearer token | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_TOKEN` | A malformed, expired or no longer valid token (there is no separate expired-token code) | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_CREDENTIALS` | Wrong email or password | Login |
 | `403 Forbidden` | `ERR_SELLER_REQUIRED` | A buyer calls a seller route | Seller products, seller orders |
 | `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
 | `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
+| `403 Forbidden` | `ERR_ADMIN_REQUIRED` | A non-admin calls a category administration route | Categories |
 | `404 Not Found` | `ERR_PRODUCT_NOT_FOUND` | Unknown or inactive product code | Products, cart |
+| `404 Not Found` | `ERR_CATEGORY_NOT_FOUND` | The requested category does not exist | Categories |
+| `404 Not Found` | `ERR_VARIANT_NOT_FOUND` | The requested product option does not exist or is not owned by the seller | Seller variants |
 | `404 Not Found` | `ERR_REVIEW_NOT_ELIGIBLE` | The order item does not belong to this buyer or product | Reviews |
 | `404 Not Found` | `ERR_REVIEW_NOT_FOUND` | The requested review does not exist | Seller reviews |
 | `404 Not Found` | `ERR_CART_ITEM_NOT_FOUND` | The buyer's cart has no line for the code | Cart |
@@ -815,12 +820,37 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_ADDRESS_CHANGED` | Submitted address version is stale | Addresses, orders |
 | `409 Conflict` | `ERR_STOCK_EXCEEDED` | Not enough available stock, in the cart or at checkout | Cart, orders |
 | `409 Conflict` | `ERR_PRODUCT_UNAVAILABLE` | The product was withdrawn | Cart, orders |
+| `409 Conflict` | `ERR_CATEGORY_SLUG` | A category slug is already in use | Categories |
+| `409 Conflict` | `ERR_CATEGORY_HAS_CHILDREN` | An active category has active children | Categories |
+| `409 Conflict` | `ERR_CATEGORY_HIERARCHY` | The saved category hierarchy already contains a cycle | Categories |
+| `409 Conflict` | `ERR_VARIANT_SKU_CONFLICT` | An SKU is already used by the seller's shop | Seller variants |
 | `409 Conflict` | `ERR_REVIEW_NOT_COMPLETED` | The seller order has not reached `COMPLETED` | Reviews |
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
+| `422 Unprocessable Entity` | `ERR_CATEGORY_PARENT` | The requested parent category does not exist or is inactive | Categories |
+| `422 Unprocessable Entity` | `ERR_CATEGORY_HIERARCHY` | A category update would create a hierarchy cycle | Categories |
 | `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | A database failure; the response never contains SQL | All routes |
+| `400 Bad Request` | `ERR_PARENT_NOT_FOUND` | Parent category does not exist | Admin categories |
+| `400 Bad Request` | `ERR_CATEGORY_CYCLE` | Category parent assignment would cause a cycle | Admin categories |
+| `400 Bad Request` | `ERR_INVALID_DATES` | Voucher end date is before start date | Admin vouchers |
+| `400 Bad Request` | `ERR_INVALID_DISCOUNT` | Voucher discount value exceeds limits | Admin vouchers |
+| `400 Bad Request` | `ERR_INVALID_USAGE_LIMIT` | Voucher per-user limit exceeds total usage limit | Admin vouchers |
+| `400 Bad Request` | `ERR_SUB_ORDER_MISMATCH` | Sub-order does not belong to the specified parent order | Admin disputes |
+| `400 Bad Request` | `ERR_INVALID_DISPUTE_STATE` | Sub-order is not in a permitted return state for dispute creation | Admin disputes |
+| `400 Bad Request` | `ERR_SELF_MODERATION` | Administrator attempts to suspend their own account | Admin users |
+| `400 Bad Request` | `ERR_DISPUTE_RESOLVED` | Administrator attempts to decide an already resolved dispute | Admin disputes |
+| `403 Forbidden` | `ERR_ADMIN_REQUIRED` | Non-admin user calls an admin endpoint | All admin routes |
+| `403 Forbidden` | `ERR_ACCOUNT_RESTRICTED` | Restricted or suspended account attempts prohibited actions | Auth, cart, products |
+| `403 Forbidden` | `ERR_PRODUCT_MODERATED` | Seller attempts to reactivate a product deactivated by administrator moderation | Seller products |
+| `404 Not Found` | `ERR_CATEGORY_NOT_FOUND` | Category does not exist | Admin categories |
+| `404 Not Found` | `ERR_USER_NOT_FOUND` | User account not found | Admin users |
+| `404 Not Found` | `ERR_VOUCHER_NOT_FOUND` | Platform voucher not found | Admin vouchers |
+| `404 Not Found` | `ERR_DISPUTE_NOT_FOUND` | Return dispute not found | Admin disputes |
+| `409 Conflict` | `ERR_CATEGORY_EXISTS` | Category with this slug already exists | Admin categories |
+| `409 Conflict` | `ERR_VOUCHER_EXISTS` | Voucher with this code already exists | Admin vouchers |
+| `409 Conflict` | `ERR_DISPUTE_EXISTS` | A dispute already exists for this sub-order | Admin disputes |
 | Any | `ERR_BAD_REQUEST`, `ERR_FORBIDDEN`, `ERR_NOT_FOUND`, `ERR_CONFLICT`, `ERR_INTERNAL_SERVER`, `ERR_REQUEST_FAILED` | Fallback codes in `src/main.py` for an `HTTPException` raised without an envelope; no route raises one today | Shared handler |
 
 The Sprint 3 planning list (`docs/evidence/sprint3.md` section 2.3) also named
@@ -1308,3 +1338,19 @@ checkout verifies, conditional usage counters inside the checkout transaction, a
 restoration rules tied to the US14 cancellation paths (#106, PR #164). Section 3.4 gains the `ERR_VOUCHER_*` and
 `ERR_QUOTE_STALE` codes only in the PR that first raises them. Legacy checkout bodies
 keep today's hash and pricing until the checkout UI (#136) sends quotes.
+
+
+## US20 payments and escrow settlement contract (#112)
+
+Design only. `payment_status` and `escrow_status` already exist on `orders` and
+`seller_orders` (PR #170), but there is no payment method, recorded result or settlement
+yet. The proposed contract for #148–#150 is in
+[US20 payments and settlement](us20-payments.md). It covers four tracked methods with no
+provider; the five #112 payment statuses (no `PARTIALLY_REFUNDED`); seller net
+`B_s − floor(B_s × rate_bps / 10000)` with no deduction for platform-funded discounts; a
+release guard (`COMPLETED`, paid, held) that runs once on every completion path; refunds
+recorded once through `payment_events`; an event-order matrix with invariants I1–I8; and
+explicit legacy-order rules. The commission rate, COD timing, refund amount, demo-result
+recording, the escrow name `VOIDED` and the analytics keys are pending decisions D1–D6.
+Their owners confirm them before the dependent code merges. Legacy bodies are recorded
+as COD until the checkout UI (#149) sends a method.

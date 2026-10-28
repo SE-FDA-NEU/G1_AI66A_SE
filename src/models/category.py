@@ -25,3 +25,5 @@ class Category(SQLModel, table=True):
         nullable=True,
         index=True,
     )
+
+    is_active: bool = True
