@@ -1,10 +1,9 @@
 """Seller-scoped order listing and fulfilment transitions."""
 
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func, update
 from sqlmodel import select
 
@@ -12,14 +11,16 @@ from src.auth import SellerUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
+from src.schemas.order_history import OrderHistoryEntry
+from src.schemas.order_status import OrderStatusChange
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
+from src.services.order_history import history_by_seller_order, record_transition
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
@@ -72,6 +73,7 @@ class SellerOrderResponse(BaseModel):
     shipped_at: datetime | None = None
     delivered_at: datetime | None = None
     completed_at: datetime | None = None
+    history: list[OrderHistoryEntry] = Field(default_factory=list)
     items: list[SellerOrderItemResponse]
 
 
@@ -80,18 +82,8 @@ class SellerOrderListResponse(BaseModel):
     meta: dict[str, int]
 
 
-class StatusUpdateRequest(BaseModel):
-    status: Literal[
-        "PENDING",
-        "CONFIRMED",
-        "PROCESSING",
-        "CANCELLATION_REQUESTED",
-        "SHIPPED",
-        "DELIVERED",
-        "COMPLETED",
-        "CANCELLED",
-    ]
-    tracking_number: str | None = None
+class StatusUpdateRequest(OrderStatusChange):
+    """Status change with bounded tracking and audit note fields."""
 
 
 class StatusUpdateResponse(BaseModel):
@@ -119,6 +111,7 @@ def _seller_order_response(
     session,
     seller_order: SellerOrder,
     parent_order: Order,
+    history: list[OrderHistoryEntry] | None = None,
 ) -> SellerOrderResponse:
     rows = session.exec(
         select(OrderItem, Product, ProductVariant)
@@ -164,9 +157,17 @@ def _seller_order_response(
         status=seller_order.status,
         ordered_at=parent_order.created_at,
         tracking_number=seller_order.tracking_number,
-        shipped_at=seller_order.shipped_at,
-        delivered_at=seller_order.delivered_at,
-        completed_at=seller_order.completed_at,
+        shipped_at=seller_order.shipped_at.replace(tzinfo=UTC) if seller_order.shipped_at else None,
+        delivered_at=(
+            seller_order.delivered_at.replace(tzinfo=UTC) if seller_order.delivered_at else None
+        ),
+        completed_at=(
+            seller_order.completed_at.replace(tzinfo=UTC) if seller_order.completed_at else None
+        ),
+        history=(
+            history if history is not None
+            else history_by_seller_order(session, [seller_order.id]).get(seller_order.id, [])
+        ),
         items=items,
     )
 
@@ -219,9 +220,11 @@ def list_seller_orders(
         .offset((page - 1) * limit)
         .limit(limit)
     ).all()
+    history = history_by_seller_order(session, [seller_order.id for seller_order, _ in rows])
     return SellerOrderListResponse(
         data=[
-            _seller_order_response(session, seller_order, parent) for seller_order, parent in rows
+            _seller_order_response(session, seller_order, parent, history.get(seller_order.id, []))
+            for seller_order, parent in rows
         ],
         meta={"page": page, "limit": limit, "total": total},
     )
@@ -255,15 +258,16 @@ def update_seller_order_status(
         )
 
     old_status = seller_order.status
+    now = datetime.now(UTC)
     status_values: dict[str, object] = {"status": new_status}
     if new_status == "SHIPPED":
-        status_values["shipped_at"] = datetime.now(UTC)
+        status_values["shipped_at"] = now
         if request.tracking_number:
             status_values["tracking_number"] = request.tracking_number
     elif new_status == "DELIVERED":
-        status_values["delivered_at"] = datetime.now(UTC)
+        status_values["delivered_at"] = now
     elif new_status == "COMPLETED":
-        status_values["completed_at"] = datetime.now(UTC)
+        status_values["completed_at"] = now
     changed = session.exec(
         update(SellerOrder)
         .where(
@@ -324,14 +328,14 @@ def update_seller_order_status(
     elif new_status == "CONFIRMED":
         note = "Confirmed by seller."
 
-    session.add(
-        OrderHistory(
-            seller_order_id=seller_order.id,
-            from_status=old_status,
-            to_status=new_status,
-            changed_by_user_id=seller.id,
-            note=note,
-        )
+    record_transition(
+        session,
+        seller_order_id=seller_order.id,
+        from_status=old_status,
+        to_status=new_status,
+        actor=seller,
+        note=request.note if request.note is not None else note,
+        occurred_at=now,
     )
 
     child_orders = session.exec(

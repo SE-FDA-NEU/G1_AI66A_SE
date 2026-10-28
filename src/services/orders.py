@@ -26,6 +26,7 @@ from src.schemas.orders import (
 )
 from src.services.addresses import AddressError, owned_address
 from src.services.notifications import create_notification
+from src.services.order_history import history_by_seller_order
 
 
 class CheckoutError(Exception):
@@ -80,6 +81,12 @@ def receipt(
     visible_sub_orders = sub_orders
     if seller_id is not None:
         visible_sub_orders = [so for so in sub_orders if so.seller_id == seller_id]
+        # The parent may carry another shop's latest tracking details.
+        values["tracking_number"] = sub_order.tracking_number
+        for milestone in ("shipped_at", "delivered_at", "completed_at"):
+            timestamp = getattr(sub_order, milestone)
+            values[milestone] = timestamp.replace(tzinfo=UTC) if timestamp else None
+    history = history_by_seller_order(session, [so.id for so in visible_sub_orders])
 
     return OrderData(
         **values,
@@ -116,6 +123,7 @@ def receipt(
                 shipped_at=so.shipped_at.replace(tzinfo=UTC) if so.shipped_at else None,
                 delivered_at=so.delivered_at.replace(tzinfo=UTC) if so.delivered_at else None,
                 completed_at=so.completed_at.replace(tzinfo=UTC) if so.completed_at else None,
+                history=history.get(so.id, []),
             )
             for so in visible_sub_orders
             if so.id is not None

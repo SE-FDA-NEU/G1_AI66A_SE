@@ -7,7 +7,6 @@ from sqlalchemy import case, update
 from sqlmodel import Session, select
 
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
@@ -17,6 +16,7 @@ from src.models.user import User
 from src.schemas.returns import CreateReturnRequest, ReturnDecisionRequest, ReturnRequestData
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
+from src.services.order_history import record_transition
 
 
 class ReturnError(Exception):
@@ -215,14 +215,13 @@ def submit_return_request(
     # Derive parent order state from all child seller orders
     sync_parent_order_state(session, order)
 
-    session.add(
-        OrderHistory(
-            seller_order_id=seller_order.id,
-            from_status="DELIVERED",
-            to_status="RETURN_REQUESTED",
-            changed_by_user_id=current_user.id,
-            note=f"Buyer submitted return request: {payload.reason}",
-        )
+    record_transition(
+        session,
+        seller_order_id=seller_order.id,
+        from_status="DELIVERED",
+        to_status="RETURN_REQUESTED",
+        actor=current_user,
+        note=f"Buyer submitted return request: {payload.reason}",
     )
 
     create_notification(
@@ -401,14 +400,13 @@ def decide_return_request(
         else:
             note = "Return approved. Inventory not increased."
 
-        session.add(
-            OrderHistory(
-                seller_order_id=seller_order.id,
-                from_status=old_status,
-                to_status="RETURNED_REFUNDED",
-                changed_by_user_id=current_user.id,
-                note=note,
-            )
+        record_transition(
+            session,
+            seller_order_id=seller_order.id,
+            from_status=old_status,
+            to_status="RETURNED_REFUNDED",
+            actor=current_user,
+            note=note,
         )
 
         create_notification(
@@ -428,14 +426,13 @@ def decide_return_request(
         session.add(seller_order)
 
         note = f"Return rejected: {decision.decision_notes or 'Not approved.'}"
-        session.add(
-            OrderHistory(
-                seller_order_id=seller_order.id,
-                from_status=old_status,
-                to_status="COMPLETED",
-                changed_by_user_id=current_user.id,
-                note=note,
-            )
+        record_transition(
+            session,
+            seller_order_id=seller_order.id,
+            from_status=old_status,
+            to_status="COMPLETED",
+            actor=current_user,
+            note=note,
         )
 
         create_notification(
