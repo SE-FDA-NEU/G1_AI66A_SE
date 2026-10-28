@@ -17,6 +17,7 @@ const elements = {
   emptyMessage: document.getElementById("products-empty-message"),
   resetEmpty: document.getElementById("products-reset-empty"),
   error: document.getElementById("products-error"),
+  errorMessage: document.getElementById("products-error-message"),
   retry: document.getElementById("products-retry"),
   search: document.getElementById("products-search"),
   searchInput: document.getElementById("product-search-input"),
@@ -193,6 +194,9 @@ function createProductCard(product) {
 let activeAbortController = null;
 let currentRequestId = 0;
 
+const LOAD_ERROR_MESSAGE = "We could not load the products. Check your connection, then select Retry.";
+const TIMEOUT_MESSAGE = "The catalog is taking too long to respond. Select Retry to try again.";
+
 async function fetchProducts(page, search, signal) {
   const params = new URLSearchParams({
     page: String(page),
@@ -299,10 +303,14 @@ async function loadProducts(page = currentPage) {
     }
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === "AbortError" || requestId !== currentRequestId) {
+    // A newer query aborted this request and will update the page itself.
+    if (requestId !== currentRequestId) {
       return;
     }
-    showState("error", "We could not load the products. Check your connection, then select Retry.");
+    // Only the timeout aborts the current request, so it must end in the error state.
+    const message = error.name === "AbortError" ? TIMEOUT_MESSAGE : LOAD_ERROR_MESSAGE;
+    elements.errorMessage.textContent = message;
+    showState("error", message);
   } finally {
     clearTimeout(timeoutId);
     if (activeAbortController === controller) {
@@ -314,27 +322,36 @@ async function loadProducts(page = currentPage) {
   }
 }
 
-function validatePriceBounds() {
-  const min = elements.filterMinPrice.value.trim();
-  const max = elements.filterMaxPrice.value.trim();
-  if (min !== "" && max !== "") {
-    const minVal = Number(min);
-    const maxVal = Number(max);
-    if (minVal > maxVal) {
-      elements.priceError.textContent = "Minimum price cannot be greater than maximum price.";
-      elements.priceError.hidden = false;
-      return false;
-    }
-  }
-  elements.priceError.textContent = "";
-  elements.priceError.hidden = true;
-  return true;
+function isWholePrice(value) {
+  return value === "" || /^\d+$/.test(value);
 }
 
-function applyCurrentFilters() {
-  if (!validatePriceBounds()) {
-    return;
+/** A number input holding text it cannot parse, such as "-" or "1e", reports its value as "". */
+function hasUnreadablePrice() {
+  return [elements.filterMinPrice, elements.filterMaxPrice].some((input) => input.validity?.badInput);
+}
+
+function priceBoundsError() {
+  const min = elements.filterMinPrice.value.trim();
+  const max = elements.filterMaxPrice.value.trim();
+  if (hasUnreadablePrice() || !isWholePrice(min) || !isWholePrice(max)) {
+    return "Enter prices as whole numbers of 0 ₫ or more.";
   }
+  if (min !== "" && max !== "" && Number(min) > Number(max)) {
+    return "Minimum price cannot be greater than maximum price.";
+  }
+  return "";
+}
+
+function validatePriceBounds() {
+  const message = priceBoundsError();
+  elements.priceError.textContent = message;
+  elements.priceError.hidden = message === "";
+  return message === "";
+}
+
+/** Copy the visible controls into the applied query, so results always match what is shown. */
+function readFilterControls() {
   currentSearch = elements.searchInput.value.trim();
   currentCategory = elements.filterCategory ? elements.filterCategory.value : "";
   currentSeller = elements.filterSeller ? elements.filterSeller.value : "";
@@ -343,6 +360,13 @@ function applyCurrentFilters() {
   currentRating = elements.filterRating ? elements.filterRating.value : "";
   currentInStock = elements.filterInStock ? elements.filterInStock.checked : true;
   currentSort = elements.catalogSort ? elements.catalogSort.value : "";
+}
+
+function applyCurrentFilters() {
+  if (!validatePriceBounds()) {
+    return;
+  }
+  readFilterControls();
 
   currentPage = 1;
   loadProducts();
@@ -375,6 +399,22 @@ function resetAllFilters() {
   loadProducts();
 }
 
+/** Rebuild a filter's options, keeping its current choice when that option still exists. */
+function replaceOptions(select, defaultLabel, items, labelOf) {
+  const selected = select.value;
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = defaultLabel;
+  const options = items.map((item) => {
+    const option = document.createElement("option");
+    option.value = String(item.id);
+    option.textContent = labelOf(item);
+    return option;
+  });
+  select.replaceChildren(defaultOption, ...options);
+  select.value = options.some((option) => option.value === selected) ? selected : "";
+}
+
 async function loadFilterOptions() {
   if (
     !elements.filterCategory ||
@@ -393,34 +433,27 @@ async function loadFilterOptions() {
     if (categoriesRes && categoriesRes.ok && elements.filterCategory) {
       const categories = await categoriesRes.json();
       if (Array.isArray(categories)) {
-        const defaultCatOpt = document.createElement("option");
-        defaultCatOpt.value = "";
-        defaultCatOpt.textContent = "All categories";
-        elements.filterCategory.replaceChildren(defaultCatOpt);
-        for (const cat of categories) {
-          const opt = document.createElement("option");
-          opt.value = String(cat.id);
-          const prefix = cat.parent_id ? "— " : "";
-          opt.textContent = `${prefix}${cat.name}`;
-          elements.filterCategory.append(opt);
-        }
+        replaceOptions(elements.filterCategory, "All categories", categories,
+          (cat) => `${cat.parent_id ? "— " : ""}${cat.name}`);
       }
     }
 
     if (sellersRes && sellersRes.ok && elements.filterSeller) {
       const sellers = await sellersRes.json();
       if (Array.isArray(sellers)) {
-        const defaultSellerOpt = document.createElement("option");
-        defaultSellerOpt.value = "";
-        defaultSellerOpt.textContent = "All sellers";
-        elements.filterSeller.replaceChildren(defaultSellerOpt);
-        for (const seller of sellers) {
-          const opt = document.createElement("option");
-          opt.value = String(seller.id);
-          opt.textContent = seller.name;
-          elements.filterSeller.append(opt);
-        }
+        replaceOptions(elements.filterSeller, "All sellers", sellers, (seller) => seller.name);
       }
+    }
+
+    // A restored choice whose option no longer exists now shows as "All"; load what is shown.
+    if (
+      currentCategory !== elements.filterCategory.value ||
+      currentSeller !== elements.filterSeller.value
+    ) {
+      currentCategory = elements.filterCategory.value;
+      currentSeller = elements.filterSeller.value;
+      currentPage = 1;
+      loadProducts();
     }
   } catch (err) {
     // Graceful degradation: filter controls remain functional even if remote options fail
@@ -449,6 +482,9 @@ if (elements.catalogSort) {
 if (elements.filterCategory) {
   elements.filterCategory.addEventListener("change", applyCurrentFilters);
 }
+if (elements.filterSeller) {
+  elements.filterSeller.addEventListener("change", applyCurrentFilters);
+}
 if (elements.filterRating) {
   elements.filterRating.addEventListener("change", applyCurrentFilters);
 }
@@ -466,5 +502,11 @@ elements.previous.addEventListener("click", () => loadProducts(currentPage - 1))
 elements.next.addEventListener("click", () => loadProducts(currentPage + 1));
 
 loadFilterOptions();
+// Back navigation can restore the previous control values; load what the controls show.
+readFilterControls();
+if (!validatePriceBounds()) {
+  currentMinPrice = "";
+  currentMaxPrice = "";
+}
 loadProducts();
 configureNavigation();

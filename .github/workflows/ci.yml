@@ -51,7 +51,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-cov ruff
+          pip install pytest pytest-cov ruff playwright
 
       - name: Lint
         run: ruff check . --output-format=github
@@ -68,6 +68,7 @@ jobs:
 
       - name: Page script checks
         run: |
+          node tests/products_ui.mjs
           node tests/cart_ui.mjs
           node tests/checkout_ui.mjs
           node tests/addresses_ui.mjs
