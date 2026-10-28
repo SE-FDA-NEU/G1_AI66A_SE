@@ -141,3 +141,21 @@ sandbox; the test application uses disposable databases.
 
 External PR review, merge and issue closure remain repository workflow steps. The local
 implementation and verification do not claim that another person has reviewed the work.
+
+## Task #122 Implementation & Verification Summary
+
+- **Target Issue:** [#122 [Task] Add address data model and API](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/122) (Parent Story: #105)
+- **Data Model:** `UserAddress` mapped to table `user_addresses`:
+  - Enforced version check (`ck_address_version: version >= 1`).
+  - Partial unique index `ux_user_addresses_one_default` preventing multiple active defaults per buyer account.
+  - SQLite autoincrement enabled ensuring deleted address primary keys are never recycled.
+- **REST APIs (`/api/v1/addresses`):**
+  - Authenticated buyer protection (`BuyerUser`). Returns `401 Unauthorized` for anonymous guests and `403 Forbidden` for sellers.
+  - Endpoints: `GET /` (list ordered by default-first then ID), `POST /` (create with automatic first-address default assignment), `PUT /{id}` (full replacement with optimistic version check), `PATCH /{id}/default` (switch default with automatic clearing and version increments), `DELETE /{id}` (owner-scoped atomic deletion).
+- **Error Codes & Security:**
+  - `ERR_ADDRESS_NOT_FOUND` (404) for foreign or non-existent IDs.
+  - `ERR_ADDRESS_CHANGED` (409) for stale version updates.
+  - `ERR_CONCURRENCY_CONFLICT` (409) with 5-attempt retry backoff on database lock/collision.
+- **Automated Verification:**
+  - `tests/test_addresses.py`: 32 test cases passed covering CRUD lifecycle, ownership isolation, phone number / visible text validators, concurrent default switching, and database rollback safety.
+
