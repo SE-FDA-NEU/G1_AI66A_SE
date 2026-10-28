@@ -246,7 +246,14 @@ function renderAddresses(preselect) {
   addressStatus.textContent = addresses.length ? "Select a saved address or enter delivery information manually." : "No saved addresses. Add an address or enter delivery information manually.";
   syncDeliveryMode();
 }
+function clearDeleteConfirmation() {
+  deletingAddress = null;
+  document.getElementById("address-delete").hidden = true;
+  document.getElementById("delete-address-summary").textContent = "";
+}
 async function loadAddresses(preselect = true) {
+  // A refreshed list requires confirmation of its current address details.
+  clearDeleteConfirmation();
   addressBook.hidden = false;
   lock(true);
   addressStatus.textContent = "Loading addresses...";
@@ -262,6 +269,7 @@ async function loadAddresses(preselect = true) {
   }
 }
 function openAddress(row = null) {
+  clearDeleteConfirmation();
   editingAddress = row;
   addressForm.hidden = false;
   addressError.textContent = ""; clearFields(addressForm, "address");
@@ -287,7 +295,8 @@ async function runAddress(action, successMessage = "", focusId = "") {
     addressError.textContent = e.message + (e.code === "ERR_VALIDATION" ?
       " Your input is preserved. Correct the highlighted fields and save again." :
       " Your input is preserved. Reload addresses to review changes before retrying.");
-    if (addressForm.hidden) { addressStatus.textContent = addressError.textContent; addressStatus.focus(); }
+    addressStatus.textContent = addressError.textContent;
+    if (addressForm.hidden) addressStatus.focus();
     else showFields(addressForm, "address", e.fields);
   } finally {
     addressBusy = false;
@@ -323,17 +332,18 @@ addressForm.addEventListener("submit", event => {
 });
 document.getElementById("cancel-delete").addEventListener("click", () => {
   const focusId = deletingAddress ? `address-${deletingAddress.id}-delete` : "add-address";
-  deletingAddress = null; document.getElementById("address-delete").hidden = true;
-  document.getElementById("delete-address-summary").textContent = "";
+  clearDeleteConfirmation();
   focusAddressControl(focusId);
 });
-document.getElementById("confirm-delete").addEventListener("click", () => runAddress(async () => {
+document.getElementById("confirm-delete").addEventListener("click", () => {
+  // Ignore a queued/stale click after editing, cancellation or refresh invalidated it.
   if (!deletingAddress) return;
-  await request(`/api/v1/addresses/${deletingAddress.id}`, {method:"DELETE"});
-  deletingAddress = null; document.getElementById("address-delete").hidden = true;
-  document.getElementById("delete-address-summary").textContent = "";
-  await loadAddresses(false);
-}, "Address deleted.", "address-choice"));
+  return runAddress(async () => {
+    await request(`/api/v1/addresses/${deletingAddress.id}`, {method:"DELETE"});
+    clearDeleteConfirmation();
+    await loadAddresses(false);
+  }, "Address deleted.", "address-choice");
+});
 globalThis.addEventListener?.("storage", event => {
   if (event.key === "access_token") authenticationChanged();
 });

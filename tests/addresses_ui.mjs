@@ -33,6 +33,11 @@ assert.equal(fields.phone_number.focused,true);
 assert.equal(fields.province.value,a.province);
 assert.equal(test.nodes.get("address-form").hidden,false);
 assert.match(test.nodes.get("address-phone_number-error").textContent,/7 to 15/);
+assert.match(test.nodes.get("address-status").textContent,/correct the highlighted fields/i);
+assert.ok(!test.nodes.get("address-status").textContent.includes("Saving"));
+test.nodes.get("cancel-address").handlers.click();
+assert.ok(!test.nodes.get("address-status").textContent.includes("Saving"),
+  "Cancelling after a rejected save must not leave an indefinite saving status");
 // Successful create, edit with version, default and delete/cancel including a bodyless 204.
 test=setup([user,empty],null,undefined,[list([]),{status:201,payload:{data:a}},list([a]),{payload:{data:{...a,version:2}}},list([{...a,version:2}]),{status:204},list([])]);await tick();
 test.nodes.get("add-address").handlers.click();
@@ -163,3 +168,52 @@ await test.nodes.get("retry").handlers.click();
 assert.equal(test.calls.length,3);
 assert.equal(test.calls[2].url,"/api/v1/orders");
 assert.deepEqual(test.navigations,["/checkout/confirmation/9"]);
+
+// A non-modal delete confirmation must not outlive editing its target.
+const originalAddress={...a,recipient_name:"Alice",detailed_address:"12 Old Street"};
+const updatedAddress={...originalAddress,recipient_name:"Bob",detailed_address:"99 New Street",version:2};
+test=setup([user,empty],null,undefined,[list([originalAddress]),
+  {payload:{data:updatedAddress}},list([updatedAddress]),{status:204},list([])]);await tick();
+card=test.nodes.get("address-list").children[0];
+card.children[2].handlers.click();
+assert.match(test.nodes.get("delete-address-summary").textContent,/Alice.*12 Old Street/);
+card.children[1].handlers.click();
+assert.equal(test.nodes.get("address-delete").hidden,true,"Editing invalidates delete confirmation");
+assert.equal(test.nodes.get("delete-address-summary").textContent,"");
+await test.nodes.get("confirm-delete").handlers.click();
+assert.ok(!test.calls.some(call=>call.options.method==="DELETE"));
+test.nodes.get("address-form").elements.recipient_name.value="Bob";
+test.nodes.get("address-form").elements.detailed_address.value="99 New Street";
+await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
+await test.nodes.get("confirm-delete").handlers.click();
+assert.ok(!test.calls.some(call=>call.options.method==="DELETE"),
+  "Delete -> Edit -> Save -> stale Confirm must never delete the updated address");
+assert.equal(test.nodes.get("address-status").textContent,"Address updated.");
+test.nodes.get("address-list").children[0].children[2].handlers.click();
+assert.match(test.nodes.get("delete-address-summary").textContent,/Bob.*99 New Street/);
+await test.nodes.get("confirm-delete").handlers.click();
+assert.equal(test.calls.filter(call=>call.options.method==="DELETE").length,1,
+  "Deletion requires fresh confirmation for the current details");
+
+// Starting a refresh invalidates confirmation even if that refresh fails.
+for(const refreshResponse of [list([updatedAddress]),new Error("Address service unavailable")]) {
+  test=setup([user,empty],null,undefined,[list([originalAddress]),refreshResponse]);await tick();
+  test.nodes.get("address-list").children[0].children[2].handlers.click();
+  await test.nodes.get("reload-addresses").handlers.click();
+  assert.equal(test.nodes.get("address-delete").hidden,true);
+  assert.equal(test.nodes.get("delete-address-summary").textContent,"");
+  await test.nodes.get("confirm-delete").handlers.click();
+  assert.ok(!test.calls.some(call=>call.options.method==="DELETE"));
+}
+
+// Network errors in an open form also end progress while keeping the draft available.
+test=setup([user,empty],null,undefined,[list([a]),new Error("offline")]);await tick();
+test.nodes.get("address-list").children[0].children[1].handlers.click();
+await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
+assert.match(test.nodes.get("address-status").textContent,/offline/);
+assert.ok(!test.nodes.get("address-status").textContent.includes("Saving"));
+assert.equal(test.nodes.get("address-form").hidden,false);
+assert.equal(test.nodes.get("address-form").elements.recipient_name.value,a.recipient_name);
+test.nodes.get("cancel-address").handlers.click();
+assert.match(test.nodes.get("address-status").textContent,/offline/);
+console.log("US13 review regressions passed: stale delete confirmation invalidated and failed saves end progress.");

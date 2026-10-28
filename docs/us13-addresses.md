@@ -100,7 +100,10 @@ ownership/version rules, database migrations and order snapshots are unchanged.
 - Delete confirmation shows the exact recipient, phone and full address as plain
   text. Cancel receives initial focus, sends no DELETE, clears the confirmation
   details and returns focus to the initiating Delete button. A failed deletion
-  retains the target and confirmation for review/retry.
+  retains the target and confirmation for review/retry. Opening an address form or
+  starting any address-list refresh invalidates that confirmation, including when
+  the refresh fails. Updated address details require a fresh Delete confirmation;
+  stale Confirm events send no DELETE and do not announce a successful deletion.
 - Cancelling an edit returns to its Edit button. Successful edits return to the
   refreshed Edit button; adding, deleting or setting a default returns to the
   checkout address selector. These actions preserve the user's current delivery
@@ -109,10 +112,15 @@ ownership/version rules, database migrations and order snapshots are unchanged.
   `tabindex="-1"` also lets failed card actions focus their visible error feedback.
   Field-level validation continues to preserve entered values and focus the first
   invalid input. Pending mutations disable address controls and refuse duplicates.
+  Every failed mutation replaces the saving status with error guidance, whether
+  the editor is open or closed. Cancelling after a rejected save cannot leave an
+  indefinite progress message.
 
 Run `node tests/addresses_ui.mjs` and `node tests/checkout_ui.mjs` to verify these
 behaviors alongside saved/manual checkout selection, account isolation and pending
-checkout protection. A native Chromium spot check using disposable API fixtures
+checkout protection. Review regressions also cover Delete → Edit → Save → stale
+Confirm, refresh success/failure, fresh confirmation of updated details, and 422/
+network errors followed by cancellation. A native Chromium spot check using disposable API fixtures
 also confirmed edit/default/delete focus, targeted delete confirmation and no
 horizontal overflow at 360/768/1280px. This spot check does not replace the existing
 SQLite persistence tests or claim real-user validation.
