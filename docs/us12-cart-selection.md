@@ -56,8 +56,12 @@ conflict check to protect against reused SQLite row IDs.
   Rows are deleted before commit inside that transaction, so they disappear only
   when the order commits. A failure rolls back stock, orders and cart deletion.
   Unselected rows remain unchanged, including unavailable rows.
-- The selected-line delete checks row ID, buyer, product, quantity and selection.
-  A concurrent deselection/quantity change conflicts and rolls back. Existing
+- The selected-line delete checks row ID, buyer, product, variant, quantity and
+  selection. A concurrent deselection/quantity change conflicts and rolls back. The
+  variant check (#120) matters because SQLite reuses a freed row ID. Another request
+  can remove the ordered line and add a different variant of the same product
+  between checkout reading the cart and deleting the line. Without that check,
+  checkout would order the old variant and delete the new line. Existing
   optimistic stock checks and cross-buyer ID-reuse protection remain.
 - Committed idempotent replay returns the same order before reading the remaining
   cart. It cannot accidentally order newly selected leftover rows on retry.
@@ -103,6 +107,7 @@ capability. Incomplete new metadata never falls back to whole-cart checkout.
 | Item/shop changes persist and update selected total | Same API test and item/shop/failure cases in `cart_ui.mjs` |
 | Unavailable rows deselect; price changes disclosed | `test_unavailable_rows_deselected_and_not_reselected_on_restock`, `test_price_at_add_is_immutable_across_price_and_quantity_changes`; cart/checkout script checks |
 | Only selected order rows created/removed | `test_mixed_shop_checkout_preserves_unselected_rows_and_idempotent_replay`, `test_failed_selected_checkout_rolls_back_every_selected_row` |
+| Only the selected variant is ordered; other variant rows stay (#120) | `test_selected_variant_is_ordered_and_other_variant_rows_survive`, `test_cart_id_reused_for_another_variant_during_checkout_is_a_conflict` |
 
 `tests/test_us12.py` also covers strict inputs, ownership, empty selection,
 concurrent deselection, reused row IDs and repeatable legacy migration. The US04
