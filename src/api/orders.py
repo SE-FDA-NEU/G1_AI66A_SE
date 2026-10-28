@@ -36,18 +36,6 @@ TRANSITIONS: dict[str, set[str]] = {
 
 class OrderStatusUpdateRequest(OrderStatusChange):
     """Status change with bounded tracking and audit note fields."""
-class OrderStatusUpdateRequest(BaseModel):
-    status: Literal[
-        "PENDING",
-        "CONFIRMED",
-        "PROCESSING",
-        "CANCELLATION_REQUESTED",
-        "SHIPPED",
-        "DELIVERED",
-        "COMPLETED",
-        "CANCELLED",
-    ]
-    tracking_number: str | None = None
 
 
 # Backward-compatibility alias
