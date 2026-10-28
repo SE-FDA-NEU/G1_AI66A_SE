@@ -135,6 +135,31 @@ class SellerProductResponse(BaseModel):
     data: SellerProduct
 
 
+class SellerProductListResponse(BaseModel):
+    data: list[SellerProduct]
+
+
+class SellerInventoryProduct(BaseModel):
+    """Product representation for seller inventory management with moderation state."""
+
+    id: int
+    code: str
+    seller_id: int
+    name: str
+    description: str | None = ""
+    price: int
+    stock_quantity: int
+    reserved_stock: int
+    image_url: str | None = None
+    is_active: bool
+    is_moderated_deactivated: bool = False
+    version: int
+
+
+class SellerInventoryListResponse(BaseModel):
+    data: list[SellerInventoryProduct]
+
+
 def field_message(field: str, error: Mapping[str, Any]) -> str:
     """A message for one invalid product field; the submitted value is never repeated."""
     label = FIELD_LABELS[field]

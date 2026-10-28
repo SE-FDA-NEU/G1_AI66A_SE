@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.auth import CurrentUser
+from src.auth import ActiveCurrentUser, CurrentUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.schemas.returns import (
@@ -30,7 +30,7 @@ router = APIRouter(tags=["Returns"])
 def create_return_request_endpoint(
     order_id: int,
     payload: CreateReturnRequest,
-    current_user: CurrentUser,
+    current_user: ActiveCurrentUser,
     session: SessionDep,
 ) -> ReturnRequestResponse:
     """Submit a return or refund request for a delivered order."""
@@ -96,7 +96,7 @@ def get_return_request_endpoint(
 def decide_return_request_endpoint(
     return_request_id: int,
     decision: ReturnDecisionRequest,
-    current_user: CurrentUser,
+    current_user: ActiveCurrentUser,
     session: SessionDep,
 ) -> ReturnRequestResponse:
     """Approve or reject a return request."""

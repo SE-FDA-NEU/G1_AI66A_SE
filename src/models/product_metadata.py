@@ -30,3 +30,5 @@ class ProductMetadata(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
     )
+
+    is_moderated_deactivated: bool = Field(default=False)

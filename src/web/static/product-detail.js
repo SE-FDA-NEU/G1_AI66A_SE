@@ -26,6 +26,7 @@ const elements = {
   myOrders: document.getElementById("my-orders-link"),
   sellerNewProduct: document.getElementById("seller-new-product-link"),
   sellerOrders: document.getElementById("seller-orders-link"),
+  adminPortal: document.getElementById("admin-portal-link"),
   reviews: document.getElementById("reviews-section"),
   reviewsSummary: document.getElementById("reviews-summary"),
   reviewsError: document.getElementById("reviews-error"),
@@ -84,10 +85,12 @@ function configureNavigation() {
 
   const isSeller = Boolean(user && user.role === "seller");
   const isBuyer = Boolean(user && user.role === "buyer");
+  const isAdmin = Boolean(user && user.role === "admin");
 
   if (elements.myOrders) elements.myOrders.hidden = !isBuyer;
   if (elements.sellerNewProduct) elements.sellerNewProduct.hidden = !isSeller;
   if (elements.sellerOrders) elements.sellerOrders.hidden = !isSeller;
+  if (elements.adminPortal) elements.adminPortal.hidden = !isAdmin;
 }
 
 function setProductImage(imageUrl, altText) {

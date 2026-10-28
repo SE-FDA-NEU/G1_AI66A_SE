@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, update
 from sqlmodel import select
 
-from src.auth import BuyerUser, CurrentUser
+from src.auth import ActiveCurrentUser, BuyerUser, CurrentUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
@@ -102,7 +102,7 @@ def get_order(order_id: int, user: CurrentUser, session: SessionDep) -> OrderRes
 def update_buyer_order_status(
     order_id: int,
     request: OrderStatusUpdateRequest,
-    user: CurrentUser,
+    user: ActiveCurrentUser,
     session: SessionDep,
 ) -> OrderResponse:
     order = session.get(Order, order_id)
@@ -354,7 +354,7 @@ def update_buyer_order_status(
 @router.post("/{order_id}/cancel", response_model=OrderResponse)
 def cancel_buyer_order(
     order_id: int,
-    user: CurrentUser,
+    user: ActiveCurrentUser,
     session: SessionDep,
 ) -> OrderResponse:
     order = session.get(Order, order_id)
@@ -372,7 +372,7 @@ def cancel_buyer_order(
 @router.post("/{order_id}/confirm", response_model=OrderResponse)
 def confirm_buyer_order_delivery(
     order_id: int,
-    user: CurrentUser,
+    user: ActiveCurrentUser,
     session: SessionDep,
 ) -> OrderResponse:
     return update_buyer_order_status(
@@ -381,3 +381,4 @@ def confirm_buyer_order_delivery(
         user=user,
         session=session,
     )
+
