@@ -219,6 +219,18 @@ def test_issue115_q_matches_legacy_search(client, sample_catalog, keyword):
     assert canonical.json() == legacy.json()
 
 
+def test_issue115_q_matches_description_without_matching_name(client, sample_catalog):
+    """Assert actual results for a description-only keyword, independently of legacy search."""
+    response = client.get("/api/v1/products", params={"q": "  CREATIVES  "})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["total_items"] == 1
+    assert [product["code"] for product in body["data"]] == ["P-LAP-PRO"]
+    product = body["data"][0]
+    assert "creatives" not in product["name"].lower()
+    assert "creatives" in product["description"].lower()
+
+
 def test_issue115_combines_all_filters(client, sample_catalog):
     response = client.get("/api/v1/products", params={
         "q": "laptop", "category_id": 1, "seller_id": 2,
@@ -265,11 +277,29 @@ def test_issue115_canonical_parameters_take_precedence(client, sample_catalog):
     {"page": 0}, {"q": "x" * 201}, {"sort_by": "random"},
     {"min_rating": 5.1}, {"min_price": -1}, {"category_id": 0},
     {"seller_id": 0}, {"in_stock": "bad"},
+    {"max_price": -1}, {"min_rating": -1}, {"limit": 0},
+    {"search": "x" * 201}, {"sort": "random"},
+    {"min_price": 200, "max_price": 100},
 ])
 def test_issue115_invalid_parameters_return_422(client, params):
+    """Framework and route validation both use the common error envelope."""
     response = client.get("/api/v1/products", params=params)
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "ERR_VALIDATION"
+    assert response.headers["content-type"].startswith("application/json")
+    body = response.json()
+    assert set(body) == {"error"}
+    error = body["error"]
+    assert {"code", "message"} <= set(error) <= {"code", "message", "fields"}
+    assert error["code"] == "ERR_VALIDATION"
+    assert isinstance(error["message"], str)
+    assert error["message"].strip()
+    if "fields" in error:
+        assert isinstance(error["fields"], dict)
+        assert error["fields"]
+        for field, messages in error["fields"].items():
+            assert isinstance(field, str) and field
+            assert isinstance(messages, list) and messages
+            assert all(isinstance(message, str) and message.strip() for message in messages)
 
 
 def test_issue115_empty_and_out_of_range_pages(client, sample_catalog):
