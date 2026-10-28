@@ -39,6 +39,7 @@ const elements = {
   buyerOrdersLink: document.getElementById("buyer-orders-link"),
   sellerNewProductLink: document.getElementById("seller-new-product-link"),
   sellerOrdersLink: document.getElementById("seller-orders-link"),
+  adminPortalLink: document.getElementById("admin-portal-link"),
 };
 
 let currentPage = 1;
@@ -76,6 +77,7 @@ function configureNavigation() {
 
   const isSeller = Boolean(user && user.role === "seller");
   const isBuyer = Boolean(user && user.role === "buyer");
+  const isAdmin = Boolean(user && user.role === "admin");
 
   if (elements.buyerOrdersLink) {
     elements.buyerOrdersLink.hidden = !isBuyer;
@@ -85,6 +87,9 @@ function configureNavigation() {
   }
   if (elements.sellerOrdersLink) {
     elements.sellerOrdersLink.hidden = !isSeller;
+  }
+  if (elements.adminPortalLink) {
+    elements.adminPortalLink.hidden = !isAdmin;
   }
 }
 

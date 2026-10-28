@@ -142,6 +142,10 @@ def get_product(
             .where(
                 Product.code == product_code,
                 Product.is_active.is_(True),
+                or_(
+                    ProductMetadata.is_moderated_deactivated.is_(False),
+                    ProductMetadata.is_moderated_deactivated.is_(None),
+                ),
             )
         ).first()
         all_variants = (
@@ -249,7 +253,13 @@ def list_products(
 
     try:
         # Base filter: active products
-        filters = [Product.is_active.is_(True)]
+        filters = [
+            Product.is_active.is_(True),
+            or_(
+                ProductMetadata.is_moderated_deactivated.is_(False),
+                ProductMetadata.is_moderated_deactivated.is_(None),
+            ),
+        ]
 
         # Stock availability filter
         if in_stock is True:
@@ -274,13 +284,14 @@ def list_products(
         # When in_stock is False (or None), all active products are returned
         # (both in-stock and out-of-stock)
 
-        # AC1: Keyword search across product name OR description
+        # AC1: Keyword search across product name OR description OR code
         if search and search.strip():
             term = f"%{search.strip()}%"
             filters.append(
                 or_(
                     Product.name.ilike(term),
                     Product.description.ilike(term),
+                    Product.code.ilike(term),
                 )
             )
 

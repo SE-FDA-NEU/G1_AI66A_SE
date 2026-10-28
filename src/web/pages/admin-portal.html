@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Admin Portal - Mini Marketplace</title>
+    <link rel="stylesheet" href="/static/products.css">
+    <link rel="stylesheet" href="/static/admin-portal.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="admin-header">
+        <div class="admin-header-content">
+            <div class="admin-brand">
+                <a href="/products" class="brand-link">Mini Marketplace</a>
+                <span class="admin-badge">Admin Portal</span>
+            </div>
+            <div class="admin-user-info">
+                <span id="admin-user-name" class="user-name">Loading...</span>
+                <button id="admin-logout-btn" class="btn btn-secondary btn-sm">Log Out</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="admin-container">
+        <!-- Unauthorized / Restricted Banner -->
+        <div id="admin-unauthorized-banner" class="alert alert-danger" style="display: none;">
+            <h3>Access Denied</h3>
+            <p>You must be signed in with an active platform administrator account to access this portal.</p>
+            <a href="/login?next=/admin" class="btn btn-primary btn-sm">Sign in as Admin</a>
+        </div>
+
+        <!-- Main Portal Dashboard -->
+        <div id="admin-portal-content" class="portal-layout" style="display: none;">
+            <!-- Navigation Sidebar -->
+            <nav class="portal-nav" aria-label="Admin Navigation">
+                <button class="nav-tab active" data-tab="catalog">
+                    <span class="tab-icon">📦</span> Catalog Policy & Moderation
+                </button>
+                <button class="nav-tab" data-tab="categories">
+                    <span class="tab-icon">🏷️</span> Categories
+                </button>
+                <button class="nav-tab" data-tab="vouchers">
+                    <span class="tab-icon">🎟️</span> Platform Vouchers
+                </button>
+                <button class="nav-tab" data-tab="users">
+                    <span class="tab-icon">👥</span> Account Moderation
+                </button>
+                <button class="nav-tab" data-tab="disputes">
+                    <span class="tab-icon">⚖️</span> Return Disputes
+                </button>
+            </nav>
+
+            <!-- Portal View Content -->
+            <section class="portal-views">
+                <!-- Global Feedback Toast -->
+                <div id="admin-alert" class="portal-alert" style="display: none;"></div>
+
+                <!-- View 1: Catalog Moderation -->
+                <div id="view-catalog" class="tab-view active">
+                    <div class="view-header">
+                        <div>
+                            <h2>Catalog Moderation</h2>
+                            <p class="subtitle">Review marketplace products and enforce listing compliance.</p>
+                        </div>
+                        <div class="filter-controls">
+                            <input type="text" id="catalog-search" placeholder="Search by name or code..." class="form-input">
+                            <select id="catalog-filter-status" class="form-select">
+                                <option value="">All Statuses</option>
+                                <option value="active">Active (On Sale)</option>
+                                <option value="inactive">Deactivated</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="catalog-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Product Name</th>
+                                    <th>Seller</th>
+                                    <th>Category</th>
+                                    <th>Price</th>
+                                    <th>Stock</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="catalog-tbody">
+                                <tr><td colspan="8" class="text-center">Loading products...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- View 2: Categories -->
+                <div id="view-categories" class="tab-view">
+                    <div class="view-header">
+                        <div>
+                            <h2>Category Hierarchy</h2>
+                            <p class="subtitle">Define and organize product taxonomy and policy rules.</p>
+                        </div>
+                        <button id="btn-new-category" class="btn btn-primary">+ Add Category</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="categories-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Slug</th>
+                                    <th>Parent ID</th>
+                                    <th>Products</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="categories-tbody">
+                                <tr><td colspan="6" class="text-center">Loading categories...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- View 3: Platform Vouchers -->
+                <div id="view-vouchers" class="tab-view">
+                    <div class="view-header">
+                        <div>
+                            <h2>Platform Vouchers</h2>
+                            <p class="subtitle">Create and manage sitewide promotion codes and discount limits.</p>
+                        </div>
+                        <button id="btn-new-voucher" class="btn btn-primary">+ Create Platform Voucher</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="vouchers-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Type</th>
+                                    <th>Value / Cap</th>
+                                    <th>Min Order</th>
+                                    <th>Usage / Limit</th>
+                                    <th>Valid Period (UTC)</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vouchers-tbody">
+                                <tr><td colspan="8" class="text-center">Loading platform vouchers...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- View 4: Account Moderation -->
+                <div id="view-users" class="tab-view">
+                    <div class="view-header">
+                        <div>
+                            <h2>Account Moderation</h2>
+                            <p class="subtitle">Enforce marketplace terms across buyers and sellers.</p>
+                        </div>
+                        <div class="filter-controls">
+                            <input type="text" id="users-search" placeholder="Search name or email..." class="form-input">
+                            <select id="users-filter-role" class="form-select">
+                                <option value="">All Roles</option>
+                                <option value="buyer">Buyers</option>
+                                <option value="seller">Sellers</option>
+                                <option value="admin">Admins</option>
+                            </select>
+                            <select id="users-filter-status" class="form-select">
+                                <option value="">All Statuses</option>
+                                <option value="ACTIVE">Active</option>
+                                <option value="RESTRICTED">Restricted</option>
+                                <option value="SUSPENDED">Suspended</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Joined</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-tbody">
+                                <tr><td colspan="7" class="text-center">Loading accounts...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- View 5: Return Disputes -->
+                <div id="view-disputes" class="tab-view">
+                    <div class="view-header">
+                        <div>
+                            <h2>Return Disputes Adjudication</h2>
+                            <p class="subtitle">Resolve escalated return disputes between buyers and sellers.</p>
+                        </div>
+                        <div class="filter-controls">
+                            <select id="disputes-filter-status" class="form-select">
+                                <option value="">All Disputes</option>
+                                <option value="PENDING">Pending Review</option>
+                                <option value="APPROVED">Approved</option>
+                                <option value="REJECTED">Rejected</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="disputes-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Order #</th>
+                                    <th>Buyer</th>
+                                    <th>Seller</th>
+                                    <th>Reason & Evidence</th>
+                                    <th>Status</th>
+                                    <th>Decided By</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="disputes-tbody">
+                                <tr><td colspan="8" class="text-center">Loading disputes...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Modal: Category Editor -->
+    <div id="modal-category" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog">
+            <h3 id="modal-category-title">Add Category</h3>
+            <form id="form-category">
+                <input type="hidden" id="category-id">
+                <div class="form-group">
+                    <label for="category-name">Category Name *</label>
+                    <input type="text" id="category-name" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="category-slug">Slug (Unique URL identifier) *</label>
+                    <input type="text" id="category-slug" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="category-parent">Parent Category (Optional)</label>
+                    <select id="category-parent" class="form-select">
+                        <option value="">(None - Top Level Category)</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary btn-cancel-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Voucher Creator -->
+    <div id="modal-voucher" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog">
+            <h3>Create Platform Voucher</h3>
+            <form id="form-voucher">
+                <div class="form-group">
+                    <label for="voucher-code">Voucher Code * (3-32 characters, uppercase)</label>
+                    <input type="text" id="voucher-code" required class="form-input" placeholder="e.g. PLATFORM10">
+                </div>
+                <div class="form-group">
+                    <label for="voucher-type">Discount Type *</label>
+                    <select id="voucher-type" class="form-select" required>
+                        <option value="PERCENTAGE">PERCENTAGE (Percentage off order total)</option>
+                        <option value="FIXED_AMOUNT">FIXED_AMOUNT (Fixed VND discount)</option>
+                        <option value="FREE_SHIPPING">FREE_SHIPPING (Free Shipping promotion)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="group-discount-val">
+                    <label for="voucher-val" id="label-voucher-val">Discount Value * (bps: 1000 = 10%)</label>
+                    <input type="number" id="voucher-val" class="form-input" required min="1" value="1000">
+                </div>
+                <div class="form-group">
+                    <label for="voucher-max">Max Discount Cap (Optional, in VND)</label>
+                    <input type="number" id="voucher-max" class="form-input" min="1" placeholder="e.g. 50000">
+                </div>
+                <div class="form-group">
+                    <label for="voucher-min">Min Order Value (VND)</label>
+                    <input type="number" id="voucher-min" class="form-input" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="voucher-usage-limit">Total Usage Limit (Optional)</label>
+                    <input type="number" id="voucher-usage-limit" class="form-input" min="1" placeholder="Unlimited">
+                </div>
+                <div class="form-group">
+                    <label for="voucher-user-limit">Per-User Limit (Optional)</label>
+                    <input type="number" id="voucher-user-limit" class="form-input" min="1" placeholder="Unlimited">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="voucher-starts">Start Date (UTC) *</label>
+                        <input type="datetime-local" id="voucher-starts" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="voucher-ends">End Date (UTC) *</label>
+                        <input type="datetime-local" id="voucher-ends" class="form-input" required>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary btn-cancel-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Voucher</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: User Account Status -->
+    <div id="modal-user" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog">
+            <h3>Manage User Account Status</h3>
+            <p id="modal-user-desc" class="subtitle"></p>
+            <form id="form-user-status">
+                <input type="hidden" id="user-status-id">
+                <div class="form-group">
+                    <label for="user-status-select">Account Status *</label>
+                    <select id="user-status-select" class="form-select" required>
+                        <option value="ACTIVE">ACTIVE (Normal marketplace privileges)</option>
+                        <option value="RESTRICTED">RESTRICTED (Limited permissions)</option>
+                        <option value="SUSPENDED">SUSPENDED (Prohibited from all marketplace actions)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="user-status-reason">Moderation Reason *</label>
+                    <textarea id="user-status-reason" class="form-input" required rows="3" placeholder="State reason for policy enforcement..."></textarea>
+                </div>
+                <div id="user-audits-list" class="audit-history-box"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary btn-cancel-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Dispute Adjudication Decision -->
+    <div id="modal-dispute" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog">
+            <h3>Adjudicate Return Dispute</h3>
+            <div id="dispute-modal-summary" class="dispute-summary-card"></div>
+            <form id="form-dispute-decision">
+                <input type="hidden" id="dispute-decision-id">
+                <div class="form-group">
+                    <label for="dispute-action">Adjudication Action *</label>
+                    <select id="dispute-action" class="form-select" required>
+                        <option value="APPROVE">APPROVE (Refund buyer & transition order to RETURNED_REFUNDED)</option>
+                        <option value="REJECT">REJECT (Dismiss return & complete order to COMPLETED/RELEASED)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="group-dispute-restock">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="dispute-restock" checked>
+                        <span>Restore product stock inventory for approved returned items</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="dispute-notes">Decision Notes *</label>
+                    <textarea id="dispute-notes" class="form-input" required rows="3" placeholder="Provide reason and resolution explanation..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary btn-cancel-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Decision</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/admin-portal.js"></script>
+</body>
+</html>

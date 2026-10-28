@@ -50,10 +50,23 @@ def seller_orders_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "seller-orders.html")
 
 
+@router.get("/seller/products", response_class=FileResponse, include_in_schema=False)
+def seller_products_page() -> FileResponse:
+    """Serve the seller product management screen."""
+    return FileResponse(PAGES_DIR / "seller-products.html")
+
+
 @router.get("/seller/products/new", response_class=FileResponse, include_in_schema=False)
 def seller_product_new_page() -> FileResponse:
     """Serve the seller product form (US06); POST /api/v1/seller/products enforces the role."""
     return FileResponse(PAGES_DIR / "seller-product-new.html")
+
+
+@router.get("/admin", response_class=FileResponse, include_in_schema=False)
+@router.get("/admin/portal", response_class=FileResponse, include_in_schema=False)
+def admin_portal_page() -> FileResponse:
+    """Serve the platform administrator portal."""
+    return FileResponse(PAGES_DIR / "admin-portal.html")
 
 
 @router.get("/checkout", response_class=FileResponse, include_in_schema=False)

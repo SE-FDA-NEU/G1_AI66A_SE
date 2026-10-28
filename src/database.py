@@ -70,6 +70,13 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"
                     )
                 )
+            if "status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'"
+                    )
+                )
 
         if "cart_items" in tables:
             columns = {c["name"] for c in inspector.get_columns("cart_items")}
@@ -356,21 +363,57 @@ def migrate_db(connection: Connection | None = None) -> None:
 
         # Backfill ProductMetadata for any existing products that lack metadata
         if "products" in tables and "product_metadata" in tables:
-            connection.execute(
-                text(
-                    "INSERT INTO product_metadata "
-                    "(product_id, category_id, rating, review_count, sales_count, created_at) "
-                    "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
-                    "FROM products p "
-                    "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+            columns = {c["name"] for c in inspector.get_columns("product_metadata")}
+            if "is_moderated_deactivated" in columns:
+                connection.execute(
+                    text(
+                        "INSERT INTO product_metadata "
+                        "(product_id, category_id, rating, review_count, "
+                        "sales_count, created_at, is_moderated_deactivated) "
+                        "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP, FALSE "
+                        "FROM products p "
+                        "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+                    )
                 )
-            )
+            else:
+                connection.execute(
+                    text(
+                        "INSERT INTO product_metadata "
+                        "(product_id, category_id, rating, review_count, sales_count, created_at) "
+                        "SELECT p.id, NULL, 0.0, 0, 0, CURRENT_TIMESTAMP "
+                        "FROM products p "
+                        "WHERE p.id NOT IN (SELECT product_id FROM product_metadata)"
+                    )
+                )
+
+        if "product_metadata" in tables:
+            columns = {c["name"] for c in inspector.get_columns("product_metadata")}
+            if "is_moderated_deactivated" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE product_metadata ADD COLUMN is_moderated_deactivated "
+                        "BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                )
 
         if "return_requests" in tables:
             connection.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_return_requests_seller_order_pending "
                     "ON return_requests(seller_order_id) WHERE status = 'PENDING'"
+                )
+            )
+
+        if "return_disputes" in tables:
+            columns = {c["name"] for c in inspector.get_columns("return_disputes")}
+            if "return_request_id" not in columns:
+                connection.execute(
+                    text("ALTER TABLE return_disputes ADD COLUMN return_request_id INTEGER")
+                )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_return_disputes_seller_order "
+                    "ON return_disputes(seller_order_id)"
                 )
             )
 

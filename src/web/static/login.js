@@ -3,7 +3,7 @@
 const form = document.getElementById("login-form");
 const error = document.getElementById("login-error");
 
-function getReturnDestination() {
+function getReturnDestination(role) {
   const params = new URLSearchParams(window.location.search);
   const candidate = params.get("return_to") || params.get("redirect") || params.get("next");
   if (
@@ -13,6 +13,9 @@ function getReturnDestination() {
     !candidate.includes("\\")
   ) {
     return candidate;
+  }
+  if (role === "admin") {
+    return "/admin";
   }
   return "/products";
 }
@@ -35,7 +38,7 @@ form.addEventListener("submit", async (event) => {
       throw new Error(payload.error?.message || "Unable to log in.");
     }
     localStorage.setItem("access_token", payload.access_token);
-    window.location.assign(getReturnDestination());
+    window.location.assign(getReturnDestination(payload.user?.role));
   } catch (reason) {
     error.textContent = reason instanceof Error ? reason.message : "Unable to log in.";
     error.hidden = false;

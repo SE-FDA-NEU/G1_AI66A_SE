@@ -55,6 +55,7 @@ const elements = {
   sellerRejectCancelBtn: document.getElementById("seller-reject-cancel-btn"),
   sellerCancelBtn: document.getElementById("seller-cancel-btn"),
   sellerOrdersLink: document.getElementById("seller-orders-link"),
+  adminPortalLink: document.getElementById("admin-portal-link"),
   myOrdersLink: document.getElementById("my-orders-link"),
   detailsCard: document.getElementById("details-card"),
   recipientName: document.getElementById("recipient-name"),
@@ -241,9 +242,13 @@ function updateStepper(order) {
 function updateActions(order) {
   const user = getCurrentUser();
   const isSeller = Boolean(user && user.role === "seller");
+  const isAdmin = Boolean(user && user.role === "admin");
 
   if (elements.sellerOrdersLink) {
     elements.sellerOrdersLink.hidden = !isSeller;
+  }
+  if (elements.adminPortalLink) {
+    elements.adminPortalLink.hidden = !isAdmin;
   }
   if (elements.myOrdersLink) {
     elements.myOrdersLink.hidden = isSeller;
