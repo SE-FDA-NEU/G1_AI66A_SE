@@ -9,12 +9,13 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, select
 
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
+from src.models.user import User
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
+from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
 from src.services.orders import CheckoutError
 from src.services.returns import sync_parent_order_state
@@ -55,7 +56,11 @@ def _apply_status(
     *,
     buyer: bool = False,
     tracking_number: str | None = None,
+    audit_note: str | None = None,
 ) -> None:
+    actor = session.get(User, actor_id)
+    if actor is None:
+        raise WorkflowError("ERR_RESOURCE_OWNER", "The order actor could not be loaded.", 403)
     old_status = child.status
     if not is_allowed_transition("buyer" if buyer else "seller", old_status, status):
         raise WorkflowError(
@@ -135,14 +140,14 @@ def _apply_status(
         note = "Delivered."
     elif status == "CONFIRMED":
         note = "Confirmed by seller."
-    session.add(
-        OrderHistory(
-            seller_order_id=child.id,
-            from_status=old_status,
-            to_status=status,
-            changed_by_user_id=actor_id,
-            note=note,
-        )
+    record_transition(
+        session,
+        seller_order_id=child.id,
+        from_status=old_status,
+        to_status=status,
+        actor=actor,
+        note=audit_note if audit_note is not None else note,
+        occurred_at=now,
     )
     create_notification(
         session,
@@ -183,6 +188,7 @@ def seller_status_change(
     sub_order_id: int | None = None,
     order_id: int | None = None,
     tracking_number: str | None = None,
+    note: str | None = None,
 ) -> None:
     """Both seller APIs use the same compare-and-set and cancellation effects."""
 
@@ -209,14 +215,17 @@ def seller_status_change(
             raise WorkflowError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
         for child in children:
             _apply_status(
-                session, parent, child, seller_id, status, tracking_number=tracking_number
+                session, parent, child, seller_id, status,
+                tracking_number=tracking_number, audit_note=note,
             )
         _sync_parent(session, parent)
 
     _transaction(session, operation)
 
 
-def buyer_cancellation(session: Session, buyer_id: int, order_id: int, status: str) -> None:
+def buyer_cancellation(
+    session: Session, buyer_id: int, order_id: int, status: str, *, note: str | None = None,
+) -> None:
     """Cancel all pending children, or only request cancellation after confirmation."""
 
     def operation():
@@ -240,7 +249,7 @@ def buyer_cancellation(session: Session, buyer_id: int, order_id: int, status: s
                 "ERR_INVALID_TRANSITION", "The order cannot be cancelled in its current state.", 400
             )
         for child in targets:
-            _apply_status(session, parent, child, buyer_id, status, buyer=True)
+            _apply_status(session, parent, child, buyer_id, status, buyer=True, audit_note=note)
         _sync_parent(session, parent)
 
     _transaction(session, operation)

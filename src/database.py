@@ -231,6 +231,13 @@ def migrate_db(connection: Connection | None = None) -> None:
                     )
                 )
 
+        if "order_history" in tables:
+            columns = {c["name"] for c in inspector.get_columns("order_history")}
+            if "actor_role" not in columns:
+                connection.execute(
+                    text("ALTER TABLE order_history ADD COLUMN actor_role VARCHAR(20)")
+                )
+
         if "orders" in tables:
             columns = {c["name"] for c in inspector.get_columns("orders")}
             for name in ("request_key", "request_hash"):

@@ -14,7 +14,6 @@ from src.models.account_audit_log import AccountAuditLog
 from src.models.category import Category
 from src.models.notification import Notification
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
@@ -39,6 +38,7 @@ from src.schemas.admin import (
     VoucherAdminResponse,
 )
 from src.services.inventory import restore_order_item_stock
+from src.services.order_history import record_transition
 from src.services.returns import sync_parent_order_state
 
 logger = logging.getLogger(__name__)
@@ -916,28 +916,26 @@ def admin_decide_dispute(
                         .execution_options(synchronize_session=False)
                     )
 
-            session.add(
-                OrderHistory(
-                    seller_order_id=so.id,  # type: ignore[arg-type]
-                    from_status=old_status,
-                    to_status="RETURNED_REFUNDED",
-                    changed_by_user_id=admin.id,  # type: ignore[arg-type]
-                    note=f"Dispute approved by Admin {admin.name}: {payload.decision_notes}",
-                )
+            record_transition(
+                session,
+                seller_order_id=so.id,
+                from_status=old_status,
+                to_status="RETURNED_REFUNDED",
+                actor=admin,
+                note=f"Dispute approved by Admin {admin.name}: {payload.decision_notes}",
             )
         else:
             so.status = "COMPLETED"
             so.escrow_status = "RELEASED"
             session.add(so)
 
-            session.add(
-                OrderHistory(
-                    seller_order_id=so.id,  # type: ignore[arg-type]
-                    from_status=old_status,
-                    to_status="COMPLETED",
-                    changed_by_user_id=admin.id,  # type: ignore[arg-type]
-                    note=f"Dispute rejected by Admin {admin.name}: {payload.decision_notes}",
-                )
+            record_transition(
+                session,
+                seller_order_id=so.id,
+                from_status=old_status,
+                to_status="COMPLETED",
+                actor=admin,
+                note=f"Dispute rejected by Admin {admin.name}: {payload.decision_notes}",
             )
 
         # Sync parent order state atomically

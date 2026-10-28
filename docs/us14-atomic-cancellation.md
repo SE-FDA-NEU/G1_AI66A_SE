@@ -76,8 +76,10 @@ error table in `docs/design.md` records this contract.
   `src/services/order_states.py`. Seller APIs cannot create cancellation requests,
   and buyer cancellation validates both the parent and every active child.
   Conditional writes and the single transaction wrap those shared role rules.
-- **PR #186 / #127:** once merged, route history writes through its audit service,
-  retaining the same cancellation transaction, actor metadata and receipt contract.
+- **PR #186 / #127 integration:** the workflow routes history writes through the
+  shared audit service in this branch. Actor roles, validated notes and milestone
+  timestamps are captured within the existing cancellation transaction; the
+  authorized receipt/history contract is retained.
 - **#148:** integrate the payment/refund amount ledger when available. Replace the
   current tracked status update and legacy escrow/parent conventions with the
   approved payment service in the same transaction, without calling a live provider

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.schemas.addresses import PositiveID
 from src.schemas.delivery import valid_phone, visible_text
+from src.schemas.order_history import OrderHistoryEntry
 
 
 class CheckoutRequest(BaseModel):
@@ -44,6 +45,7 @@ class SubOrderSummary(BaseModel):
     shipped_at: datetime | None = None
     delivered_at: datetime | None = None
     completed_at: datetime | None = None
+    history: list[OrderHistoryEntry] = Field(default_factory=list)
 
 
 class OrderLine(BaseModel):

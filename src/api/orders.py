@@ -1,17 +1,17 @@
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Response
-from pydantic import BaseModel
 from sqlmodel import select
 
 from src.auth import ActiveCurrentUser, BuyerUser, CurrentUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.seller_order import SellerOrder
+from src.schemas.order_status import OrderStatusChange
 from src.schemas.orders import CheckoutInput, OrderResponse
+from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
 from src.services.order_workflow import WorkflowError, buyer_cancellation, seller_status_change
 from src.services.orders import CheckoutError, checkout, receipt
@@ -19,18 +19,8 @@ from src.services.orders import CheckoutError, checkout, receipt
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-class OrderStatusUpdateRequest(BaseModel):
-    status: Literal[
-        "PENDING",
-        "CONFIRMED",
-        "PROCESSING",
-        "CANCELLATION_REQUESTED",
-        "SHIPPED",
-        "DELIVERED",
-        "COMPLETED",
-        "CANCELLED",
-    ]
-    tracking_number: str | None = None
+class OrderStatusUpdateRequest(OrderStatusChange):
+    """Status change with bounded tracking and audit note fields."""
 
 
 # Backward-compatibility alias
@@ -107,6 +97,7 @@ def update_buyer_order_status(
                 new_status,
                 order_id=order_id,
                 tracking_number=request.tracking_number,
+                note=request.note,
             )
         except WorkflowError as exc:
             raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
@@ -120,7 +111,7 @@ def update_buyer_order_status(
 
     if new_status in {"CANCELLED", "CANCELLATION_REQUESTED"}:
         try:
-            buyer_cancellation(session, user.id, order_id, new_status)
+            buyer_cancellation(session, user.id, order_id, new_status, note=request.note)
         except WorkflowError as exc:
             raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
         return OrderResponse(data=receipt(session, user.id, order_id))
@@ -141,14 +132,17 @@ def update_buyer_order_status(
                 sub_order.status = "COMPLETED"
                 sub_order.completed_at = now
                 session.add(sub_order)
-                session.add(
-                    OrderHistory(
-                        seller_order_id=sub_order.id,
-                        from_status=old_sub_status,
-                        to_status="COMPLETED",
-                        changed_by_user_id=user.id,
-                        note="Delivery confirmed by buyer.",
-                    )
+                record_transition(
+                    session,
+                    seller_order_id=sub_order.id,
+                    from_status=old_sub_status,
+                    to_status="COMPLETED",
+                    actor=user,
+                    note=(
+                        request.note if request.note is not None
+                        else "Delivery confirmed by buyer."
+                    ),
+                    occurred_at=now,
                 )
         order.status = "COMPLETED"
         order.completed_at = now

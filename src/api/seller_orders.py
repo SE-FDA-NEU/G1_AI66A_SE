@@ -1,10 +1,9 @@
 """Seller-scoped order listing and fulfilment transitions."""
 
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -16,22 +15,15 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
+from src.schemas.order_history import OrderHistoryEntry, order_timestamp_utc
+from src.schemas.order_status import OrderStatusChange
+from src.services.order_history import history_by_seller_order
+from src.services.order_states import ORDER_STATUSES
 from src.services.order_workflow import WorkflowError, seller_status_change
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
-STATUSES = {
-    "PENDING",
-    "CONFIRMED",
-    "PROCESSING",
-    "CANCELLATION_REQUESTED",
-    "SHIPPED",
-    "DELIVERED",
-    "COMPLETED",
-    "CANCELLED",
-    "RETURN_REQUESTED",
-    "RETURNED_REFUNDED",
-}
+STATUSES = ORDER_STATUSES | {"RETURN_REQUESTED", "RETURNED_REFUNDED"}
 
 
 class SellerOrderItemResponse(BaseModel):
@@ -57,6 +49,7 @@ class SellerOrderResponse(BaseModel):
     shipped_at: datetime | None = None
     delivered_at: datetime | None = None
     completed_at: datetime | None = None
+    history: list[OrderHistoryEntry] = Field(default_factory=list)
     items: list[SellerOrderItemResponse]
 
 
@@ -65,18 +58,8 @@ class SellerOrderListResponse(BaseModel):
     meta: dict[str, int]
 
 
-class StatusUpdateRequest(BaseModel):
-    status: Literal[
-        "PENDING",
-        "CONFIRMED",
-        "PROCESSING",
-        "CANCELLATION_REQUESTED",
-        "SHIPPED",
-        "DELIVERED",
-        "COMPLETED",
-        "CANCELLED",
-    ]
-    tracking_number: str | None = None
+class StatusUpdateRequest(OrderStatusChange):
+    """Status change with bounded tracking and audit note fields."""
 
 
 class StatusUpdateResponse(BaseModel):
@@ -104,6 +87,7 @@ def _seller_order_response(
     session,
     seller_order: SellerOrder,
     parent_order: Order,
+    history: list[OrderHistoryEntry] | None = None,
 ) -> SellerOrderResponse:
     rows = session.exec(
         select(OrderItem, Product, ProductVariant)
@@ -147,11 +131,21 @@ def _seller_order_response(
         order_id=seller_order.order_id,
         customer_name=parent_order.recipient_name,
         status=seller_order.status,
-        ordered_at=parent_order.created_at,
+        ordered_at=order_timestamp_utc(parent_order.created_at),
         tracking_number=seller_order.tracking_number,
-        shipped_at=seller_order.shipped_at,
-        delivered_at=seller_order.delivered_at,
-        completed_at=seller_order.completed_at,
+        shipped_at=(
+            order_timestamp_utc(seller_order.shipped_at) if seller_order.shipped_at else None
+        ),
+        delivered_at=(
+            order_timestamp_utc(seller_order.delivered_at) if seller_order.delivered_at else None
+        ),
+        completed_at=(
+            order_timestamp_utc(seller_order.completed_at) if seller_order.completed_at else None
+        ),
+        history=(
+            history if history is not None
+            else history_by_seller_order(session, [seller_order.id]).get(seller_order.id, [])
+        ),
         items=items,
     )
 
@@ -204,9 +198,11 @@ def list_seller_orders(
         .offset((page - 1) * limit)
         .limit(limit)
     ).all()
+    history = history_by_seller_order(session, [seller_order.id for seller_order, _ in rows])
     return SellerOrderListResponse(
         data=[
-            _seller_order_response(session, seller_order, parent) for seller_order, parent in rows
+            _seller_order_response(session, seller_order, parent, history.get(seller_order.id, []))
+            for seller_order, parent in rows
         ],
         meta={"page": page, "limit": limit, "total": total},
     )
@@ -227,6 +223,7 @@ def update_seller_order_status(
             request.status,
             sub_order_id=sub_order_id,
             tracking_number=request.tracking_number,
+            note=request.note,
         )
     except WorkflowError as exc:
         raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc

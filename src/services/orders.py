@@ -16,6 +16,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
+from src.schemas.order_history import order_timestamp_utc
 from src.schemas.orders import (
     CheckoutInput,
     CheckoutRequest,
@@ -26,6 +27,7 @@ from src.schemas.orders import (
 )
 from src.services.addresses import AddressError, owned_address
 from src.services.notifications import create_notification
+from src.services.order_history import history_by_seller_order
 
 
 class CheckoutError(Exception):
@@ -58,21 +60,24 @@ def receipt(
         order = session.get(Order, order_id)
     if order is None:
         raise CheckoutError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
-    rows = session.exec(
+    item_query = (
         select(OrderItem, Product)
         .join(SellerOrder, SellerOrder.id == OrderItem.seller_order_id)
         .join(Product, Product.id == OrderItem.product_id)
         .where(SellerOrder.order_id == order.id)
         .order_by(OrderItem.id)
-    ).all()
+    )
+    if seller_id is not None:
+        item_query = item_query.where(SellerOrder.seller_id == seller_id)
+    rows = session.exec(item_query).all()
     values = order.model_dump(exclude={"buyer_id", "request_key", "request_hash"})
-    values["created_at"] = order.created_at.replace(tzinfo=UTC)
+    values["created_at"] = order_timestamp_utc(order.created_at)
     if order.shipped_at:
-        values["shipped_at"] = order.shipped_at.replace(tzinfo=UTC)
+        values["shipped_at"] = order_timestamp_utc(order.shipped_at)
     if order.delivered_at:
-        values["delivered_at"] = order.delivered_at.replace(tzinfo=UTC)
+        values["delivered_at"] = order_timestamp_utc(order.delivered_at)
     if order.completed_at:
-        values["completed_at"] = order.completed_at.replace(tzinfo=UTC)
+        values["completed_at"] = order_timestamp_utc(order.completed_at)
     sub_orders = session.exec(
         select(SellerOrder).where(SellerOrder.order_id == order.id).order_by(SellerOrder.id)
     ).all()
@@ -80,6 +85,12 @@ def receipt(
     visible_sub_orders = sub_orders
     if seller_id is not None:
         visible_sub_orders = [so for so in sub_orders if so.seller_id == seller_id]
+        # The parent may carry another shop's latest tracking details.
+        values["tracking_number"] = sub_order.tracking_number
+        for milestone in ("shipped_at", "delivered_at", "completed_at"):
+            timestamp = getattr(sub_order, milestone)
+            values[milestone] = order_timestamp_utc(timestamp) if timestamp else None
+    history = history_by_seller_order(session, [so.id for so in visible_sub_orders])
 
     return OrderData(
         **values,
@@ -113,9 +124,10 @@ def receipt(
                 payment_status=so.payment_status,
                 escrow_status=so.escrow_status,
                 tracking_number=so.tracking_number,
-                shipped_at=so.shipped_at.replace(tzinfo=UTC) if so.shipped_at else None,
-                delivered_at=so.delivered_at.replace(tzinfo=UTC) if so.delivered_at else None,
-                completed_at=so.completed_at.replace(tzinfo=UTC) if so.completed_at else None,
+                shipped_at=order_timestamp_utc(so.shipped_at) if so.shipped_at else None,
+                delivered_at=order_timestamp_utc(so.delivered_at) if so.delivered_at else None,
+                completed_at=order_timestamp_utc(so.completed_at) if so.completed_at else None,
+                history=history.get(so.id, []),
             )
             for so in visible_sub_orders
             if so.id is not None

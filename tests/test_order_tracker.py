@@ -1416,5 +1416,3 @@ def test_concurrent_atomic_stock_depletion_three_buyers_for_single_unit(tmp_path
     with Session(test_db) as session:
         final_prod = session.exec(select(Product).where(Product.code == "TRK-RACE-3WAY")).one()
         assert final_prod.stock_quantity == 0
-
-
