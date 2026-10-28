@@ -79,7 +79,7 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
             order.shipped_at = datetime.now(UTC)
     elif statuses == {"CONFIRMED"}:
         order.status = "CONFIRMED"
-    elif statuses == {"CANCELLATION_REQUESTED"}:
+    elif "CANCELLATION_REQUESTED" in statuses:
         order.status = "CANCELLATION_REQUESTED"
     elif (statuses - {"CANCELLED", "RETURNED_REFUNDED"}) == {"DELIVERED"}:
         order.status = "DELIVERED"
@@ -95,6 +95,12 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
         order.payment_status = "REFUNDED"
     elif "REFUNDED" in payment_statuses:
         order.payment_status = "PARTIALLY_REFUNDED"
+    elif payment_statuses == {"UNPAID"}:
+        order.payment_status = "UNPAID"
+    elif "REFUND_PENDING" in payment_statuses:
+        order.payment_status = "REFUND_PENDING"
+    elif "PAID" not in payment_statuses and "FAILED" in payment_statuses:
+        order.payment_status = "FAILED"
     else:
         order.payment_status = "PAID"
 
@@ -105,6 +111,8 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
         order.escrow_status = "REFUNDED"
     elif escrow_statuses == {"RELEASED"}:
         order.escrow_status = "RELEASED"
+    elif escrow_statuses == {"VOIDED"}:
+        order.escrow_status = "VOIDED"
     elif "HELD" in escrow_statuses:
         order.escrow_status = "HELD"
     elif escrow_statuses == {"REFUNDED", "RELEASED"}:
