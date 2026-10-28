@@ -835,6 +835,7 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
+| `409 Conflict` | `ERR_INVALID_PAYMENT_STATE` | Cancellation finds a payment state other than `PAID`, `UNPAID` or `FAILED`; payment reconciliation is required before cancellation, and no cancellation effects are committed | Buyer and seller order cancellation |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
 | `422 Unprocessable Entity` | `ERR_CATEGORY_PARENT` | The requested parent category does not exist or is inactive | Categories |
 | `422 Unprocessable Entity` | `ERR_CATEGORY_HIERARCHY` | A category update would create a hierarchy cycle | Categories |

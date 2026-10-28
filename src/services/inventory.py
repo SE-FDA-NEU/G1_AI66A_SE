@@ -10,7 +10,7 @@ def restore_order_item_stock(session: Session, item: OrderItem) -> None:
     """Restore stock to the exact inventory unit purchased, including inactive variants."""
     inventory_model = ProductVariant if item.variant_id is not None else Product
     inventory_id = item.variant_id if item.variant_id is not None else item.product_id
-    session.exec(
+    restored = session.exec(
         update(inventory_model)
         .where(inventory_model.id == inventory_id)
         .values(
@@ -19,3 +19,5 @@ def restore_order_item_stock(session: Session, item: OrderItem) -> None:
         )
         .execution_options(synchronize_session=False)
     )
+    if restored.rowcount != 1:
+        raise ValueError("Purchased inventory could not be restored.")

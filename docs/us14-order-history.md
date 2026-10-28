@@ -107,6 +107,14 @@ transition controllers. Their older orchestration remains in place. Revisit the
 design if event volumes require a separately paginated audit API; it does not
 justify a new network service for this small monolith.
 
+After integrating main's #128 cancellation core, the buyer cancellation and both
+seller status routes retain `order_workflow.py` as their transaction owner.
+The workflow calls the audit service with the authenticated actor, optional
+validated note and the same UTC instant used for the milestone. Its conditional
+updates, tracked refunds, stock restoration, notifications and retry/rollback
+behavior remain in that single transaction. Return/admin audit writers and the
+buyer receipt-confirmation path continue using the same audit service.
+
 ## Verification
 
 Cases and expected results are in [testing.md](testing.md#task-127-order-history-and-shipping-milestones).

@@ -414,7 +414,7 @@ def test_seller_completion_uses_one_utc_instant_for_parent_child_and_history(
         second.status = "COMPLETED"
         session.add_all([first, second])
         session.commit()
-    monkeypatch.setattr("src.api.seller_orders.datetime", AdvancingClock)
+    monkeypatch.setattr("src.services.order_workflow.datetime", AdvancingClock)
     response = client.patch(
         "/api/v1/seller/orders/1/status", headers=headers[2], json={"status": "COMPLETED"}
     )
@@ -548,3 +548,40 @@ def test_invalid_transition_leaves_all_audit_data_unchanged(audit_data, path):
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "ERR_INVALID_TRANSITION"
     assert _stored_audit_state(engine) == before
+
+
+@pytest.mark.parametrize("method,path,actor,role,with_note,expected_children", [
+    ("PATCH", "/api/v1/seller/orders/1/status", 2, "seller", True, {1}),
+    ("PATCH", "/api/v1/orders/1/status", 2, "seller", True, {1}),
+    ("PATCH", "/api/v1/orders/1/status", 1, "buyer", True, {1, 2}),
+    ("POST", "/api/v1/orders/1/cancel", 1, "buyer", False, {1, 2}),
+])
+def test_atomic_cancellation_workflow_preserves_actor_and_note(
+    audit_data, method, path, actor, role, with_note, expected_children
+):
+    client, engine, headers = audit_data
+    with Session(engine) as session:
+        for row in [session.get(Order, 1), *session.exec(select(SellerOrder)).all()]:
+            row.status = "PENDING"
+            session.add(row)
+        session.commit()
+    body = {"status": "CANCELLED", "note": "  Reviewed cancellation  "} if with_note else None
+    response = client.request(method, path, headers=headers[actor], json=body)
+    assert response.status_code == 200
+    with Session(engine) as session:
+        events = session.exec(select(OrderHistory).order_by(OrderHistory.id)).all()
+        assert {row.seller_order_id for row in events} == expected_children
+        for row in events:
+            assert (row.from_status, row.to_status) == ("PENDING", "CANCELLED")
+            assert (row.changed_by_user_id, row.actor_role) == (actor, role)
+            if with_note:
+                assert row.note == "Reviewed cancellation"
+            else:
+                assert "Stock restored." in row.note
+            assert session.get(SellerOrder, row.seller_order_id).payment_status == "REFUNDED"
+    visible = response.json()["data"]
+    sub_orders = visible["sub_orders"] if "sub_orders" in visible else [visible]
+    for row in sub_orders:
+        if row["id"] in expected_children:
+            assert row["history"][-1]["actor_role"] == role
+            assert row["history"][-1]["created_at"].endswith("Z")

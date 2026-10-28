@@ -17,6 +17,7 @@ from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.schemas.orders import CheckoutRequest
@@ -28,9 +29,10 @@ def tracker_fixture():
     with Session(engine) as session:
         session.exec(delete(OrderHistory))
         session.exec(delete(OrderItem))
+        session.exec(delete(CartItem))
+        session.exec(delete(ProductVariant))
         session.exec(delete(SellerOrder))
         session.exec(delete(Order))
-        session.exec(delete(CartItem))
         session.exec(delete(ProductMetadata))
         session.exec(delete(Product).where(Product.code.like("TRK-%")))
         session.exec(delete(User).where(User.email.like("trk-%@example.com")))
@@ -108,9 +110,10 @@ def tracker_fixture():
     with Session(engine) as session:
         session.exec(delete(OrderHistory))
         session.exec(delete(OrderItem))
+        session.exec(delete(CartItem))
+        session.exec(delete(ProductVariant))
         session.exec(delete(SellerOrder))
         session.exec(delete(Order))
-        session.exec(delete(CartItem))
         session.exec(delete(ProductMetadata))
         session.exec(delete(Product).where(Product.code.like("TRK-%")))
         session.exec(delete(User).where(User.email.like("trk-%@example.com")))
@@ -852,3 +855,564 @@ def test_order_api_supports_malicious_xss_payloads_safely(client: TestClient, tr
     assert len(items) >= 1
     item = next(it for it in items if it["product_id"] == prod_id)
     assert xss_payload in item["product_name"]
+
+def test_seller_ownership_on_all_product_and_variant_mutations(client: TestClient, tracker_fixture):
+    """Sellers cannot update or delete products or variants owned by another seller."""
+    seller_b_token = tracker_fixture["seller_b_token"]
+    buyer_token = tracker_fixture["buyer_token"]
+    prod_a_id = tracker_fixture["product_a_id"]
+
+    seller_b_hdr = {"Authorization": f"Bearer {seller_b_token}"}
+    buyer_hdr = {"Authorization": f"Bearer {buyer_token}"}
+
+    # Create a variant for product_a (owned by seller_a)
+    with Session(engine) as session:
+        var_a = ProductVariant(
+            product_id=prod_a_id,
+            seller_id=tracker_fixture["seller_a_id"],
+            sku="TRK-VAR-A1",
+            name="Tracked Variant A1",
+            price=175_000,
+            stock_quantity=5,
+            version=1,
+            is_active=True,
+        )
+        session.add(var_a)
+        session.commit()
+        session.refresh(var_a)
+        var_a_id = var_a.id
+
+    # 1. Seller B cannot PUT product A
+    res_put = client.put(
+        f"/api/v1/seller/products/{prod_a_id}",
+        headers=seller_b_hdr,
+        json={"name": "Hacked Name"},
+    )
+    assert res_put.status_code == 403
+    assert res_put.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # 2. Seller B cannot DELETE product A
+    res_del = client.delete(
+        f"/api/v1/seller/products/{prod_a_id}",
+        headers=seller_b_hdr,
+    )
+    assert res_del.status_code == 403
+    assert res_del.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # 3. Seller B cannot POST a variant to product A
+    res_post_var = client.post(
+        f"/api/v1/seller/products/{prod_a_id}/variants",
+        headers=seller_b_hdr,
+        json={
+            "sku": "TRK-VAR-B-HACK",
+            "name": "Unauthorized Variant",
+            "price": 99_000,
+            "stock_quantity": 10,
+        },
+    )
+    assert res_post_var.status_code == 403
+    assert res_post_var.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # 4. Seller B cannot PATCH variant of product A
+    res_patch_var = client.patch(
+        f"/api/v1/seller/products/{prod_a_id}/variants/{var_a_id}",
+        headers=seller_b_hdr,
+        json={"name": "Unauthorized Update", "expected_version": 1},
+    )
+    assert res_patch_var.status_code == 403
+    assert res_patch_var.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # 5. Seller B cannot DELETE variant of product A
+    res_del_var = client.delete(
+        f"/api/v1/seller/products/{prod_a_id}/variants/{var_a_id}",
+        headers=seller_b_hdr,
+    )
+    assert res_del_var.status_code == 403
+    assert res_del_var.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # 6. Buyer role attempting seller product mutations gets 403
+    assert client.patch(
+        f"/api/v1/seller/products/{prod_a_id}",
+        headers=buyer_hdr,
+        json={"name": "Buyer Hack"},
+    ).status_code == 403
+
+    # 7. Unauthenticated request gets 401
+    assert client.patch(
+        f"/api/v1/seller/products/{prod_a_id}",
+        json={"name": "Guest Hack"},
+    ).status_code == 401
+
+
+def test_seller_ownership_on_order_mutations_and_multi_seller_isolation(
+    client: TestClient, tracker_fixture
+):
+    """Sellers cannot modify foreign sub-orders; multi-seller order mutations are isolated."""
+    seller_a_token = tracker_fixture["seller_a_token"]
+    seller_b_token = tracker_fixture["seller_b_token"]
+    buyer_token = tracker_fixture["buyer_token"]
+
+    seller_a_hdr = {"Authorization": f"Bearer {seller_a_token}"}
+    seller_b_hdr = {"Authorization": f"Bearer {seller_b_token}"}
+    buyer_hdr = {"Authorization": f"Bearer {buyer_token}"}
+
+    # Buyer orders 1 item from Seller A and 1 item from Seller B
+    client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": "TRK-A", "quantity": 1},
+    )
+    client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": "TRK-B", "quantity": 1},
+    )
+    order_res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": "multi-seller-order-key"},
+        json={
+            "recipient_name": "Multi Buyer",
+            "delivery_address": "789 Isolation Blvd",
+            "phone_number": "0912345678",
+        },
+    )
+    assert order_res.status_code == 201
+    order_data = order_res.json()["data"]
+    order_id = order_data["id"]
+    sub_orders = order_data["sub_orders"]
+    assert len(sub_orders) == 2
+
+    so_a = next(so for so in sub_orders if so["seller_id"] == tracker_fixture["seller_a_id"])
+    so_b = next(so for so in sub_orders if so["seller_id"] == tracker_fixture["seller_b_id"])
+
+    # 1. Seller A attempts to update Seller B's sub-order -> 403 ERR_RESOURCE_OWNER
+    res_cross = client.patch(
+        f"/api/v1/seller/orders/{so_b['id']}/status",
+        headers=seller_a_hdr,
+        json={"status": "CONFIRMED"},
+    )
+    assert res_cross.status_code == 403
+    assert res_cross.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # Seller B attempts to update Seller A's sub-order -> 403 ERR_RESOURCE_OWNER
+    res_cross_b = client.patch(
+        f"/api/v1/seller/orders/{so_a['id']}/status",
+        headers=seller_b_hdr,
+        json={"status": "CONFIRMED"},
+    )
+    assert res_cross_b.status_code == 403
+    assert res_cross_b.json()["error"]["code"] == "ERR_RESOURCE_OWNER"
+
+    # 2. Buyer attempts to update seller sub-order -> 403
+    res_buyer = client.patch(
+        f"/api/v1/seller/orders/{so_a['id']}/status",
+        headers=buyer_hdr,
+        json={"status": "CONFIRMED"},
+    )
+    assert res_buyer.status_code == 403
+
+    # 3. Unauthenticated attempts get 401
+    assert client.patch(
+        f"/api/v1/seller/orders/{so_a['id']}/status",
+        json={"status": "CONFIRMED"},
+    ).status_code == 401
+
+    # 4. Seller A confirms their own sub-order via /api/v1/orders/{order_id}/status
+    confirm_res = client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=seller_a_hdr,
+        json={"status": "CONFIRMED"},
+    )
+    assert confirm_res.status_code == 200
+
+    # Verify sub-order A is CONFIRMED, but sub-order B remains PENDING
+    with Session(engine) as session:
+        db_so_a = session.get(SellerOrder, so_a["id"])
+        db_so_b = session.get(SellerOrder, so_b["id"])
+        assert db_so_a.status == "CONFIRMED"
+        assert db_so_b.status == "PENDING"
+
+
+def test_block_self_purchase_with_variants_and_multi_item_cart(client: TestClient, tracker_fixture):
+    """Self-purchase is blocked for variants, and cart rollbacks prevent partial orders."""
+    buyer_id = tracker_fixture["buyer_id"]
+    buyer_hdr = {"Authorization": f"Bearer {tracker_fixture['buyer_token']}"}
+
+    # Create a product and variant where seller_id == buyer_id
+    with Session(engine) as session:
+        own_product = Product(
+            code="TRK-OWN-VAR",
+            seller_id=buyer_id,
+            name="Own Product With Variant",
+            price=80_000,
+            stock_quantity=10,
+            version=1,
+            is_active=True,
+        )
+        session.add(own_product)
+        session.commit()
+        session.refresh(own_product)
+        own_prod_id = own_product.id
+
+        own_variant = ProductVariant(
+            product_id=own_prod_id,
+            seller_id=buyer_id,
+            sku="TRK-OWN-V1",
+            name="Own Variant 1",
+            price=85_000,
+            stock_quantity=5,
+            version=1,
+            is_active=True,
+        )
+        session.add(own_variant)
+        session.commit()
+        session.refresh(own_variant)
+        own_var_id = own_variant.id
+
+    # 1. Adding own variant to cart is blocked with 400 ERR_SELF_PURCHASE
+    res_add_var = client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": "TRK-OWN-VAR", "variant_id": own_var_id, "quantity": 1},
+    )
+    assert res_add_var.status_code == 400
+    assert res_add_var.json()["error"]["code"] == "ERR_SELF_PURCHASE"
+
+    # 2. Multi-item cart containing Seller A's product and own product rolls back cleanly
+    client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": "TRK-A", "quantity": 1},
+    )
+    # Inject own product into CartItem
+    with Session(engine) as session:
+        session.add(
+            CartItem(
+                buyer_id=buyer_id,
+                product_id=own_prod_id,
+                variant_id=own_var_id,
+                quantity=1,
+            )
+        )
+        session.commit()
+
+    # Attempt checkout
+    checkout_res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": "self-purchase-mixed-cart-key"},
+        json={
+            "recipient_name": "Self Buyer",
+            "delivery_address": "Home",
+            "phone_number": "0912345678",
+        },
+    )
+    assert checkout_res.status_code == 400
+    assert checkout_res.json()["error"]["code"] == "ERR_SELF_PURCHASE"
+
+    # Verify atomic rollback: Seller A's stock was NOT decremented, 0 orders created
+    with Session(engine) as session:
+        prod_a = session.get(Product, tracker_fixture["product_a_id"])
+        assert prod_a.stock_quantity == 10
+        orders = session.exec(select(Order).where(Order.buyer_id == buyer_id)).all()
+        assert len(orders) == 0
+
+
+def test_checkout_idempotency_conflicts_and_state_preservation(client: TestClient, tracker_fixture):
+    """Idempotency keys must be valid; conflicts return 409; replays preserve current state."""
+    buyer_token = tracker_fixture["buyer_token"]
+    buyer_hdr = {"Authorization": f"Bearer {buyer_token}"}
+    seller_a_hdr = {"Authorization": f"Bearer {tracker_fixture['seller_a_token']}"}
+
+    client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": "TRK-A", "quantity": 1},
+    )
+
+    valid_body = {
+        "recipient_name": "Idemp Test",
+        "delivery_address": "123 Valid St",
+        "phone_number": "0912345678",
+    }
+
+    # 1. Invalid keys (whitespace or untrimmed) return 400 ERR_INVALID_KEY
+    res_ws = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": "   "},
+        json=valid_body,
+    )
+    assert res_ws.status_code == 400
+    assert res_ws.json()["error"]["code"] == "ERR_INVALID_KEY"
+
+    res_pad = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": " padded-key "},
+        json=valid_body,
+    )
+    assert res_pad.status_code == 400
+    assert res_pad.json()["error"]["code"] == "ERR_INVALID_KEY"
+
+    # 2. Place order successfully with 201
+    idemp_key = "idemp-preserve-state-key-1"
+    create_res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": idemp_key},
+        json=valid_body,
+    )
+    assert create_res.status_code == 201
+    order_id = create_res.json()["data"]["id"]
+
+    # 3. Replay with same key but altered payload returns 409 ERR_IDEMPOTENCY_CONFLICT
+    conflict_res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": idemp_key},
+        json={**valid_body, "delivery_address": "999 Altered St"},
+    )
+    assert conflict_res.status_code == 409
+    assert conflict_res.json()["error"]["code"] == "ERR_IDEMPOTENCY_CONFLICT"
+
+    # 4. Another buyer using same key returns 409 ERR_IDEMPOTENCY_CONFLICT
+    with Session(engine) as session:
+        buyer2 = User(
+            name="Second Buyer",
+            email="trk-buyer-second@example.com",
+            role="buyer",
+            password_hash=hash_password("password"),
+        )
+        session.add(buyer2)
+        session.commit()
+        buyer2_token = create_access_token(buyer2)
+
+    conflict_buyer = client.post(
+        "/api/v1/orders",
+        headers={"Authorization": f"Bearer {buyer2_token}", "Idempotency-Key": idemp_key},
+        json=valid_body,
+    )
+    assert conflict_buyer.status_code == 409
+    assert conflict_buyer.json()["error"]["code"] == "ERR_IDEMPOTENCY_CONFLICT"
+
+    # 5. Seller transitions order to CONFIRMED and SHIPPED
+    client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=seller_a_hdr,
+        json={"status": "CONFIRMED"},
+    )
+    client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=seller_a_hdr,
+        json={"status": "SHIPPED", "tracking_number": "TRK-IDEMP-001"},
+    )
+
+    # 6. Replay with original key and original payload returns 200 with current SHIPPED status
+    replay_res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": idemp_key},
+        json=valid_body,
+    )
+    assert replay_res.status_code == 200
+    assert replay_res.json()["data"]["id"] == order_id
+    assert replay_res.json()["data"]["status"] == "SHIPPED"
+    assert replay_res.json()["data"]["tracking_number"] == "TRK-IDEMP-001"
+
+
+def test_insufficient_stock_returns_409_and_preserves_inventory(
+    client: TestClient, tracker_fixture
+):
+    """When stock is insufficient, checkout returns HTTP 409 and leaves inventory intact."""
+    buyer_token = tracker_fixture["buyer_token"]
+    buyer_hdr = {"Authorization": f"Bearer {buyer_token}"}
+    prod_id = tracker_fixture["product_a_id"]
+
+    # Set product A stock to 2
+    with Session(engine) as session:
+        prod = session.get(Product, prod_id)
+        prod.stock_quantity = 2
+        prod.version = 1
+        session.commit()
+
+    # Buyer puts 3 in cart
+    with Session(engine) as session:
+        session.add(CartItem(buyer_id=tracker_fixture["buyer_id"], product_id=prod_id, quantity=3))
+        session.commit()
+
+    # Attempt checkout with 3 items when only 2 in stock
+    res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": "insufficient-stock-key-1"},
+        json={
+            "recipient_name": "Greedy Buyer",
+            "delivery_address": "123 Shortage Way",
+            "phone_number": "0912345678",
+        },
+    )
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "ERR_STOCK_EXCEEDED"
+
+    # Verify stock remains exactly 2, cart item is preserved, 0 orders created
+    with Session(engine) as session:
+        check_prod = session.get(Product, prod_id)
+        assert check_prod.stock_quantity == 2
+        cart_items = session.exec(
+            select(CartItem).where(CartItem.buyer_id == tracker_fixture["buyer_id"])
+        ).all()
+        assert len(cart_items) == 1
+        orders = session.exec(
+            select(Order).where(Order.buyer_id == tracker_fixture["buyer_id"])
+        ).all()
+        assert len(orders) == 0
+
+
+def test_atomic_variant_stock_depletion_and_restoration(client: TestClient, tracker_fixture):
+    """Variant stock is atomically deducted and restored on cancellation."""
+    buyer_token = tracker_fixture["buyer_token"]
+    buyer_hdr = {"Authorization": f"Bearer {buyer_token}"}
+    seller_a_hdr = {"Authorization": f"Bearer {tracker_fixture['seller_a_token']}"}
+    prod_id = tracker_fixture["product_a_id"]
+
+    with Session(engine) as session:
+        var = ProductVariant(
+            product_id=prod_id,
+            seller_id=tracker_fixture["seller_a_id"],
+            sku="TRK-VAR-ATOMIC-1",
+            name="Atomic Variant",
+            price=120_000,
+            stock_quantity=2,
+            version=1,
+            is_active=True,
+        )
+        session.add(var)
+        session.commit()
+        session.refresh(var)
+        var_id = var.id
+
+    # Buyer adds 2 of variant to cart
+    client.post(
+        "/api/v1/cart/items",
+        headers=buyer_hdr,
+        json={"product_code": "TRK-A", "variant_id": var_id, "quantity": 2},
+    )
+
+    # Checkout variant items
+    order_res = client.post(
+        "/api/v1/orders",
+        headers={**buyer_hdr, "Idempotency-Key": "atomic-variant-key-1"},
+        json={
+            "recipient_name": "Variant Buyer",
+            "delivery_address": "456 Variant Lane",
+            "phone_number": "0912345678",
+        },
+    )
+    assert order_res.status_code == 201
+    order_id = order_res.json()["data"]["id"]
+
+    # Verify variant stock is now 0 in DB
+    with Session(engine) as session:
+        check_var = session.get(ProductVariant, var_id)
+        assert check_var.stock_quantity == 0
+
+    # Second buyer attempts to checkout the now-exhausted variant
+    with Session(engine) as session:
+        buyer2 = User(
+            name="Second Variant Buyer",
+            email="trk-buyer-var2@example.com",
+            role="buyer",
+            password_hash=hash_password("password"),
+        )
+        session.add(buyer2)
+        session.flush()
+        session.add(
+            CartItem(buyer_id=buyer2.id, product_id=prod_id, variant_id=var_id, quantity=1)
+        )
+        session.commit()
+        buyer2_token = create_access_token(buyer2)
+
+    res_fail = client.post(
+        "/api/v1/orders",
+        headers={
+            "Authorization": f"Bearer {buyer2_token}",
+            "Idempotency-Key": "atomic-var-fail-key",
+        },
+        json={
+            "recipient_name": "Buyer 2",
+            "delivery_address": "Home",
+            "phone_number": "0912345678",
+        },
+    )
+    assert res_fail.status_code == 409
+    assert res_fail.json()["error"]["code"] == "ERR_STOCK_EXCEEDED"
+
+    # Seller cancels order 1 -> stock restored
+    cancel_res = client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=seller_a_hdr,
+        json={"status": "CANCELLED"},
+    )
+    assert cancel_res.status_code == 200
+
+    with Session(engine) as session:
+        restored_var = session.get(ProductVariant, var_id)
+        assert restored_var.stock_quantity == 2
+
+    # Attempting to cancel order 1 again fails and does not double-restore stock
+    second_cancel = client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=seller_a_hdr,
+        json={"status": "CANCELLED"},
+    )
+    assert second_cancel.status_code == 400
+    assert second_cancel.json()["error"]["code"] == "ERR_INVALID_TRANSITION"
+
+    with Session(engine) as session:
+        still_two = session.get(ProductVariant, var_id)
+        assert still_two.stock_quantity == 2
+
+
+def test_concurrent_atomic_stock_depletion_three_buyers_for_single_unit(tmp_path):
+    """When 3 buyers race for 1 unit, exactly 1 wins and 2 receive 409 without overselling."""
+    from tests.cart_db import add_product, create_cart_engine
+    test_db = create_cart_engine(tmp_path / "race_3way.db")
+
+    add_product(test_db, "TRK-RACE-3WAY", stock=1)
+    with Session(test_db) as session:
+        prod = session.exec(select(Product).where(Product.code == "TRK-RACE-3WAY")).one()
+        session.add(User(id=4, name="Buyer 3", email="buyer3@test.local", role="buyer"))
+        session.commit()
+        for b_id in (2, 3, 4):
+            session.add(CartItem(buyer_id=b_id, product_id=prod.id, quantity=1))
+        session.commit()
+
+    body = CheckoutRequest(
+        recipient_name="Winner",
+        delivery_address="1 Finish Line",
+        phone_number="0912345678",
+    )
+
+    results = []
+
+    def run_race_checkout(buyer_id, key):
+        with Session(test_db) as s:
+            try:
+                receipt_data, created = checkout(s, buyer_id, body, key)
+                results.append((buyer_id, 201 if created else 200, None))
+            except Exception as exc:
+                results.append(
+                    (buyer_id, getattr(exc, "status", 500), getattr(exc, "code", str(exc)))
+                )
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [
+            pool.submit(run_race_checkout, b_id, f"race-3way-key-{i}")
+            for i, b_id in enumerate((2, 3, 4))
+        ]
+        for f in futures:
+            f.result()
+
+    successes = [r for r in results if r[1] in (200, 201)]
+    conflicts = [r for r in results if r[1] == 409]
+
+    assert len(successes) == 1, f"Expected exactly 1 winner, got {results}"
+    assert len(conflicts) == 2, f"Expected 2 conflicts, got {results}"
+
+    with Session(test_db) as session:
+        final_prod = session.exec(select(Product).where(Product.code == "TRK-RACE-3WAY")).one()
+        assert final_prod.stock_quantity == 0
