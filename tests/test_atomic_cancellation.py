@@ -1,6 +1,7 @@
 """Cancellation effects observed through new sessions on real SQLite files."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from threading import Barrier
 
 import pytest
@@ -195,6 +196,90 @@ def test_cancellation_only_marks_collected_payments_refunded(engine, payment):
             == child.escrow_status
             == ("REFUNDED" if payment == "PAID" else "VOIDED")
         )
+
+
+@pytest.mark.parametrize("route", ["buyer-post", "seller-patch"])
+@pytest.mark.parametrize("payment", ["REFUND_PENDING", "REFUNDED"])
+def test_unreconciled_payment_returns_409_without_cancellation_effects(api, engine, route, payment):
+    order_id, children, _ = purchase(engine)
+    with Session(engine) as session:
+        child = session.get(SellerOrder, children[0])
+        child.payment_status = payment
+        session.add(child)
+        session.commit()
+    before = snapshot(engine)
+    if route == "buyer-post":
+        response = api.post(f"/api/v1/orders/{order_id}/cancel", headers=headers(engine))
+    else:
+        response = api.patch(
+            f"/api/v1/seller/orders/{children[0]}/status",
+            json={"status": "CANCELLED"},
+            headers=headers(engine, 1),
+        )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ERR_INVALID_PAYMENT_STATE"
+    assert snapshot(engine) == before
+
+
+@pytest.mark.parametrize("route", ["seller-patch", "seller-legacy"])
+@pytest.mark.parametrize("lower_id_last", [False, True])
+def test_parent_milestones_follow_fulfilment_time_not_seller_order_id(
+    api, engine, monkeypatch, route, lower_id_last
+):
+    order_id, children, _ = purchase(engine, shops=2)
+    with Session(engine) as session:
+        sellers = {child_id: session.get(SellerOrder, child_id).seller_id for child_id in children}
+    tick = datetime(2026, 10, 1, 9, tzinfo=UTC)
+
+    class FixedClock:
+        @staticmethod
+        def now(tz):
+            return tick.astimezone(tz)
+
+    monkeypatch.setattr(workflow, "datetime", FixedClock)
+
+    def change(child_id, status):
+        url = (
+            f"/api/v1/seller/orders/{child_id}/status"
+            if route == "seller-patch"
+            else f"/api/v1/orders/{order_id}/status"
+        )
+        response = api.patch(
+            url, json={"status": status}, headers=headers(engine, sellers[child_id])
+        )
+        assert response.status_code == 200, response.text
+
+    for child_id in children:
+        change(child_id, "PROCESSING")
+    ordered_children = sorted(children, reverse=lower_id_last)
+    milestones = [
+        ("SHIPPED", "shipped_at", datetime(2026, 10, 1, 12, tzinfo=UTC)),
+        ("DELIVERED", "delivered_at", datetime(2026, 10, 1, 15, tzinfo=UTC)),
+        ("COMPLETED", "completed_at", datetime(2026, 10, 2, 12, tzinfo=UTC)),
+    ]
+    for status, field, first_time in milestones:
+        for index, child_id in enumerate(ordered_children):
+            # The final completion occurs Oct 3, after the other shop's Oct 2 completion.
+            tick = (
+                first_time.replace(day=3)
+                if status == "COMPLETED" and index
+                else (first_time.replace(minute=index))
+            )
+            change(child_id, status)
+            response = api.get(f"/api/v1/orders/{order_id}", headers=headers(engine))
+            assert response.status_code == 200, response.text
+            parent = response.json()["data"]
+            assert datetime.fromisoformat(parent[field]) == tick
+            if status == "COMPLETED":
+                assert parent["status"] == ("PROCESSING" if index == 0 else "COMPLETED")
+
+    with Session(engine) as session:
+        parent = session.get(Order, order_id)
+        assert parent.completed_at.replace(tzinfo=UTC) == datetime(2026, 10, 3, 12, tzinfo=UTC)
+        first = session.get(SellerOrder, ordered_children[0])
+        last = session.get(SellerOrder, ordered_children[1])
+        assert first.completed_at.replace(tzinfo=UTC) == datetime(2026, 10, 2, 12, tzinfo=UTC)
+        assert last.completed_at.replace(tzinfo=UTC) == parent.completed_at.replace(tzinfo=UTC)
 
 
 def test_partial_seller_cancellation_leaves_other_shop_untouched(engine):

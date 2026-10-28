@@ -161,9 +161,17 @@ def _sync_parent(session: Session, parent: Order) -> None:
         select(SellerOrder).where(SellerOrder.order_id == parent.id).order_by(SellerOrder.id)
     ).all()
     for child in children:
-        for field in ("tracking_number", "shipped_at", "delivered_at", "completed_at"):
-            if getattr(child, field) is not None:
-                setattr(parent, field, getattr(child, field))
+        if child.tracking_number:
+            parent.tracking_number = child.tracking_number
+    for field in ("shipped_at", "delivered_at", "completed_at"):
+        timestamps = [
+            getattr(child, field) for child in children if getattr(child, field) is not None
+        ]
+        if timestamps:
+            # SQLite reloads UTC timestamps without tzinfo; compare actual times,
+            # including an aware timestamp from the current transaction.
+            latest = max(timestamps, key=lambda stamp: stamp.replace(tzinfo=stamp.tzinfo or UTC))
+            setattr(parent, field, latest)
     session.add(parent)
 
 
