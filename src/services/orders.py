@@ -319,6 +319,10 @@ def checkout(
                         CartItem.id == line.id,
                         CartItem.buyer_id == buyer_id,
                         CartItem.product_id == line.product_id,
+                        # IDs are reused, so the row must still hold the variant just ordered.
+                        CartItem.variant_id == line.variant_id
+                        if line.variant_id is not None
+                        else CartItem.variant_id.is_(None),
                         CartItem.quantity == line.quantity,
                         CartItem.is_selected.is_(True),
                     )
