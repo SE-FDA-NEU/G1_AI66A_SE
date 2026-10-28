@@ -18,7 +18,9 @@ The server independently checks that the order item belongs to the authenticated
 buyer and that its seller order is `COMPLETED`. A unique constraint on the order item
 prevents duplicate reviews even if concurrent submissions race. Saving a review,
 updating the product's rating average/count and notifying its seller happen in the
-same transaction. Only the product's seller can post or update a reply.
+same transaction. Only the product's seller can post or update a reply. A successful
+seller reply also notifies the buyer in the same transaction, with a product link;
+replies to the same review reuse one notification event key.
 
 ## Notification flow
 
