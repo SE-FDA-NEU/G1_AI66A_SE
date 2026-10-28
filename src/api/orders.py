@@ -3,7 +3,6 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel
-from sqlalchemy import case, update
 from sqlmodel import select
 
 from src.auth import ActiveCurrentUser, BuyerUser, CurrentUser
@@ -11,16 +10,14 @@ from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
 from src.models.order_history import OrderHistory
-from src.models.order_item import OrderItem
-from src.models.product import Product
-from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutInput, OrderResponse
-from src.services.inventory import restore_order_item_stock
 from src.services.order_states import is_allowed_transition
+from src.services.order_workflow import WorkflowError, buyer_cancellation, seller_status_change
 from src.services.orders import CheckoutError, checkout, receipt
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
 
 class OrderStatusUpdateRequest(BaseModel):
     status: Literal[
@@ -98,228 +95,35 @@ def update_buyer_order_status(
     if order is None:
         raise HTTPException(404, detail=error_detail("ERR_ORDER_NOT_FOUND", "Order not found."))
 
-    sub_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
-
     new_status = request.status
     now = datetime.now(UTC)
 
     # 1. Seller flow
     if user.role == "seller":
-        seller_sub_orders = [s for s in sub_orders if s.seller_id == user.id]
-        if not seller_sub_orders:
-            raise HTTPException(
-                403,
-                detail=error_detail(
-                    "ERR_RESOURCE_OWNER", "You do not own any items in this order."
-                ),
+        try:
+            seller_status_change(
+                session,
+                user.id,
+                new_status,
+                order_id=order_id,
+                tracking_number=request.tracking_number,
             )
-
-        for sub_order in seller_sub_orders:
-            if not is_allowed_transition("seller", sub_order.status, new_status):
-                raise HTTPException(
-                    400,
-                    detail=error_detail(
-                        "ERR_INVALID_TRANSITION",
-                        f"Transition from {sub_order.status} to {new_status} is not allowed.",
-                    ),
-                )
-            old_sub_status = sub_order.status
-            sub_order.status = new_status
-            if new_status == "SHIPPED":
-                sub_order.shipped_at = now
-                if request.tracking_number:
-                    sub_order.tracking_number = request.tracking_number
-            elif new_status == "DELIVERED":
-                sub_order.delivered_at = now
-            elif new_status == "COMPLETED":
-                sub_order.completed_at = now
-            elif new_status == "CANCELLED":
-                # Restore inventory
-                items = session.exec(
-                    select(OrderItem, Product)
-                    .join(Product, Product.id == OrderItem.product_id)
-                    .where(OrderItem.seller_order_id == sub_order.id)
-                ).all()
-                for item, product in items:
-                    restore_order_item_stock(session, item)
-                    session.exec(
-                        update(ProductMetadata)
-                        .where(ProductMetadata.product_id == product.id)
-                        .values(
-                            sales_count=case(
-                                (ProductMetadata.sales_count - item.quantity < 0, 0),
-                                else_=ProductMetadata.sales_count - item.quantity,
-                            )
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
-
-            note = None
-            if old_sub_status == "CANCELLATION_REQUESTED":
-                note = (
-                    "Cancellation approved by seller. Stock restored."
-                    if new_status == "CANCELLED"
-                    else "Cancellation rejected by seller."
-                )
-            elif new_status == "CANCELLED":
-                note = "Stock restored."
-            elif new_status == "SHIPPED":
-                note = (
-                    f"Shipped. Tracking: {request.tracking_number}"
-                    if request.tracking_number
-                    else "Shipped."
-                )
-            elif new_status == "DELIVERED":
-                note = "Delivered."
-            elif new_status == "CONFIRMED":
-                note = "Confirmed by seller."
-
-            session.add(sub_order)
-            session.add(
-                OrderHistory(
-                    seller_order_id=sub_order.id,
-                    from_status=old_sub_status,
-                    to_status=new_status,
-                    changed_by_user_id=user.id,
-                    note=note,
-                )
-            )
-
-        # Synchronize parent order status and milestones
-        child_orders = session.exec(
-            select(SellerOrder).where(SellerOrder.order_id == order.id)
-        ).all()
-        statuses = {child.status for child in child_orders}
-        if statuses == {"COMPLETED"}:
-            order.status = "COMPLETED"
-            order.completed_at = now
-        elif statuses == {"CANCELLED"}:
-            order.status = "CANCELLED"
-        elif statuses == {"DELIVERED"}:
-            order.status = "DELIVERED"
-            order.delivered_at = now
-        elif statuses == {"SHIPPED"}:
-            order.status = "SHIPPED"
-            order.shipped_at = now
-        elif statuses == {"CONFIRMED"}:
-            order.status = "CONFIRMED"
-        elif statuses == {"CANCELLATION_REQUESTED"}:
-            order.status = "CANCELLATION_REQUESTED"
-        elif statuses & {"PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "COMPLETED"}:
-            order.status = "PROCESSING"
-        else:
-            order.status = "PENDING"
-
-        for s in child_orders:
-            if s.tracking_number:
-                order.tracking_number = s.tracking_number
-            if s.shipped_at:
-                order.shipped_at = s.shipped_at
-            if s.delivered_at:
-                order.delivered_at = s.delivered_at
-            if s.completed_at:
-                order.completed_at = s.completed_at
-
-        session.add(order)
-        session.commit()
-        receipt_data = receipt(session, buyer_id=None, order_id=order.id, seller_id=user.id)
-        return OrderResponse(data=receipt_data)
+        except WorkflowError as exc:
+            raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
+        return OrderResponse(
+            data=receipt(session, buyer_id=None, order_id=order_id, seller_id=user.id)
+        )
 
     # 2. Buyer flow
     if order.buyer_id != user.id:
         raise HTTPException(404, detail=error_detail("ERR_ORDER_NOT_FOUND", "Order not found."))
 
-    if new_status == "CANCELLED":
-        if not is_allowed_transition("buyer", order.status, new_status):
-            raise HTTPException(
-                400,
-                detail=error_detail(
-                    "ERR_INVALID_TRANSITION",
-                    "Only pending orders can be directly cancelled. "
-                    "For confirmed orders, please request cancellation.",
-                ),
-            )
-        invalid_sub_order = next(
-            (
-                sub_order
-                for sub_order in sub_orders
-                if sub_order.status != "CANCELLED"
-                and not is_allowed_transition("buyer", sub_order.status, new_status)
-            ),
-            None,
-        )
-        if invalid_sub_order is not None:
-            raise HTTPException(
-                400,
-                detail=error_detail(
-                    "ERR_INVALID_TRANSITION",
-                    f"Cannot cancel seller order in {invalid_sub_order.status} state.",
-                ),
-            )
-        for sub_order in sub_orders:
-            old_sub_status = sub_order.status
-            if old_sub_status != "CANCELLED":
-                sub_order.status = "CANCELLED"
-                session.add(sub_order)
-                items = session.exec(
-                    select(OrderItem, Product)
-                    .join(Product, Product.id == OrderItem.product_id)
-                    .where(OrderItem.seller_order_id == sub_order.id)
-                ).all()
-                for item, product in items:
-                    restore_order_item_stock(session, item)
-                    session.exec(
-                        update(ProductMetadata)
-                        .where(ProductMetadata.product_id == product.id)
-                        .values(
-                            sales_count=case(
-                                (ProductMetadata.sales_count - item.quantity < 0, 0),
-                                else_=ProductMetadata.sales_count - item.quantity,
-                            )
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
-                session.add(
-                    OrderHistory(
-                        seller_order_id=sub_order.id,
-                        from_status=old_sub_status,
-                        to_status="CANCELLED",
-                        changed_by_user_id=user.id,
-                        note="Cancelled by buyer. Stock restored.",
-                    )
-                )
-        order.status = "CANCELLED"
-        session.add(order)
-        session.commit()
-        return OrderResponse(data=receipt(session, user.id, order.id))
-
-    elif new_status == "CANCELLATION_REQUESTED":
-        if not is_allowed_transition("buyer", order.status, new_status):
-            raise HTTPException(
-                400,
-                detail=error_detail(
-                    "ERR_INVALID_TRANSITION",
-                    f"Cannot request cancellation for an order in {order.status} state.",
-                ),
-            )
-        for sub_order in sub_orders:
-            if sub_order.status in ("CONFIRMED", "PROCESSING"):
-                old_sub_status = sub_order.status
-                sub_order.status = "CANCELLATION_REQUESTED"
-                session.add(sub_order)
-                session.add(
-                    OrderHistory(
-                        seller_order_id=sub_order.id,
-                        from_status=old_sub_status,
-                        to_status="CANCELLATION_REQUESTED",
-                        changed_by_user_id=user.id,
-                        note="Cancellation requested by buyer.",
-                    )
-                )
-        order.status = "CANCELLATION_REQUESTED"
-        session.add(order)
-        session.commit()
-        return OrderResponse(data=receipt(session, user.id, order.id))
+    if new_status in {"CANCELLED", "CANCELLATION_REQUESTED"}:
+        try:
+            buyer_cancellation(session, user.id, order_id, new_status)
+        except WorkflowError as exc:
+            raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
+        return OrderResponse(data=receipt(session, user.id, order_id))
 
     elif new_status == "COMPLETED":
         if not is_allowed_transition("buyer", order.status, new_status):
@@ -330,6 +134,7 @@ def update_buyer_order_status(
                     "Confirmation is only available once the order has been delivered.",
                 ),
             )
+        sub_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order_id)).all()
         for sub_order in sub_orders:
             if sub_order.status in ("DELIVERED", "SHIPPED"):
                 old_sub_status = sub_order.status

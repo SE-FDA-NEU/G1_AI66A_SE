@@ -5,30 +5,32 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import case, func, update
+from sqlalchemy import func
 from sqlmodel import select
 
 from src.auth import SellerUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.order import Order
-from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
-from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
-from src.services.inventory import restore_order_item_stock
-from src.services.notifications import create_notification
-from src.services.order_states import ORDER_STATUSES, SELLER_TRANSITIONS, is_allowed_transition
+from src.services.order_workflow import WorkflowError, seller_status_change
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
-STATUSES = ORDER_STATUSES | {"RETURN_REQUESTED", "RETURNED_REFUNDED"}
-TRANSITIONS = {
-    **SELLER_TRANSITIONS,
-    "RETURN_REQUESTED": frozenset(),
-    "RETURNED_REFUNDED": frozenset(),
+STATUSES = {
+    "PENDING",
+    "CONFIRMED",
+    "PROCESSING",
+    "CANCELLATION_REQUESTED",
+    "SHIPPED",
+    "DELIVERED",
+    "COMPLETED",
+    "CANCELLED",
+    "RETURN_REQUESTED",
+    "RETURNED_REFUNDED",
 }
 
 
@@ -218,158 +220,16 @@ def update_seller_order_status(
     seller: SellerUser,
 ) -> StatusUpdateResponse:
     """Apply an owned status transition and record its audit event."""
-    seller_order = session.get(SellerOrder, sub_order_id)
-    if seller_order is None:
-        raise HTTPException(
-            status_code=404,
-            detail=error_detail("ERR_ORDER_NOT_FOUND", "Seller order was not found."),
-        )
-    if seller_order.seller_id != seller.id:
-        raise HTTPException(
-            status_code=403,
-            detail=error_detail("ERR_RESOURCE_OWNER", "You do not own this seller order."),
-        )
-
-    new_status = request.status
-    if not is_allowed_transition("seller", seller_order.status, new_status):
-        raise _bad_request(
-            "ERR_INVALID_TRANSITION",
-            f"Transition from {seller_order.status} to {new_status} is not allowed.",
-        )
-
-    old_status = seller_order.status
-    status_values: dict[str, object] = {"status": new_status}
-    if new_status == "SHIPPED":
-        status_values["shipped_at"] = datetime.now(UTC)
-        if request.tracking_number:
-            status_values["tracking_number"] = request.tracking_number
-    elif new_status == "DELIVERED":
-        status_values["delivered_at"] = datetime.now(UTC)
-    elif new_status == "COMPLETED":
-        status_values["completed_at"] = datetime.now(UTC)
-    changed = session.exec(
-        update(SellerOrder)
-        .where(
-            SellerOrder.id == seller_order.id,
-            SellerOrder.seller_id == seller.id,
-            SellerOrder.status == old_status,
-        )
-        .values(**status_values)
-        .execution_options(synchronize_session=False)
-    )
-    if changed.rowcount != 1:
-        session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=error_detail(
-                "ERR_CONCURRENCY_CONFLICT",
-                "The seller order changed. Please refresh and try again.",
-            ),
-        )
-    session.refresh(seller_order)
-
-    items = session.exec(
-        select(OrderItem, Product)
-        .join(Product, Product.id == OrderItem.product_id)
-        .where(OrderItem.seller_order_id == seller_order.id)
-    ).all()
-    if new_status == "CANCELLED":
-        for item, product in items:
-            restore_order_item_stock(session, item)
-            session.exec(
-                update(ProductMetadata)
-                .where(ProductMetadata.product_id == product.id)
-                .values(
-                    sales_count=case(
-                        (ProductMetadata.sales_count - item.quantity < 0, 0),
-                        else_=ProductMetadata.sales_count - item.quantity,
-                    )
-                )
-                .execution_options(synchronize_session=False)
-            )
-
-    note: str | None = None
-    if old_status == "CANCELLATION_REQUESTED":
-        if new_status == "CANCELLED":
-            note = "Cancellation approved by seller. Stock restored."
-        else:
-            note = "Cancellation rejected by seller."
-    elif new_status == "CANCELLED":
-        note = "Stock restored."
-    elif new_status == "SHIPPED":
-        note = (
-            f"Shipped. Tracking: {request.tracking_number}"
-            if request.tracking_number
-            else "Shipped."
-        )
-    elif new_status == "DELIVERED":
-        note = "Delivered."
-    elif new_status == "CONFIRMED":
-        note = "Confirmed by seller."
-
-    session.add(
-        OrderHistory(
-            seller_order_id=seller_order.id,
-            from_status=old_status,
-            to_status=new_status,
-            changed_by_user_id=seller.id,
-            note=note,
-        )
-    )
-
-    child_orders = session.exec(
-        select(SellerOrder).where(SellerOrder.order_id == seller_order.order_id)
-    ).all()
-    statuses = {child.status for child in child_orders}
-    parent = session.get(Order, seller_order.order_id)
-    if parent:
-        if statuses == {"COMPLETED"}:
-            parent.status = "COMPLETED"
-            parent.completed_at = datetime.now(UTC)
-        elif statuses == {"CANCELLED"}:
-            parent.status = "CANCELLED"
-        elif statuses == {"RETURNED_REFUNDED"}:
-            parent.status = "RETURNED_REFUNDED"
-        elif "RETURN_REQUESTED" in statuses:
-            parent.status = "RETURN_REQUESTED"
-        elif statuses == {"DELIVERED"}:
-            parent.status = "DELIVERED"
-            parent.delivered_at = datetime.now(UTC)
-        elif statuses == {"SHIPPED"}:
-            parent.status = "SHIPPED"
-            parent.shipped_at = datetime.now(UTC)
-        elif statuses == {"CONFIRMED"}:
-            parent.status = "CONFIRMED"
-        elif statuses == {"CANCELLATION_REQUESTED"}:
-            parent.status = "CANCELLATION_REQUESTED"
-        elif statuses & {"PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "COMPLETED"}:
-            parent.status = "PROCESSING"
-        else:
-            parent.status = "PENDING"
-        if seller_order.tracking_number:
-            parent.tracking_number = seller_order.tracking_number
-        if seller_order.shipped_at:
-            parent.shipped_at = seller_order.shipped_at
-        if seller_order.delivered_at:
-            parent.delivered_at = seller_order.delivered_at
-        session.add(parent)
-        create_notification(
+    try:
+        seller_status_change(
             session,
-            recipient_user_id=parent.buyer_id,
-            order_id=parent.id,
-            event_key=f"seller-order:{seller_order.id}:status:{new_status}",
-            message=(
-                f"Seller order #{seller_order.id} in your order #{parent.id} "
-                f"is now {new_status.lower()}."
-            ),
-            target_path=f"/checkout/confirmation/{parent.id}",
+            seller.id,
+            request.status,
+            sub_order_id=sub_order_id,
+            tracking_number=request.tracking_number,
         )
-
-    session.commit()
-    session.refresh(seller_order)
-    if parent is None:
-        raise HTTPException(
-            status_code=500,
-            detail=error_detail("ERR_DATABASE_FAILURE", "The parent order could not be loaded."),
-        )
+    except WorkflowError as exc:
+        raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
+    seller_order = session.get(SellerOrder, sub_order_id)
+    parent = session.get(Order, seller_order.order_id)
     return StatusUpdateResponse(data=_seller_order_response(session, seller_order, parent))
