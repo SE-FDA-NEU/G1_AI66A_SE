@@ -16,6 +16,7 @@ from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
@@ -120,8 +121,9 @@ def _seller_order_response(
     parent_order: Order,
 ) -> SellerOrderResponse:
     rows = session.exec(
-        select(OrderItem, Product)
+        select(OrderItem, Product, ProductVariant)
         .join(Product, Product.id == OrderItem.product_id)
+        .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id)
         .where(OrderItem.seller_order_id == seller_order.id)
         .order_by(OrderItem.id)
     ).all()
@@ -135,18 +137,24 @@ def _seller_order_response(
                 if item.snapshot_initialized
                 else item.product_name_snapshot or product.name
             ),
-            variant_name=item.variant_name_snapshot,
+            variant_name=(
+                item.variant_name_snapshot
+                if item.snapshot_initialized
+                else item.variant_name_snapshot or (variant.name if variant else None)
+            ),
             product_code=product.code,
             image_url=(
                 item.product_image_snapshot
                 if item.snapshot_initialized
-                else item.product_image_snapshot or product.image_url
+                else item.product_image_snapshot
+                or (variant.image_url if variant else None)
+                or product.image_url
             ),
             quantity=item.quantity,
             unit_price=item.unit_price,
             total_price=item.quantity * item.unit_price,
         )
-        for item, product in rows
+        for item, product, variant in rows
         if item.id is not None
     ]
     return SellerOrderResponse(
