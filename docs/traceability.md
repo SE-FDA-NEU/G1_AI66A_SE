@@ -389,6 +389,18 @@ The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for 
 | US10 Seller best-selling products | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | P2 | /seller/analytics/products | @QuangMinhQu | Not implemented (depends on US09) |
 
 
+## US12 cart selection and checkout (#104, #119, #120)
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Shop groups, item/shop selection and subtotals | `src/web/static/cart.js`: shop groups and server-confirmed totals | `tests/cart_ui.mjs`; `tests/cart_selection_browser.mjs` |
+| Unavailable items and changed prices | Separate labelled unavailable groups, disabled selection, old/current price warnings | DOM and browser checks; `tests/test_us12.py` |
+| Variant labels, save feedback and focus recovery | Variant-specific control names; live status; initiating focus restored after a failed save | DOM focus-loss simulation and native browser checks |
+| Responsive cart selection | Existing shared/cart CSS, verified at 390/768/1280px | `docs/images/us12/cart-selection-*.png` (deterministic API fixtures) |
+| Selected-only checkout (#120) | `src/services/orders.py:checkout()`: selected rows only, one transaction, and a line delete that also matches the ordered variant | `tests/test_us12.py` (selected/unselected variants, reused row ID during checkout), `tests/test_checkout.py` |
+
+Scope and reproduction: [US12 cart selection](us12-cart-selection.md).
+
 ## US13 implementation (#105, #122–#125)
 
 | Task | Implementation | Verification |
@@ -429,3 +441,20 @@ recorded results and settlement are not implemented. Contract proposed in
 | #150 payment and settlement tests | 4, 6, 8, 10, 11 | Section 11 matrix and criteria R1–R6 and L; section 6.2 pairs in both orders and concurrently; invariants I1–I8 after every step; reconciliation identity |
 
 Pending decisions D1–D6 (section 12 of the contract) must be confirmed by their owners before the code that depends on them merges.
+
+
+## Catalog discovery controls (#116)
+
+Runtime: **Implemented.** The controls on `/products` came with PR #162; this task fixes
+the gaps found during an audit of that work.
+
+| Gap on `main` | Change | Evidence |
+|---|---|---|
+| A catalog request that timed out left the page on the loading skeleton | Only a newer query may silence an aborted request; a timeout shows the error with Retry | `tests/products_ui.mjs`; Chromium: error after 10.4 s, Retry loads 20 cards |
+| Enter in a price field ran the browser's 1,000 ₫ step check, so 155,500 was blocked while Apply accepted it | The form uses `novalidate`; one rule (whole, non-negative, minimum not above maximum) covers Enter, Search and Apply | `tests/products_ui.mjs`; Chromium: Enter with 155500 sends `min_price=155500` |
+| The seller filter needed Apply while the other filters applied on change | The seller filter applies on change and resets to page 1 | `tests/products_ui.mjs` |
+| Back navigation could restore filter values without applying them | The first load reads the restored controls | `tests/products_ui.mjs` |
+| Rebuilding the category and seller options reset a restored choice to "All" while the results stayed filtered | Options are rebuilt keeping the current choice; a choice with no option left falls back to "All" and the list reloads | `tests/test_catalog_browser.py` (native selects, delayed option lists) |
+| Text a number input cannot parse (`-`, `1e`) reads as an empty price, so the search ran without that bound | `validity.badInput` counts as an invalid price | `tests/test_catalog_browser.py` (native number input) |
+| The maximum price field had no accessible name | Both price fields are labelled and point to the price error | Page markup |
+| At 360–390 px every filter took a full row | Short filters share a row: the filter panel is 507 px instead of 677 px, and the page has no horizontal scroll | [Phone](images/catalog/mobile-filters.png), [timeout](images/catalog/mobile-timeout.png), [desktop](images/catalog/desktop-filters.png) |

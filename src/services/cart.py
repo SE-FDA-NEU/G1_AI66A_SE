@@ -120,9 +120,12 @@ def validate_purchasable_quantity(
     quantity: int,
     variant: ProductVariant | None = None,
     requires_variant: bool = False,
+    is_moderated: bool = False,
 ) -> None:
     """Refuse a cart quantity the product cannot satisfy right now (BR2)."""
-    availability = get_line_availability(product, quantity, variant, requires_variant)
+    availability = get_line_availability(
+        product, quantity, variant, requires_variant, is_moderated=is_moderated
+    )
     if availability is CartLineAvailability.VARIANT_REQUIRED:
         raise CartError(
             CartErrorCode.PRODUCT_UNAVAILABLE,
@@ -449,12 +452,16 @@ class CartService:
                 raise CartError(CartErrorCode.CART_ITEM_NOT_FOUND, CART_ITEM_NOT_FOUND_MESSAGE)
             line, product, variant = row
             if selected:
+                meta = self.session.exec(
+                    select(ProductMetadata).where(ProductMetadata.product_id == product.id)
+                ).first()
                 validate_purchasable_quantity(
                     product,
                     line.quantity,
                     variant,
                     requires_variant=variant is None
                     and product_requires_variant(self.session, product.id),
+                    is_moderated=bool(meta and meta.is_moderated_deactivated),
                 )
             update_line_fields(self.session, line, is_selected=selected)
             return self._flush_and_snapshot(buyer_id)
@@ -466,9 +473,10 @@ class CartService:
 
         def change() -> Cart:
             rows = self.session.exec(
-                select(CartItem, Product, ProductVariant)
+                select(CartItem, Product, ProductVariant, ProductMetadata.is_moderated_deactivated)
                 .join(Product, Product.id == CartItem.product_id)
                 .outerjoin(ProductVariant, ProductVariant.id == CartItem.variant_id)
+                .outerjoin(ProductMetadata, ProductMetadata.product_id == Product.id)
                 .where(CartItem.buyer_id == buyer_id, Product.seller_id == seller_id)
             ).all()
             if not rows:
@@ -476,17 +484,18 @@ class CartService:
             products_with_variants = set(
                 self.session.exec(
                     select(ProductVariant.product_id).where(
-                        ProductVariant.product_id.in_({product.id for _, product, _ in rows})
+                        ProductVariant.product_id.in_({product.id for _, product, _, _ in rows})
                     )
                 ).all()
             )
-            for line, product, variant in rows:
+            for line, product, variant, is_mod in rows:
                 available = (
                     get_line_availability(
                         product,
                         line.quantity,
                         variant,
                         requires_variant=product.id in products_with_variants and variant is None,
+                        is_moderated=bool(is_mod),
                     )
                     == CartLineAvailability.AVAILABLE
                 )

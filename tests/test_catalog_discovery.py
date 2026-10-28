@@ -938,3 +938,443 @@ def test_sort_newest_handles_null_timestamps_and_fallback_by_id(
     # Products with created_at come first (newest to oldest), then items without created_at by
     # ID desc
     assert returned_codes == ["P-SORT-NEW", "P-SORT-OLD", "P-SORT-NO-META-B", "P-SORT-NO-META-A"]
+
+
+# ==============================================================================
+# Comprehensive Catalog Query Tests (Story #102)
+# ==============================================================================
+
+
+# ------------------------------------------------------------------------------
+# Combined Filters
+# ------------------------------------------------------------------------------
+def test_combined_query_matching_single_item(client: TestClient, sample_catalog):
+    """Multiple filters simultaneously matching a specific product."""
+    res = client.get(
+        "/api/v1/products?search=Ergonomic&category_id=1&seller_id=1"
+        "&min_price=400000&max_price=500000&min_rating=4.5&in_stock=true&sort=price_asc"
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["meta"]["total_items"] == 1
+    assert body["data"][0]["code"] == "P-ACC-MOUSE"
+    assert body["data"][0]["stock_status"] in ("in_stock", "low_stock")
+
+
+def test_combined_query_failing_one_filter_returns_empty(client: TestClient, sample_catalog):
+    """When one filter condition is not met among combined filters, returns empty list."""
+    # Mouse has rating 4.7; requiring min_rating=4.9 should exclude it
+    res = client.get(
+        "/api/v1/products?search=Ergonomic&category_id=1&seller_id=1"
+        "&min_price=400000&max_price=500000&min_rating=4.9&in_stock=true"
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["data"] == []
+    assert body["meta"]["total_items"] == 0
+    assert body["meta"]["total_pages"] == 0
+
+
+def test_combined_query_failing_seller_returns_empty(client: TestClient, sample_catalog):
+    """Combined filters with mismatched seller return empty list."""
+    # Mouse belongs to seller 1; querying seller 2 returns empty
+    res = client.get(
+        "/api/v1/products?search=Ergonomic&category_id=1&seller_id=2"
+        "&min_price=400000&max_price=500000"
+    )
+    assert res.status_code == 200
+    assert res.json()["data"] == []
+
+
+# ------------------------------------------------------------------------------
+# Descendant Categories Deep Hierarchy
+# ------------------------------------------------------------------------------
+def test_deep_four_level_category_descendants(client: TestClient, discovery_engine):
+    """Category filter resolves recursively across 4 hierarchy levels."""
+    with Session(discovery_engine) as session:
+        seller = User(id=301, name="Audio Seller", email="audio@test.local", role="seller")
+        session.add(seller)
+
+        c10 = Category(id=10, name="Audio Root", slug="audio-root", parent_id=None)
+        c11 = Category(id=11, name="Headphones & Speakers", slug="audio-mid", parent_id=10)
+        c12 = Category(id=12, name="Wireless Audio", slug="audio-sub", parent_id=11)
+        c13 = Category(id=13, name="Bluetooth Earbuds", slug="audio-leaf", parent_id=12)
+        c14 = Category(id=14, name="Wired Earbuds", slug="audio-sibling", parent_id=12)
+        session.add_all([c10, c11, c12, c13, c14])
+        session.commit()
+
+        p_leaf = Product(
+            id=301,
+            code="P-AUD-LEAF",
+            seller_id=seller.id,
+            name="True Wireless Earbuds",
+            description="Active noise cancelling wireless earbuds",
+            price=1500000,
+            stock_quantity=20,
+            reserved_stock=0,
+            is_active=True,
+        )
+        session.add(p_leaf)
+        session.commit()
+
+        meta = ProductMetadata(product_id=p_leaf.id, category_id=13, rating=4.9, sales_count=50)
+        session.add(meta)
+        session.commit()
+
+    # Querying root category (10) returns descendant leaf product
+    res10 = client.get("/api/v1/products?category_id=10")
+    assert any(p["code"] == "P-AUD-LEAF" for p in res10.json()["data"])
+
+    # Querying intermediate level 2 (11) returns product
+    res11 = client.get("/api/v1/products?category_id=11")
+    assert any(p["code"] == "P-AUD-LEAF" for p in res11.json()["data"])
+
+    # Querying intermediate level 3 (12) returns product
+    res12 = client.get("/api/v1/products?category_id=12")
+    assert any(p["code"] == "P-AUD-LEAF" for p in res12.json()["data"])
+
+    # Querying leaf category (13) returns product
+    res13 = client.get("/api/v1/products?category_id=13")
+    assert any(p["code"] == "P-AUD-LEAF" for p in res13.json()["data"])
+
+    # Querying sibling category (14) does NOT return leaf product
+    res14 = client.get("/api/v1/products?category_id=14")
+    assert not any(p["code"] == "P-AUD-LEAF" for p in res14.json()["data"])
+
+
+def test_empty_category_without_products_returns_empty_catalog(
+    client: TestClient, discovery_engine
+):
+    """Category with no assigned products returns empty list gracefully."""
+    with Session(discovery_engine) as session:
+        empty_cat = Category(id=40, name="Empty Category", slug="empty-cat", parent_id=None)
+        session.add(empty_cat)
+        session.commit()
+
+    res = client.get("/api/v1/products?category_id=40")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["data"] == []
+    assert body["meta"]["total_items"] == 0
+
+
+def test_non_existent_category_id_returns_empty_catalog(client: TestClient, sample_catalog):
+    """Filtering by non-existent category_id returns empty product list."""
+    res = client.get("/api/v1/products?category_id=999999")
+    assert res.status_code == 200
+    assert res.json()["data"] == []
+    assert res.json()["meta"]["total_items"] == 0
+
+
+# ------------------------------------------------------------------------------
+# Valid and Invalid Price Ranges
+# ------------------------------------------------------------------------------
+def test_price_range_exact_match(client: TestClient, sample_catalog):
+    """When min_price equals max_price, returns products matching exact price."""
+    res = client.get("/api/v1/products?min_price=450000&max_price=450000")
+    assert res.status_code == 200
+    codes = [p["code"] for p in res.json()["data"]]
+    assert codes == ["P-ACC-MOUSE"]
+
+
+def test_price_range_only_min_price(client: TestClient, sample_catalog):
+    """Querying min_price alone filters products with price >= min_price."""
+    res = client.get("/api/v1/products?min_price=20000000")
+    assert res.status_code == 200
+    codes = [p["code"] for p in res.json()["data"]]
+    assert codes == ["P-LAP-PRO"]
+
+
+def test_price_range_only_max_price(client: TestClient, sample_catalog):
+    """Querying max_price alone filters products with price <= max_price."""
+    res = client.get("/api/v1/products?max_price=450000")
+    assert res.status_code == 200
+    codes = [p["code"] for p in res.json()["data"]]
+    assert codes == ["P-ACC-MOUSE"]
+
+
+@pytest.mark.parametrize("param", ["min_price=-10", "max_price=-50"])
+def test_invalid_price_range_negative_values_rejected(client: TestClient, param):
+    """Negative values for min_price or max_price trigger 422 validation error."""
+    res = client.get(f"/api/v1/products?{param}")
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "ERR_VALIDATION"
+
+
+# ------------------------------------------------------------------------------
+# Supported Sort Modes and Tie-Breaking
+# ------------------------------------------------------------------------------
+def test_default_sort_when_sort_omitted_is_id_asc(client: TestClient, sample_catalog):
+    """When sort parameter is omitted, results are ordered by Product.id ASC."""
+    res = client.get("/api/v1/products?limit=10")
+    assert res.status_code == 200
+    ids = [int(p["id"]) for p in res.json()["data"]]
+    assert ids == sorted(ids)
+
+
+def test_sort_price_tie_breakers(client: TestClient, discovery_engine):
+    """Products with identical prices are tie-broken by Product.id ASC/DESC."""
+    with Session(discovery_engine) as session:
+        seller = User(id=401, name="Price Seller", email="price@test.local", role="seller")
+        session.add(seller)
+        session.commit()
+
+        p1 = Product(
+            id=501,
+            code="P-SAME-P1",
+            seller_id=seller.id,
+            name="Identical Price Item A",
+            description="d",
+            price=200000,
+            stock_quantity=10,
+            reserved_stock=0,
+            is_active=True,
+        )
+        p2 = Product(
+            id=502,
+            code="P-SAME-P2",
+            seller_id=seller.id,
+            name="Identical Price Item B",
+            description="d",
+            price=200000,
+            stock_quantity=10,
+            reserved_stock=0,
+            is_active=True,
+        )
+        session.add_all([p1, p2])
+        session.commit()
+
+    # Price ASC tie-breaks by id ASC
+    res_asc = client.get("/api/v1/products?seller_id=401&sort=price_asc")
+    assert res_asc.status_code == 200
+    codes_asc = [p["code"] for p in res_asc.json()["data"]]
+    assert codes_asc == ["P-SAME-P1", "P-SAME-P2"]
+
+    # Price DESC tie-breaks by id DESC
+    res_desc = client.get("/api/v1/products?seller_id=401&sort=price_desc")
+    assert res_desc.status_code == 200
+    codes_desc = [p["code"] for p in res_desc.json()["data"]]
+    assert codes_desc == ["P-SAME-P2", "P-SAME-P1"]
+
+
+def test_sort_rating_desc_tie_breaker(client: TestClient, discovery_engine):
+    """Products with identical ratings are tie-broken by Product.id DESC."""
+    with Session(discovery_engine) as session:
+        seller = User(id=402, name="Rating Seller", email="rating@test.local", role="seller")
+        session.add(seller)
+        session.commit()
+
+        p1 = Product(
+            id=601,
+            code="P-RATE-1",
+            seller_id=seller.id,
+            name="Item Rate 1",
+            description="d",
+            price=10000,
+            stock_quantity=5,
+            reserved_stock=0,
+            is_active=True,
+        )
+        p2 = Product(
+            id=602,
+            code="P-RATE-2",
+            seller_id=seller.id,
+            name="Item Rate 2",
+            description="d",
+            price=10000,
+            stock_quantity=5,
+            reserved_stock=0,
+            is_active=True,
+        )
+        session.add_all([p1, p2])
+        session.commit()
+
+        m1 = ProductMetadata(product_id=p1.id, rating=4.5)
+        m2 = ProductMetadata(product_id=p2.id, rating=4.5)
+        session.add_all([m1, m2])
+        session.commit()
+
+    res = client.get("/api/v1/products?seller_id=402&sort=rating_desc")
+    assert res.status_code == 200
+    codes = [p["code"] for p in res.json()["data"]]
+    # Tie broken by id DESC
+    assert codes == ["P-RATE-2", "P-RATE-1"]
+
+
+@pytest.mark.parametrize(
+    "sort_mode",
+    ["newest", "bestselling", "price_asc", "price_desc", "rating_desc"],
+)
+def test_all_supported_sort_modes_accept_valid_requests(
+    client: TestClient, sample_catalog, sort_mode
+):
+    """Every supported sort mode succeeds and returns 200 OK."""
+    res = client.get(f"/api/v1/products?sort={sort_mode}")
+    assert res.status_code == 200
+    assert len(res.json()["data"]) > 0
+
+
+# ------------------------------------------------------------------------------
+# Pagination Boundaries
+# ------------------------------------------------------------------------------
+def test_pagination_boundary_first_and_last_page(client: TestClient, sample_catalog):
+    """Verify first and last page pagination boundaries."""
+    # First page: 2 items
+    res_p1 = client.get("/api/v1/products?limit=2&page=1")
+    assert res_p1.status_code == 200
+    meta_p1 = res_p1.json()["meta"]
+    assert meta_p1["current_page"] == 1
+    assert meta_p1["total_pages"] == 3
+    assert len(res_p1.json()["data"]) == 2
+
+    # Last page: 1 remaining item
+    res_p3 = client.get("/api/v1/products?limit=2&page=3")
+    assert res_p3.status_code == 200
+    meta_p3 = res_p3.json()["meta"]
+    assert meta_p3["current_page"] == 3
+    assert len(res_p3.json()["data"]) == 1
+
+
+def test_pagination_page_beyond_total_pages_clamps_to_last(client: TestClient, sample_catalog):
+    """Requesting page beyond total_pages clamps to total_pages."""
+    res = client.get("/api/v1/products?limit=2&page=999")
+    assert res.status_code == 200
+    meta = res.json()["meta"]
+    assert meta["current_page"] == 3
+    assert len(res.json()["data"]) == 1
+
+
+def test_pagination_boundary_limits(client: TestClient, sample_catalog):
+    """Test limit boundary values 1 and 100."""
+    # limit=1
+    res1 = client.get("/api/v1/products?limit=1")
+    assert res1.status_code == 200
+    assert len(res1.json()["data"]) == 1
+    assert res1.json()["meta"]["total_pages"] == 5
+
+    # limit=100
+    res100 = client.get("/api/v1/products?limit=100")
+    assert res100.status_code == 200
+    assert len(res100.json()["data"]) == 5
+    assert res100.json()["meta"]["total_pages"] == 1
+
+
+@pytest.mark.parametrize(
+    "invalid_query",
+    ["page=0", "page=-1", "limit=0", "limit=101"],
+)
+def test_pagination_invalid_boundary_errors(client: TestClient, invalid_query):
+    """Out-of-range pagination parameters return 422 validation errors."""
+    res = client.get(f"/api/v1/products?{invalid_query}")
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "ERR_VALIDATION"
+
+
+# ------------------------------------------------------------------------------
+# Empty Results & Metadata Consistency
+# ------------------------------------------------------------------------------
+def test_empty_results_metadata_consistency(client: TestClient, sample_catalog):
+    """Empty result set has total=0, total_items=0, total_pages=0, current_page=1."""
+    res = client.get("/api/v1/products?search=completely_absent_item")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["data"] == []
+    assert body["meta"]["total"] == 0
+    assert body["meta"]["total_items"] == 0
+    assert body["meta"]["total_pages"] == 0
+    assert body["meta"]["current_page"] == 1
+
+
+def test_metadata_consistency_stock_status_all_variants(client: TestClient, discovery_engine):
+    """Product stock status calculations: in_stock (>5), low_stock (1..5), out_of_stock (0)."""
+    with Session(discovery_engine) as session:
+        seller = User(id=501, name="Stock Seller", email="stock@test.local", role="seller")
+        session.add(seller)
+        session.commit()
+
+        p_in = Product(
+            id=701,
+            code="P-STK-IN",
+            seller_id=seller.id,
+            name="Stock High",
+            price=1000,
+            stock_quantity=10,
+            reserved_stock=0,
+            is_active=True,
+        )
+        p_low = Product(
+            id=702,
+            code="P-STK-LOW",
+            seller_id=seller.id,
+            name="Stock Low",
+            price=1000,
+            stock_quantity=4,
+            reserved_stock=0,
+            is_active=True,
+        )
+        p_out = Product(
+            id=703,
+            code="P-STK-OUT",
+            seller_id=seller.id,
+            name="Stock Out",
+            price=1000,
+            stock_quantity=0,
+            reserved_stock=0,
+            is_active=True,
+        )
+        session.add_all([p_in, p_low, p_out])
+        session.commit()
+
+    # Query with in_stock=false to include out-of-stock items
+    res = client.get("/api/v1/products?seller_id=501&in_stock=false")
+    assert res.status_code == 200
+    status_map = {p["code"]: p["stock_status"] for p in res.json()["data"]}
+    assert status_map["P-STK-IN"] == "in_stock"
+    assert status_map["P-STK-LOW"] == "low_stock"
+    assert status_map["P-STK-OUT"] == "out_of_stock"
+
+
+def test_metadata_consistency_reserved_stock_affects_availability(
+    client: TestClient, discovery_engine
+):
+    """Reserved stock reduces available stock quantity and influences stock_status."""
+    with Session(discovery_engine) as session:
+        seller = User(id=502, name="Reserved Seller", email="res@test.local", role="seller")
+        session.add(seller)
+        session.commit()
+
+        # 10 total, 7 reserved -> 3 available (low_stock)
+        p_res_low = Product(
+            id=704,
+            code="P-RES-LOW",
+            seller_id=seller.id,
+            name="Reserved Low",
+            price=1000,
+            stock_quantity=10,
+            reserved_stock=7,
+            is_active=True,
+        )
+        # 5 total, 5 reserved -> 0 available (out_of_stock)
+        p_res_out = Product(
+            id=705,
+            code="P-RES-OUT",
+            seller_id=seller.id,
+            name="Reserved Zero",
+            price=1000,
+            stock_quantity=5,
+            reserved_stock=5,
+            is_active=True,
+        )
+        session.add_all([p_res_low, p_res_out])
+        session.commit()
+
+    res = client.get("/api/v1/products?seller_id=502&in_stock=false")
+    assert res.status_code == 200
+    by_code = {p["code"]: p for p in res.json()["data"]}
+
+    assert by_code["P-RES-LOW"]["stock_quantity"] == 3
+    assert by_code["P-RES-LOW"]["stock_status"] == "low_stock"
+
+    assert by_code["P-RES-OUT"]["stock_quantity"] == 0
+    assert by_code["P-RES-OUT"]["stock_status"] == "out_of_stock"
+

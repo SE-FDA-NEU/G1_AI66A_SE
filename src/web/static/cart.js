@@ -199,6 +199,10 @@ function createElement(tag, className, text = "") {
   return element;
 }
 
+function itemDisplayName(item) {
+  return item.variant_name ? `${item.name} · ${item.variant_name}` : item.name;
+}
+
 function createLineImage(item) {
   const image = createElement("img", "cart-line__image");
   image.alt = "";
@@ -213,7 +217,7 @@ function createLineImage(item) {
 function createLineInfo(item) {
   const info = createElement("div", "cart-line__info");
   info.append(
-    createElement("h2", "cart-line__name", item.variant_name ? `${item.name} · ${item.variant_name}` : item.name),
+    createElement("h2", "cart-line__name", itemDisplayName(item)),
     createElement("p", "cart-line__price", `${formatPrice(item.unit_price)} each`),
     createElement(
       "p",
@@ -251,7 +255,7 @@ function createQuantityControl(line, item) {
   const control = createElement("div", "cart-line__quantity");
 
   const inputId = `quantity-${item.cart_item_id}`;
-  const label = createElement("label", "visually-hidden", `Quantity for ${item.name}`);
+  const label = createElement("label", "visually-hidden", `Quantity for ${itemDisplayName(item)}`);
   label.htmlFor = inputId;
 
   const input = document.createElement("input");
@@ -262,8 +266,8 @@ function createQuantityControl(line, item) {
   input.inputMode = "numeric";
   input.value = String(item.quantity);
 
-  const decrease = createStepButton("−", `Decrease quantity of ${item.name}`);
-  const increase = createStepButton("+", `Increase quantity of ${item.name}`);
+  const decrease = createStepButton("−", `Decrease quantity of ${itemDisplayName(item)}`);
+  const increase = createStepButton("+", `Increase quantity of ${itemDisplayName(item)}`);
   decrease.id = `decrease-${item.cart_item_id}`;
   increase.id = `increase-${item.cart_item_id}`;
   decrease.dataset.minimum = String(item.quantity <= 1);
@@ -280,7 +284,7 @@ function createRemoveButton(line, item) {
   const button = createElement("button", "cart-line__remove", "Remove");
   button.type = "button";
   button.id = `remove-${item.cart_item_id}`;
-  button.setAttribute("aria-label", `Remove ${item.name} from cart`);
+  button.setAttribute("aria-label", `Remove ${itemDisplayName(item)} from cart`);
   button.addEventListener("click", () => removeLine(line, item));
   return button;
 }
@@ -299,7 +303,7 @@ function createCartLine(item, selectable = false) {
   );
   if (selectable) {
     line.classList.add("cart-line--selectable");
-    const selection = createSelection(`select-item-${item.cart_item_id}`, `Select ${item.name}`,
+    const selection = createSelection(`select-item-${item.cart_item_id}`, `Select ${itemDisplayName(item)}`,
       item.is_selected && item.availability === "available", item.availability !== "available");
     selection.classList.add("cart-line__selection");
     selection.querySelector("input").addEventListener("change", event => {
@@ -316,6 +320,7 @@ function createSelection(id, labelText, checked, disabled = false) {
   input.type = "checkbox";
   input.id = id;
   input.checked = checked;
+  input.disabled = disabled;
   input.dataset.unavailable = String(disabled);
   label.append(input, createElement("span", "", labelText));
   return label;
@@ -335,6 +340,8 @@ function createShopGroup(sellerId, items) {
   const subtotal = available.reduce((total, item) => total + item.line_total, 0);
   const header = createElement("div", "cart-shop__header");
   const heading = createElement("h2", "cart-shop__name", items[0].seller_name);
+  heading.id = `shop-heading-${sellerId}`;
+  group.setAttribute("aria-labelledby", heading.id);
   header.append(heading, selection, createElement("p", "cart-shop__subtotal",
     `Shop subtotal: ${formatPrice(subtotal)} · Selected: ${formatPrice(selectedSubtotal(items))}`));
   const error = createElement("p", "cart-line__error");
@@ -347,6 +354,8 @@ function createShopGroup(sellerId, items) {
   if (unavailable.length) {
     const section = createElement("section", "cart-shop__unavailable");
     const title = createElement("h3", "", "Unavailable for checkout — not selected");
+    title.id = `unavailable-heading-${sellerId}`;
+    section.setAttribute("aria-labelledby", title.id);
     const unavailableLines = createElement("ul", "cart-lines");
     unavailableLines.append(...unavailable.map(item => createCartLine(item, true)));
     section.append(title, unavailableLines);
@@ -452,11 +461,13 @@ async function changeLine(line, sendChange) {
 
 async function changeSelection(scope, url, isSelected) {
   if (changingCart || !hasCurrentAccount()) return;
+  // Disabling a focused native checkbox moves focus to the document body in browsers.
+  const focusId = document.activeElement?.id;
+  elements.status.textContent = "Saving your selection…";
   const changed = await changeLine(scope, () => requestCart(url, "PATCH", { is_selected: isSelected }));
   if (!changed && hasCurrentAccount()) {
     // Restore the last confirmed snapshot; a failed PATCH must not look saved.
     const message = scope.querySelector(".cart-line__error").textContent || CHANGE_ERROR_MESSAGE;
-    const focusId = document.activeElement?.id;
     renderCart(currentCart);
     elements.status.textContent = message;
     const error = document.getElementById("cart-change-error");

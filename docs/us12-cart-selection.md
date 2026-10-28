@@ -56,8 +56,12 @@ conflict check to protect against reused SQLite row IDs.
   Rows are deleted before commit inside that transaction, so they disappear only
   when the order commits. A failure rolls back stock, orders and cart deletion.
   Unselected rows remain unchanged, including unavailable rows.
-- The selected-line delete checks row ID, buyer, product, quantity and selection.
-  A concurrent deselection/quantity change conflicts and rolls back. Existing
+- The selected-line delete checks row ID, buyer, product, variant, quantity and
+  selection. A concurrent deselection/quantity change conflicts and rolls back. The
+  variant check (#120) matters because SQLite reuses a freed row ID. Another request
+  can remove the ordered line and add a different variant of the same product
+  between checkout reading the cart and deleting the line. Without that check,
+  checkout would order the old variant and delete the new line. Existing
   optimistic stock checks and cross-buyer ID-reuse protection remain.
 - Committed idempotent replay returns the same order before reading the remaining
   cart. It cannot accidentally order newly selected leftover rows on retry.
@@ -77,6 +81,20 @@ selection disables checkout. Authentication changes invalidate the displayed
 account context. Server text is rendered with `textContent`. Existing four states
 and responsive cart layout/shared tokens remain.
 
+### Task #119 follow-up
+
+The grouped selection implementation already exists on `main`. This follow-up
+keeps its API contract and shared styling, gives shop/unavailable groups accessible
+heading associations, and includes variant names in item selection, quantity and
+removal labels. Unavailable selection controls are disabled as they are created.
+Selection saves announce progress through the existing live status region.
+
+Native browsers move focus away when a checkbox is disabled. The selection handler
+now captures the initiating control before locking it and restores that control
+after an unsuccessful save. Both the mixed shop state and confirmed selected total
+are restored. DOM-double tests simulate native focus loss rather than retaining
+focus on a disabled control.
+
 The legacy-response path remains for compatibility with older deployments; the
 current server always sends selection metadata and enables the selected checkout
 capability. Incomplete new metadata never falls back to whole-cart checkout.
@@ -89,6 +107,7 @@ capability. Incomplete new metadata never falls back to whole-cart checkout.
 | Item/shop changes persist and update selected total | Same API test and item/shop/failure cases in `cart_ui.mjs` |
 | Unavailable rows deselect; price changes disclosed | `test_unavailable_rows_deselected_and_not_reselected_on_restock`, `test_price_at_add_is_immutable_across_price_and_quantity_changes`; cart/checkout script checks |
 | Only selected order rows created/removed | `test_mixed_shop_checkout_preserves_unselected_rows_and_idempotent_replay`, `test_failed_selected_checkout_rolls_back_every_selected_row` |
+| Only the selected variant is ordered; other variant rows stay (#120) | `test_selected_variant_is_ordered_and_other_variant_rows_survive`, `test_cart_id_reused_for_another_variant_during_checkout_is_a_conflict` |
 
 `tests/test_us12.py` also covers strict inputs, ownership, empty selection,
 concurrent deselection, reused row IDs and repeatable legacy migration. The US04
@@ -101,6 +120,7 @@ python -m src.database
 python -m pytest -q
 python -m ruff check .
 node tests/cart_ui.mjs
+node tests/cart_selection_browser.mjs
 node tests/checkout_ui.mjs
 node tests/seller_products_ui.mjs
 node tests/seller_orders_ui.mjs
@@ -112,9 +132,20 @@ item and reload to check persistence. Select a shop and verify its mixed/checked
 state and subtotals; open checkout and confirm only selected items appear. Place
 the order, then return to the cart: unselected items must remain. For warning
 screens, change a product's price or stock as its seller and reload the buyer cart.
-Check widths 390/768/1280px and keyboard selection/focus. New browser screenshots
-and real-user validation are still pending; older Sprint 3 screenshots do not
-prove this selection flow.
+Check widths 390/768/1280px and keyboard selection/focus. Automated browser evidence
+is available at [390px](images/us12/cart-selection-390.png),
+[768px](images/us12/cart-selection-768.png), and
+[1280px](images/us12/cart-selection-1280.png). Real-user validation remains pending.
+
+`node tests/cart_selection_browser.mjs` requires Node 22+ and Chrome/Edge (Windows
+paths are detected; other installations can set `BROWSER_PATH`). It starts an
+isolated local HTTP server serving the real cart HTML/CSS/JavaScript and deterministic
+API fixtures, then uses a temporary headless browser profile. It verifies three
+shop groups, mixed/disabled selection, variant labels, price warnings, viewport
+overflow, item/shop changes, failed-save focus recovery, and selection across reload.
+It rewrites the three screenshots. These fixture screenshots demonstrate rendering
+and browser interaction, not backend persistence or real-user testing; the SQLite
+API tests above verify persistence, ownership and selected-only checkout separately.
 
 ## Design rationale and AI assistance
 
