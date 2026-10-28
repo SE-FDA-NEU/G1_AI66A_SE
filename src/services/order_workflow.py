@@ -219,16 +219,19 @@ def buyer_cancellation(session: Session, buyer_id: int, order_id: int, status: s
             select(SellerOrder).where(SellerOrder.order_id == order_id).order_by(SellerOrder.id)
         ).all()
         active = [child for child in children if child.status != "CANCELLED"]
+        targets = [
+            child for child in active if is_allowed_transition("buyer", child.status, status)
+        ]
         # Validate child states too: the parent may still say PENDING after a partial cancel.
         if (
-            not active
+            not targets
             or not is_allowed_transition("buyer", parent.status, status)
-            or any(not is_allowed_transition("buyer", child.status, status) for child in active)
+            or (status == "CANCELLED" and len(targets) != len(active))
         ):
             raise WorkflowError(
                 "ERR_INVALID_TRANSITION", "The order cannot be cancelled in its current state.", 400
             )
-        for child in active:
+        for child in targets:
             _apply_status(session, parent, child, buyer_id, status, buyer=True)
         _sync_parent(session, parent)
 

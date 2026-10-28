@@ -79,7 +79,7 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
             order.shipped_at = datetime.now(UTC)
     elif statuses == {"CONFIRMED"}:
         order.status = "CONFIRMED"
-    elif statuses == {"CANCELLATION_REQUESTED"}:
+    elif "CANCELLATION_REQUESTED" in statuses:
         order.status = "CANCELLATION_REQUESTED"
     elif (statuses - {"CANCELLED", "RETURNED_REFUNDED"}) == {"DELIVERED"}:
         order.status = "DELIVERED"
