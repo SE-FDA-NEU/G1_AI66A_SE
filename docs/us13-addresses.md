@@ -88,6 +88,35 @@ review. Auth context is checked before requests and after responses; account cha
 hide/clear old address data and block submit/retry/CRUD. Cross-tab token changes also
 invalidate the view.
 
+## Task #123 follow-up — address UI only
+
+The address book and checkout selector already exist from PR #167. This follow-up
+changes only their frontend behavior, UI tests and this documentation. Address APIs,
+ownership/version rules, database migrations and order snapshots are unchanged.
+
+- Address cards and their Edit/Delete/Set default actions have distinct accessible
+  names identifying the recipient and street. Stable action IDs allow focus to
+  return after the cards are refreshed.
+- Delete confirmation shows the exact recipient, phone and full address as plain
+  text. Cancel receives initial focus, sends no DELETE, clears the confirmation
+  details and returns focus to the initiating Delete button. A failed deletion
+  retains the target and confirmation for review/retry.
+- Cancelling an edit returns to its Edit button. Successful edits return to the
+  refreshed Edit button; adding, deleting or setting a default returns to the
+  checkout address selector. These actions preserve the user's current delivery
+  selection where that address still exists.
+- The existing live address status announces saves and successful changes. Its
+  `tabindex="-1"` also lets failed card actions focus their visible error feedback.
+  Field-level validation continues to preserve entered values and focus the first
+  invalid input. Pending mutations disable address controls and refuse duplicates.
+
+Run `node tests/addresses_ui.mjs` and `node tests/checkout_ui.mjs` to verify these
+behaviors alongside saved/manual checkout selection, account isolation and pending
+checkout protection. A native Chromium spot check using disposable API fixtures
+also confirmed edit/default/delete focus, targeted delete confirmation and no
+horizontal overflow at 360/768/1280px. This spot check does not replace the existing
+SQLite persistence tests or claim real-user validation.
+
 ## Acceptance evidence — 27 October 2026
 
 | Acceptance criterion | Automated evidence | Browser evidence |
