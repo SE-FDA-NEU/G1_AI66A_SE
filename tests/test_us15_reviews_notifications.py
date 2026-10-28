@@ -281,6 +281,17 @@ def test_only_product_owner_can_reply_and_reply_is_shown(client, us15_data) -> N
     assert replied.json()["data"]["seller_replied_at"] is not None
     public_reviews = client.get(f"/api/v1/products/{PRODUCT_CODE}/reviews")
     assert public_reviews.json()["data"][0]["seller_reply"] == "Thanks for the feedback."
+    buyer_notifications = client.get(
+        "/api/v1/notifications",
+        headers=_auth(buyer_token),
+    )
+    assert buyer_notifications.json()["unread_count"] == 1
+    assert buyer_notifications.json()["data"][0]["message"] == (
+        "The seller replied to your review of US15 Review Product."
+    )
+    assert buyer_notifications.json()["data"][0]["target_path"] == (
+        f"/products/{PRODUCT_CODE}"
+    )
 
 
 def test_status_transition_notifies_only_buyer_and_retry_does_not_duplicate(

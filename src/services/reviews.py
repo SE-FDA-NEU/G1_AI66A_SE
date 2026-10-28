@@ -160,18 +160,29 @@ def reply_to_review(
     reply: str,
 ) -> Review:
     row = session.exec(
-        select(Review, Product)
+        select(Review, Product, OrderItem, SellerOrder, Order)
         .join(Product, Product.id == Review.product_id)
+        .join(OrderItem, OrderItem.id == Review.order_item_id)
+        .join(SellerOrder, SellerOrder.id == OrderItem.seller_order_id)
+        .join(Order, Order.id == SellerOrder.order_id)
         .where(Review.id == review_id)
     ).first()
     if row is None:
         raise ReviewError("ERR_REVIEW_NOT_FOUND", "Review not found.", 404)
-    review, product = row
+    review, product, _item, seller_order, order = row
     if product.seller_id != seller.id:
         raise ReviewError("ERR_RESOURCE_OWNER", "You do not own this product.", 403)
     review.seller_reply = reply
     review.seller_replied_at = datetime.now(UTC)
     session.add(review)
+    create_notification(
+        session,
+        recipient_user_id=order.buyer_id,
+        order_id=order.id,
+        event_key=f"review:{review.id}:replied",
+        message=f"The seller replied to your review of {product.name}.",
+        target_path=f"/products/{product.code}",
+    )
     session.commit()
     session.refresh(review)
     return review
