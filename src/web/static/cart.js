@@ -536,6 +536,8 @@ function configureNavigation() {
   const user = getUserFromToken();
   const myOrders = document.getElementById("my-orders-link");
   const sellerOrders = document.getElementById("seller-orders-link");
+  const adminPortal = document.getElementById("admin-portal-link");
+  if (adminPortal) adminPortal.hidden = !(user && user.role === "admin");
   if (user && user.role === "seller") {
     if (myOrders) myOrders.hidden = true;
     if (sellerOrders) sellerOrders.hidden = false;

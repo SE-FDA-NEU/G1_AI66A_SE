@@ -55,6 +55,12 @@ SEED_USERS: list[dict[str, str]] = [
         "role": "buyer",
         "password": DEFAULT_DEV_PASSWORD,
     },
+    {
+        "name": "Platform Administrator",
+        "email": "admin@example.com",
+        "role": "admin",
+        "password": DEFAULT_DEV_PASSWORD,
+    },
 ]
 
 

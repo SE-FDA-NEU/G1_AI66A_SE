@@ -121,6 +121,8 @@ def submit_return_request(
     order_id: int,
     payload: CreateReturnRequest,
 ) -> ReturnRequestData:
+    if getattr(current_user, "status", "ACTIVE") != "ACTIVE":
+        raise ReturnError("ERR_ACCOUNT_RESTRICTED", "This account is restricted.", 403)
     order = session.get(Order, order_id)
     if order is None:
         raise ReturnError("ERR_ORDER_NOT_FOUND", "Order not found.", 404)
@@ -314,6 +316,8 @@ def decide_return_request(
     return_request_id: int,
     decision: ReturnDecisionRequest,
 ) -> ReturnRequestData:
+    if getattr(current_user, "status", "ACTIVE") != "ACTIVE":
+        raise ReturnError("ERR_ACCOUNT_RESTRICTED", "This account is restricted.", 403)
     ret_req = session.get(ReturnRequest, return_request_id)
     if ret_req is None:
         raise ReturnError("ERR_ORDER_NOT_FOUND", "Return request not found.", 404)

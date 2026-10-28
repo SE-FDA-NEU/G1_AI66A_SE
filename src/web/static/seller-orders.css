@@ -1,14 +1,229 @@
-body { font-family: system-ui, sans-serif; margin: 0; color: #17202a; }
-.orders { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
-.site-nav { display: flex; gap: 1rem; margin-bottom: 2rem; }
-.filters { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin-bottom: 1rem; }
-.filters label { display: grid; gap: .25rem; }
-.order-card { border: 1px solid #d6dbe0; border-radius: .5rem; padding: 1rem; margin: .75rem 0; }
-.order-card__header { display: flex; justify-content: space-between; gap: 1rem; }
-.order-card__items { padding-left: 1.25rem; }
-.status { font-weight: 700; }
-button { cursor: pointer; }
-.pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
-button:disabled { cursor: not-allowed; opacity: .6; }
-.order-card__tracker-link { display: inline-block; margin: 0.5rem 0.5rem 0.5rem 0; padding: 0.4rem 0.8rem; background: #0071e3; color: #fff; text-decoration: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600; }
-.order-card__tracker-link:hover { background: #0077ed; }
+/**
+ * Mini Marketplace - Seller Orders Management Stylesheet
+ * US22 / US08: Responsive order cards, filtering controls, clear status badges, and action states.
+ */
+@import "base.css";
+
+/* Dashboard Layout */
+.orders {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+/* Filters Card */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+}
+
+.filters select,
+.filters input[type="date"] {
+  min-height: 40px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.filters button[type="submit"] {
+  min-height: 40px;
+  padding: 0.45rem 1.25rem;
+}
+
+/* Orders List & Cards */
+#orders-list {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.order-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.order-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.order-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.order-card__header h2 {
+  font-size: 1.15rem;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-border);
+}
+
+.order-card p {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+}
+
+.order-card__items {
+  margin: 0.75rem 0 1rem;
+  padding-left: 1.5rem;
+  color: var(--color-text);
+  font-size: 0.95rem;
+}
+
+.order-card__items li {
+  margin-bottom: 0.35rem;
+}
+
+.order-card__tracking {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  margin-bottom: 0.75rem;
+}
+
+.order-card__tracker-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  padding: 0.45rem 0.95rem;
+  background: var(--color-accent);
+  color: #ffffff;
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: background-color var(--transition-fast);
+}
+
+.order-card__tracker-link:hover {
+  background: var(--color-accent-hover);
+  text-decoration: none;
+  color: #ffffff;
+}
+
+.order-card button {
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  padding: 0.45rem 1rem;
+  font-size: 0.88rem;
+  min-height: 38px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-input);
+}
+
+.order-card button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+}
+
+/* Empty & Error States */
+#orders-empty,
+#orders-error {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  font-size: 1.05rem;
+}
+
+#orders-status {
+  padding: 0.75rem 1rem;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 1.25rem;
+}
+
+#orders-retry {
+  margin-top: 1rem;
+}
+
+/* Responsive Overrides */
+@media (max-width: 640px) {
+  .orders {
+    padding: 1rem 0.75rem 2rem;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .filters label {
+    width: 100%;
+  }
+
+  .filters button[type="submit"] {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .order-card {
+    padding: 1rem;
+  }
+
+  .order-card button,
+  .order-card__tracker-link {
+    width: 100%;
+    margin: 0.35rem 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .order-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
