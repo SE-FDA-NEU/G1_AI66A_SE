@@ -211,6 +211,99 @@ def sample_catalog(discovery_engine):
 # ==============================================================================
 
 
+@pytest.mark.parametrize("keyword", ["Laptop", "creatives", "  laptop  ", "", "   "])
+def test_issue115_q_matches_legacy_search(client, sample_catalog, keyword):
+    canonical = client.get("/api/v1/products", params={"q": keyword})
+    legacy = client.get("/api/v1/products", params={"search": keyword})
+    assert canonical.status_code == 200
+    assert canonical.json() == legacy.json()
+
+
+def test_issue115_combines_all_filters(client, sample_catalog):
+    response = client.get("/api/v1/products", params={
+        "q": "laptop", "category_id": 1, "seller_id": 2,
+        "min_price": 10000000, "max_price": 20000000, "min_rating": 4.5,
+        "in_stock": True, "sort_by": "price_asc", "page": 1, "page_size": 1,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert [p["code"] for p in body["data"]] == ["P-LAP-AIR"]
+    assert body["meta"] == {
+        "current_page": 1, "page_size": 1, "limit": 1,
+        "total": 1, "total_items": 1, "total_pages": 1,
+    }
+
+
+@pytest.mark.parametrize("sort_by", [
+    "newest", "bestselling", "price_asc", "price_desc", "rating_desc",
+])
+def test_issue115_sort_and_pagination_are_stable(client, sample_catalog, sort_by):
+    expected = client.get("/api/v1/products", params={"sort": sort_by}).json()["data"]
+    pages = [client.get("/api/v1/products", params={
+        "sort_by": sort_by, "page_size": 2, "page": page,
+    }).json() for page in (1, 2, 3)]
+    assert [p for page in pages for p in page["data"]] == expected
+    for number, page in enumerate(pages, start=1):
+        assert page["meta"]["current_page"] == number
+        assert page["meta"]["total_items"] == 5
+        assert page["meta"]["total_pages"] == 3
+        assert page["meta"]["page_size"] == 2
+
+
+def test_issue115_canonical_parameters_take_precedence(client, sample_catalog):
+    response = client.get("/api/v1/products", params={
+        "q": "Laptop", "search": "Mouse", "sort_by": "price_asc",
+        "sort": "price_desc", "page_size": 1, "limit": 100,
+    })
+    assert response.status_code == 200
+    assert [p["code"] for p in response.json()["data"]] == ["P-LAP-AIR"]
+    assert response.json()["meta"]["total_pages"] == 2
+
+
+@pytest.mark.parametrize("params", [
+    {"page_size": 0}, {"page_size": 101}, {"page_size": "bad"},
+    {"page": 0}, {"q": "x" * 201}, {"sort_by": "random"},
+    {"min_rating": 5.1}, {"min_price": -1}, {"category_id": 0},
+    {"seller_id": 0}, {"in_stock": "bad"},
+])
+def test_issue115_invalid_parameters_return_422(client, params):
+    response = client.get("/api/v1/products", params=params)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "ERR_VALIDATION"
+
+
+def test_issue115_empty_and_out_of_range_pages(client, sample_catalog):
+    empty = client.get("/api/v1/products?q=missing-keyword&page=99&page_size=2").json()
+    assert empty["data"] == []
+    assert empty["meta"] == {
+        "current_page": 1, "page_size": 2, "limit": 2,
+        "total": 0, "total_items": 0, "total_pages": 0,
+    }
+    last = client.get("/api/v1/products?page=99&page_size=2").json()
+    assert last["meta"]["current_page"] == 3
+    assert len(last["data"]) == 1
+
+
+def test_issue115_soft_deleted_products_excluded_even_without_stock_filter(
+    client, sample_catalog, discovery_engine,
+):
+    with Session(discovery_engine) as session:
+        product = session.get(Product, 1)
+        product.is_active = False
+        session.add(product)
+        session.commit()
+    response = client.get("/api/v1/products?q=laptop&in_stock=false&page_size=100")
+    assert response.status_code == 200
+    assert [p["code"] for p in response.json()["data"]] == ["P-LAP-AIR"]
+    assert response.json()["meta"]["total_items"] == 1
+
+
+def test_issue115_invalid_price_bounds_identify_fields(client):
+    response = client.get("/api/v1/products?min_price=200&max_price=100")
+    assert response.status_code == 422
+    assert set(response.json()["error"]["fields"]) == {"min_price", "max_price"}
+
+
 def test_search_matches_product_name(client: TestClient, sample_catalog):
     """Keyword matching product title returns matching items."""
     res = client.get("/api/v1/products?search=Ultrabook")
