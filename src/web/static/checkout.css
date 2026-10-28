@@ -1,2 +1,297 @@
-*{box-sizing:border-box}body{margin:0;background:#f6f7fb;color:#182334;font:16px/1.6 system-ui}header{background:#fff;padding:1rem 5%;display:flex;gap:2rem;border-bottom:1px solid #ddd}a{color:#155ac7}main{max-width:760px;margin:2rem auto;padding:1.5rem;background:white;border-radius:12px}label{display:block;margin:1rem 0}input,textarea{display:block;width:100%;padding:.8rem;font:inherit;border:1px solid #8793a6;border-radius:6px}button{padding:.8rem 1.2rem;background:#155ac7;color:white;border:0;border-radius:6px;font:inherit;cursor:pointer}button:disabled{opacity:.5;cursor:wait}#error{color:#a51b24}section{padding:1rem;background:#f6f7fb}li{margin:.5rem 0}[hidden]{display:none!important}@media(max-width:600px){main{margin:1rem;padding:1rem}}
-fieldset{min-width:0;border:1px solid #c5cddd;border-radius:6px}select{display:block;width:100%;max-width:100%;padding:.7rem;font:inherit}article{background:white;padding:.8rem;margin:.8rem 0;border:1px solid #c5cddd;border-radius:6px;overflow-wrap:anywhere}article button{margin:.25rem}input[type=checkbox]{display:inline;width:auto}.field-error,#address-error{display:block;color:#a51b24}input[aria-invalid=true],textarea[aria-invalid=true]{border:2px solid #a51b24}:focus-visible{outline:3px solid #ec9d21;outline-offset:3px}#address-book{margin-bottom:1.5rem}#address-delete{border:2px solid #a51b24;padding:1rem}#address-form button,#address-book>button{margin:.25rem}button{white-space:normal}@media(max-width:400px){main{margin:.5rem;padding:.75rem}section{padding:.6rem}header{gap:1rem}button{max-width:100%}}
+/**
+ * Mini Marketplace - Checkout & Order Confirmation Stylesheet
+ * US22 / US04 / US13: Modern design, responsive layout, clear focus and form feedback states.
+ */
+@import "base.css";
+
+/* Container Layout */
+main {
+  max-width: 780px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+header {
+  max-width: 780px;
+  margin: 1.5rem auto 0;
+}
+
+h1 {
+  font-size: 1.85rem;
+  margin-bottom: 1.5rem;
+  color: var(--color-text);
+}
+
+/* Status message */
+#status,
+#address-status {
+  padding: 0.85rem 1rem;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+/* Order Summary */
+#summary {
+  padding: 1.5rem;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 2rem;
+}
+
+#summary p {
+  padding: 0.6rem 0;
+  margin: 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+#summary p:last-of-type {
+  border-bottom: none;
+}
+
+#summary strong {
+  display: block;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 2px dashed var(--color-border);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-align: right;
+}
+
+/* Address Book */
+#address-book {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+#address-heading {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: var(--color-text);
+}
+
+#address-book > button {
+  margin: 0.25rem 0.5rem 0.75rem 0;
+  min-height: 40px;
+}
+
+#address-choice {
+  margin-top: 0.35rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Address Cards */
+#address-list {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+article {
+  background: var(--color-surface);
+  padding: 1.25rem;
+  margin: 0.5rem 0;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  overflow-wrap: anywhere;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+article:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+article p {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+article button {
+  margin: 0.25rem 0.5rem 0.25rem 0;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.88rem;
+  min-height: 38px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-input);
+}
+
+article button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+}
+
+/* Address Form */
+#address-form {
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+#address-form h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+#address-form label {
+  margin: 0.85rem 0;
+}
+
+#address-form button {
+  margin: 0.5rem 0.5rem 0 0;
+}
+
+/* Address Delete Confirmation */
+#address-delete {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+}
+
+#address-delete p {
+  color: var(--color-danger-text);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+#address-delete button {
+  margin: 0.25rem 0.5rem 0.25rem 0;
+}
+
+#confirm-delete {
+  background-color: var(--color-danger);
+  color: #ffffff;
+}
+
+#confirm-delete:hover {
+  background-color: #b91c1c;
+}
+
+/* Checkout Manual Delivery Form */
+#checkout-form {
+  margin-top: 1.5rem;
+}
+
+#manual-delivery {
+  margin-bottom: 1.5rem;
+}
+
+#manual-delivery label {
+  margin: 1rem 0;
+}
+
+#confirm {
+  width: 100%;
+  padding: 0.85rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  min-height: 48px;
+}
+
+/* Feedback & Errors */
+#error,
+#address-error {
+  color: var(--color-danger);
+  font-weight: 600;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+}
+
+#error:empty,
+#address-error:empty {
+  display: none;
+  padding: 0;
+  border: none;
+}
+
+#retry {
+  margin-top: 1rem;
+}
+
+/* Order Confirmation receipt */
+#receipt {
+  padding: 1.5rem;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+}
+
+#receipt p {
+  margin-bottom: 0.5rem;
+}
+
+/* Responsive Overrides */
+@media (max-width: 600px) {
+  main {
+    margin: 1rem auto;
+    padding: 1.25rem;
+    border-radius: var(--radius-lg);
+  }
+
+  header {
+    margin: 0.75rem auto 0;
+    gap: 1rem;
+  }
+
+  #summary,
+  #address-book,
+  #address-form {
+    padding: 1rem;
+  }
+
+  button,
+  .button {
+    min-height: 44px;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  main {
+    margin: 0.5rem auto;
+    padding: 0.75rem;
+  }
+
+  #summary,
+  #address-book,
+  #address-form {
+    padding: 0.6rem;
+  }
+
+  article button,
+  #address-form button,
+  #address-book > button {
+    width: 100%;
+    margin: 0.25rem 0;
+  }
+}
