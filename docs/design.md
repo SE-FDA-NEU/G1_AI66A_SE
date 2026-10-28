@@ -340,10 +340,17 @@ Historical orders and seller revenue therefore remain correct even when current 
 | `from_status` | VARCHAR(30) | NOT NULL |
 | `to_status` | VARCHAR(30) | NOT NULL |
 | `changed_by_user_id` | INTEGER | NOT NULL, Foreign Key → `users.id` |
+| `actor_role` | VARCHAR(20) | Role snapshot at transition time; NULL for unknown legacy roles (#127) |
 | `note` | TEXT | Optional |
 | `created_at` | DATETIME | NOT NULL |
 
 This table satisfies the Sprint 3 audit requirement for US08 (Issue #74 / Issue #82): when an order status advances or when a `PENDING` seller order is cancelled and inventory is restocked, an immutable history record is appended.
+
+Task #127 exposes persisted events as `history` on authorized sub-order responses,
+alongside tracking and UTC shipping/delivery milestones. See the
+[order-history contract](us14-order-history.md) for request limits, migration,
+ownership scope and transaction rules. Existing transition/cancellation rules are
+unchanged.
 
 ---
 

@@ -413,6 +413,19 @@ No implementation PR number is recorded until a real PR exists. Story closure an
 review remain GitHub workflow steps after this implementation is reviewed.
 
 
+## US14 order history and shipping milestones (#106, #127)
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Persist old/new status, actor ID/role, note and time | Shared `services/order_history.py` through `repositories/order_history.py`; existing buyer/seller/return/admin writers delegate audit only | `tests/test_order_history_milestones.py`; existing order/return/admin suites |
+| Role snapshots survive account-role changes and migration | Nullable `order_history.actor_role`; repeatable migration preserves unknown legacy facts | Snapshot and legacy-migration cases in the new suite |
+| Return authorized history and shipping milestones | `SubOrderSummary.history`, `SellerOrderResponse.history`, batch reads; seller-scoped tracking on receipts | Ownership, milestone equality, stable ordering and rollback cases |
+
+Scope: backend audit/milestone data only; no new screens, transition policy,
+cancellation/inventory redesign or payment implementation. Contract and course
+design rationale: [US14 order history](us14-order-history.md). Expected results:
+[regression cases](testing.md#task-127-order-history-and-shipping-milestones).
+
 ## US16 contract (#108, #133–#137)
 
 Runtime: **Not implemented.** Contract proposed in
