@@ -226,6 +226,7 @@ function renderAddresses(preselect) {
     const description = document.createElement("p"); description.textContent = text; card.append(description);
     for (const [label, action] of [["Edit", () => openAddress(row)], ["Delete", () => {
       deletingAddress = row;
+      document.getElementById("delete-address-summary").textContent = text;
       document.getElementById("address-delete").hidden = false;
       document.getElementById("cancel-delete").focus();
     }], ...(!row.is_default ? [["Set default", () => runAddress(async () => {
@@ -304,12 +305,14 @@ addressForm.addEventListener("submit", event => {
 });
 document.getElementById("cancel-delete").addEventListener("click", () => {
   deletingAddress = null; document.getElementById("address-delete").hidden = true;
+  document.getElementById("delete-address-summary").textContent = "";
   document.getElementById("add-address").focus();
 });
 document.getElementById("confirm-delete").addEventListener("click", () => runAddress(async () => {
   if (!deletingAddress) return;
   await request(`/api/v1/addresses/${deletingAddress.id}`, {method:"DELETE"});
   deletingAddress = null; document.getElementById("address-delete").hidden = true;
+  document.getElementById("delete-address-summary").textContent = "";
   await loadAddresses(false);
 }));
 globalThis.addEventListener?.("storage", event => {
