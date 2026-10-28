@@ -389,6 +389,17 @@ The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for 
 | US10 Seller best-selling products | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | P2 | /seller/analytics/products | @QuangMinhQu | Not implemented (depends on US09) |
 
 
+## US12 grouped cart UI (#104, #119)
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Shop groups, item/shop selection and subtotals | `src/web/static/cart.js`: shop groups and server-confirmed totals | `tests/cart_ui.mjs`; `tests/cart_selection_browser.mjs` |
+| Unavailable items and changed prices | Separate labelled unavailable groups, disabled selection, old/current price warnings | DOM and browser checks; `tests/test_us12.py` |
+| Variant labels, save feedback and focus recovery | Variant-specific control names; live status; initiating focus restored after a failed save | DOM focus-loss simulation and native browser checks |
+| Responsive cart selection | Existing shared/cart CSS, verified at 390/768/1280px | `docs/images/us12/cart-selection-*.png` (deterministic API fixtures) |
+
+Scope and reproduction: [US12 cart selection](us12-cart-selection.md).
+
 ## US13 implementation (#105, #122–#125)
 
 | Task | Implementation | Verification |

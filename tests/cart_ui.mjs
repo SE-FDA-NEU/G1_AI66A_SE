@@ -61,6 +61,14 @@ function setup(responses, token = "buyer-a") {
   const document = {getElementById: get, createElement: tag => {
     const node = new Element(tag);
     node.focus = () => { activeElement = node; };
+    let disabled = false;
+    Object.defineProperty(node, "disabled", {
+      get: () => disabled,
+      set: value => {
+        disabled = value;
+        if (disabled && activeElement === node) activeElement = null;
+      },
+    });
     return node;
   }, get activeElement() { return activeElement; }};
   for (const node of roots.values()) node.focus = () => { activeElement = node; };
@@ -99,6 +107,7 @@ assert.equal(page.get("cart-lines").children.length, 3);
 assert.equal(page.get("select-shop-10").indeterminate, true);
 assert.equal(page.get("select-shop-20").checked, true);
 assert.equal(page.get("select-item-4").disabled, true);
+assert.equal(page.get("cart-lines").children[0].attributes["aria-labelledby"], "shop-heading-10");
 assert.equal(page.get("select-item-5").checked, false);
 assert.equal(page.get("cart-total").textContent, price(180000));
 const text = pageText(page.get("cart-lines"));
@@ -147,6 +156,7 @@ for (const failure of [new Error("offline"), {status: 409, payload: {error: {mes
   assert.equal(page.get("select-item-1").checked, true);
   assert.equal(page.get("cart-total").textContent, price(100000));
   assert.equal(page.get("cart-change-error").hidden, false);
+  assert.equal(page.focused.id, "select-item-1");
   page.change("select-item-1");
   await tick();
   assert.equal(page.get("select-shop-10").checked, false);
@@ -161,6 +171,7 @@ page = setup([ok(snapshot([item(1, 10, true)], {supports_partial_checkout: true}
 await tick();
 page.change("select-item-1");
 assert.equal(page.get("checkout-button").disabled, true);
+assert.equal(page.get("cart-status").textContent, "Saving your selection…");
 page.change("select-shop-10");
 page.get("checkout-button").dispatch("click");
 assert.equal(page.calls.length, 2);
@@ -168,6 +179,15 @@ assert.deepEqual(page.navigation, []);
 complete(ok(snapshot([item(1, 10, false)], {supports_partial_checkout: true})));
 await tick();
 assert.equal(page.get("select-shop-10").checked, false);
+
+// A failed shop change restores its mixed state and the original keyboard focus.
+page = setup([ok(snapshot([item(1, 10, true), item(2, 10, false)])), new Error("offline")]);
+await tick();
+page.change("select-shop-10");
+await tick();
+assert.equal(page.get("select-shop-10").indeterminate, true);
+assert.equal(page.focused.id, "select-shop-10");
+assert.equal(page.get("cart-total").textContent, price(100000));
 
 // Selection capability may enable checkout, but an empty selection never does.
 page = setup([ok(snapshot([item(1, 10, true)], {supports_partial_checkout: true}))]);
@@ -239,6 +259,9 @@ await tick();
 assert.equal(page.calls[1].url, "/api/v1/cart/items/P-1?variant_id=22");
 assert.equal(page.get("quantity-2").value, "2");
 assert.ok(page.text(page.get("cart-lines")).includes("White"));
+assert.ok(page.text(page.get("cart-lines")).includes("Select Item 1 · Black"));
+assert.ok(page.text(page.get("cart-lines")).includes("Select Item 2 · White"));
+assert.equal(page.get("increase-2").attributes["aria-label"], "Increase quantity of Item 2 · White");
 
 // Ignore a pending response after switching accounts; never render the old account's data.
 let resolveOld;
