@@ -53,6 +53,18 @@ No external payment provider is called and no refund amount ledger is introduced
 The pending payment contract in `docs/us20-payments.md` is not treated as an
 already implemented payment service.
 
+Parent shipping, delivery and completion timestamps use the latest non-null
+timestamp from the seller orders, with UTC normalization for comparison. A shop
+with a lower seller-order ID finishing later therefore advances the parent's
+completion time correctly. Parent completion time reflects the latest recorded
+child completion; it does not imply that every shop is complete while the parent
+status is still `PROCESSING`.
+
+If cancellation encounters a payment status other than `PAID`, `UNPAID` or
+`FAILED`, it returns HTTP 409 `ERR_INVALID_PAYMENT_STATE` and leaves cancellation
+effects unchanged. The payment must be reconciled before cancellation. The API
+error table in `docs/design.md` records this contract.
+
 ## Integration before readiness
 
 - **#133/#135:** use the persisted redemption/allocation identities to restore only
@@ -79,6 +91,9 @@ requests, failures after inventory/notification/parent changes and at commit,
 paid/unpaid/failed payments, multi-shop partial cancellation, request versus
 approval, inactive variants, unauthorized access, and competing buyer/seller,
 seller/seller and cancellation/confirmation requests.
+The review regressions also exercise shipping/delivery/completion milestones
+through both seller APIs in both ID orders, and confirm that unreconciled payment
+states return 409 without committing cancellation effects.
 
 Run from the repository root:
 
@@ -87,15 +102,17 @@ DEBUG=false .venv/bin/python -m pytest -q -o addopts='' \
   --basetemp=/tmp/issue128-review \
   tests/test_atomic_cancellation.py tests/test_order_states.py \
   tests/test_order_tracker.py tests/test_seller_orders.py tests/test_return_refund.py \
-  tests/test_p0_flows.py tests/test_us15_reviews_notifications.py
+  tests/test_p0_flows.py tests/test_us15_reviews_notifications.py \
+  tests/test_checkout.py tests/test_ui_docs_contract.py
 .venv/bin/python -m ruff check src/api/orders.py src/api/seller_orders.py \
   src/services/order_workflow.py src/services/inventory.py src/services/returns.py \
   tests/test_atomic_cancellation.py
 git diff --check
 ```
 
-Final focused validation after integrating #126: **86 passed** (one existing
-Starlette deprecation warning). The eight Node page-script suites from CI also
+Focused validation after the review fixes: **144 passed** (one existing
+Starlette deprecation warning), including the API milestone regressions and the
+complete UI/API documentation contract suite. The eight Node page-script suites from CI also
 passed. The initial full-suite run was stopped after main changed to #126; the focused
 regression suites above passed on the final main integration.
 Repository-wide Ruff currently reports eight pre-existing findings in
