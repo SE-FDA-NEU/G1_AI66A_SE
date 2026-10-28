@@ -39,27 +39,44 @@ test.nodes.get("add-address").handlers.click();
 for(const name of ["recipient_name","phone_number","province","district","ward","detailed_address"])test.nodes.get("address-form").elements[name].value=a[name];
 await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
 assert.equal(test.nodes.get("address-list").children.length,1);
+assert.equal(test.nodes.get("address-status").textContent,"Address added.");
+assert.equal(test.nodes.get("address-choice").focused,true);
 let card=test.nodes.get("address-list").children[0];
+assert.match(card.children[1]["aria-label"],/Edit address for Buyer at <script>street<\/script>/);
 card.children[1].handlers.click();
 assert.equal(test.nodes.get("address-form").elements.recipient_name.value,a.recipient_name);
+test.nodes.get("cancel-address").handlers.click();
+assert.equal(card.children[1].focused,true,"Cancel edit returns to that address's Edit button");
+card.children[1].handlers.click();
 await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
 const put=test.calls.find(call=>call.options.method==="PUT");
 assert.equal(JSON.parse(put.options.body).version,1);
 card=test.nodes.get("address-list").children[0];
+assert.equal(card.children[1].focused,true,"Save restores focus after cards are replaced");
+assert.equal(test.nodes.get("address-status").textContent,"Address updated.");
 card.children[2].handlers.click();
 assert.equal(test.nodes.get("address-delete").hidden,false);
+assert.match(test.nodes.get("delete-address-summary").textContent,/<script>street<\/script>/);
+assert.ok(test.nodes.get("delete-address-summary").textContent.includes(a.phone_number));
+assert.equal(test.nodes.get("cancel-delete").focused,true,"Confirmation focuses the safe action");
 test.nodes.get("cancel-delete").handlers.click();
 assert.ok(!test.calls.some(call=>call.options.method==="DELETE"));
+assert.equal(card.children[2].focused,true,"Cancel delete returns to its triggering address");
+assert.equal(test.nodes.get("delete-address-summary").textContent,"");
 card.children[2].handlers.click();
 await test.nodes.get("confirm-delete").handlers.click();
 assert.equal(test.nodes.get("address-list").children.length,0);
 assert.equal(test.nodes.get("address-delete").hidden,true);
+assert.equal(test.nodes.get("address-status").textContent,"Address deleted.");
+assert.equal(test.nodes.get("address-choice").focused,true);
 // A failed deletion keeps the card and confirmation available for retry.
 test=setup([user,empty],null,undefined,[list([a]),{status:500,payload:{error:{message:"Database unavailable"}}}]);await tick();
 test.nodes.get("address-list").children[0].children[2].handlers.click();
 await test.nodes.get("confirm-delete").handlers.click();
 assert.equal(test.nodes.get("address-list").children.length,1);
 assert.equal(test.nodes.get("address-delete").hidden,false);
+assert.ok(test.nodes.get("delete-address-summary").textContent.includes(a.phone_number));
+assert.equal(test.nodes.get("address-status").focused,true,"A failed action focuses visible feedback");
 // Saved-address submit preserves body/key on timeout, even after source deletion/reload.
 const pending={key:"frozen",body:{address_id:1,address_version:1}};
 test=setup([user,new Error("timeout"),{payload:{data:{id:7}}}],pending);await tick();
@@ -102,6 +119,23 @@ const patch=test.calls.find(c=>c.options.method==="PATCH");
 assert.equal(patch.url,"/api/v1/addresses/2/default");
 assert.deepEqual(JSON.parse(patch.options.body),{version:1});
 assert.equal(test.nodes.get("address-list").children[0].children[0].textContent.includes("Default"),true);
+assert.equal(test.nodes.get("address-status").textContent,"Default address updated.");
+assert.equal(test.nodes.get("address-choice").focused,true);
+
+// While a default change is pending, announce progress and refuse duplicate actions.
+let finishDefault;
+const savingDefault=new Promise(done=>{finishDefault=done;});
+test=setup([user,empty],null,undefined,[list([a,b]),savingDefault,
+  list([{...a,is_default:false},{...b,is_default:true,version:2}])]);await tick();
+const defaultButton=test.nodes.get("address-list").children[1].children[3];
+defaultButton.handlers.click();await tick();
+assert.equal(test.nodes.get("address-status").textContent,"Saving address changes...");
+assert.equal(defaultButton.disabled,true);
+const callsWhileSaving=test.calls.length;
+defaultButton.handlers.click();
+assert.equal(test.calls.length,callsWhileSaving);
+finishDefault({payload:{data:{...b,is_default:true,version:2}}});await tick();
+assert.equal(test.nodes.get("address-status").textContent,"Default address updated.");
 // Manual submit is a whitelist, regardless of saved-address/form controls elsewhere.
 test=setup([user,cart,new Error("timeout")],null,undefined,[list([a])]);await tick();
 test.nodes.get("address-choice").value="";test.nodes.get("address-choice").handlers.change();
