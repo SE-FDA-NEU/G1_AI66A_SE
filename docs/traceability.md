@@ -389,7 +389,7 @@ The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for 
 | US10 Seller best-selling products | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | P2 | /seller/analytics/products | @QuangMinhQu | Not implemented (depends on US09) |
 
 
-## US12 grouped cart UI (#104, #119)
+## US12 cart selection and checkout (#104, #119, #120)
 
 | Requirement | Implementation | Verification |
 |---|---|---|
@@ -397,6 +397,7 @@ The following P1 and P2 stories are targeted in Sprint 4. Traceability rows for 
 | Unavailable items and changed prices | Separate labelled unavailable groups, disabled selection, old/current price warnings | DOM and browser checks; `tests/test_us12.py` |
 | Variant labels, save feedback and focus recovery | Variant-specific control names; live status; initiating focus restored after a failed save | DOM focus-loss simulation and native browser checks |
 | Responsive cart selection | Existing shared/cart CSS, verified at 390/768/1280px | `docs/images/us12/cart-selection-*.png` (deterministic API fixtures) |
+| Selected-only checkout (#120) | `src/services/orders.py:checkout()`: selected rows only, one transaction, and a line delete that also matches the ordered variant | `tests/test_us12.py` (selected/unselected variants, reused row ID during checkout), `tests/test_checkout.py` |
 
 Scope and reproduction: [US12 cart selection](us12-cart-selection.md).
 
@@ -405,7 +406,7 @@ Scope and reproduction: [US12 cart selection](us12-cart-selection.md).
 | Task | Implementation | Verification |
 |---|---|---|
 | #122 model/API | UserAddress, addresses schema/service/router; owner/version predicates, partial default index | tests/test_addresses.py: CRUD, persistence, auth, isolation, strict validation, init upgrade, rollback, file SQLite concurrency |
-| #123 UI | /checkout address book, independent form, selector, manual mode, field guidance, delete confirmation | tests/addresses_ui.mjs; browser evidence in docs/us13-addresses.md |
+| #123 UI | /checkout address book, independent form, selector, manual mode, field guidance, recipient-specific delete confirmation, distinct action labels, save feedback and focus recovery | tests/addresses_ui.mjs; browser evidence and UI-only follow-up in docs/us13-addresses.md |
 | #124 snapshot | resolve_delivery_snapshot after replay, explicit Order fields, legacy/saved union | tests/test_checkout_addresses.py: edit/delete/replay, stale/foreign address, legacy hash, partial cart, rollback and same-key concurrency |
 | #125 integration | Node checks in CI; API/database/checkout regressions | tests/test_checkout.py, tests/test_us12.py, tests/test_database.py; docs/us13-addresses.md |
 

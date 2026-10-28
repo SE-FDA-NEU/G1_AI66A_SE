@@ -184,3 +184,137 @@ def test_checkout_failure_after_snapshot_rolls_back(api, engine, monkeypatch):
     assert stored_stock(engine, "P-100") == (10, 0)
     with Session(engine) as session:
         assert session.get(UserAddress, row["id"]).version == 1
+
+
+def test_immutable_address_snapshot_after_editing_and_deleting_address(api, engine):
+    """Orders retain their immutable delivery snapshot after address updates and deletion."""
+    add_product(engine, "P-100", stock=20)
+    fill(engine)
+
+    # 1. Create Address 1
+    addr1_payload = {
+        "recipient_name": "Phạm Quốc Anh",
+        "phone_number": "+84 (912) 888-999",
+        "province": "TP Hồ Chí Minh",
+        "district": "Quận 1",
+        "ward": "Phường Bến Nghé",
+        "detailed_address": "12 Lê Duẩn",
+    }
+    res = api.post(URL, json=addr1_payload, headers=headers(engine))
+    assert res.status_code == 201
+    addr1 = res.json()["data"]
+    assert addr1["is_default"] is True
+    assert addr1["version"] == 1
+
+    # 2. Place Order 1 with saved Address 1
+    order1_body = saved(addr1)
+    order1_res = api.post(
+        "/api/v1/orders", json=order1_body, headers=headers(engine, key="key-order-1")
+    )
+    assert order1_res.status_code == 201
+    order1 = order1_res.json()["data"]
+    expected_addr1_full = "12 Lê Duẩn, Phường Bến Nghé, Quận 1, TP Hồ Chí Minh"
+    assert order1["recipient_name"] == "Phạm Quốc Anh"
+    assert order1["phone_number"] == "+84 (912) 888-999"
+    assert order1["delivery_address"] == expected_addr1_full
+
+    with Session(engine) as session:
+        db_order1 = session.get(Order, order1["id"])
+        assert db_order1.recipient_name == "Phạm Quốc Anh"
+        assert db_order1.phone_number == "+84 (912) 888-999"
+        assert db_order1.delivery_address == expected_addr1_full
+
+    # 3. Update Address 1 (version 2) with new recipient and location
+    addr2_payload = {
+        "recipient_name": "Ngô Thị Bích",
+        "phone_number": "0987-654-321",
+        "province": "Đà Nẵng",
+        "district": "Sơn Trà",
+        "ward": "An Hải Bắc",
+        "detailed_address": "88 Võ Văn Kiệt",
+        "version": addr1["version"],
+    }
+    update_res = api.put(f"{URL}/{addr1['id']}", json=addr2_payload, headers=headers(engine))
+    assert update_res.status_code == 200
+    addr1_v2 = update_res.json()["data"]
+    assert addr1_v2["version"] == 2
+    assert addr1_v2["recipient_name"] == "Ngô Thị Bích"
+
+    # 4. Verify Order 1 snapshot remains unchanged in DB and via API
+    fetch_order1 = api.get(f"/api/v1/orders/{order1['id']}", headers=headers(engine)).json()["data"]
+    assert fetch_order1["recipient_name"] == "Phạm Quốc Anh"
+    assert fetch_order1["phone_number"] == "+84 (912) 888-999"
+    assert fetch_order1["delivery_address"] == expected_addr1_full
+
+    with Session(engine) as session:
+        db_order1_after = session.get(Order, order1["id"])
+        assert db_order1_after.recipient_name == "Phạm Quốc Anh"
+        assert db_order1_after.phone_number == "+84 (912) 888-999"
+        assert db_order1_after.delivery_address == expected_addr1_full
+
+    # 5. Place Order 2 with updated Address 1 (version 2)
+    fill(engine)
+    order2_body = saved(addr1_v2)
+    order2_res = api.post(
+        "/api/v1/orders", json=order2_body, headers=headers(engine, key="key-order-2")
+    )
+    assert order2_res.status_code == 201
+    order2 = order2_res.json()["data"]
+    expected_addr2_full = "88 Võ Văn Kiệt, An Hải Bắc, Sơn Trà, Đà Nẵng"
+    assert order2["recipient_name"] == "Ngô Thị Bích"
+    assert order2["phone_number"] == "0987-654-321"
+    assert order2["delivery_address"] == expected_addr2_full
+
+    # 6. Delete Address 1
+    del_res = api.delete(f"{URL}/{addr1['id']}", headers=headers(engine))
+    assert del_res.status_code == 204
+
+    # 7. Verify both Order 1 and Order 2 retain snapshots via API and DB
+    order1_after_del = api.get(
+        f"/api/v1/orders/{order1['id']}", headers=headers(engine)
+    ).json()["data"]
+    assert order1_after_del["recipient_name"] == "Phạm Quốc Anh"
+    assert order1_after_del["phone_number"] == "+84 (912) 888-999"
+    assert order1_after_del["delivery_address"] == expected_addr1_full
+
+    order2_after_del = api.get(
+        f"/api/v1/orders/{order2['id']}", headers=headers(engine)
+    ).json()["data"]
+    assert order2_after_del["recipient_name"] == "Ngô Thị Bích"
+    assert order2_after_del["phone_number"] == "0987-654-321"
+    assert order2_after_del["delivery_address"] == expected_addr2_full
+
+    with Session(engine) as session:
+        db_order1_final = session.get(Order, order1["id"])
+        assert db_order1_final.recipient_name == "Phạm Quốc Anh"
+        assert db_order1_final.delivery_address == expected_addr1_full
+
+        db_order2_final = session.get(Order, order2["id"])
+        assert db_order2_final.recipient_name == "Ngô Thị Bích"
+        assert db_order2_final.delivery_address == expected_addr2_full
+
+    # 8. Idempotent replays of Order 1 and Order 2 return 200 with original data
+    replay1 = api.post(
+        "/api/v1/orders", json=order1_body, headers=headers(engine, key="key-order-1")
+    )
+    assert replay1.status_code == 200
+    assert replay1.json()["data"]["id"] == order1["id"]
+    assert replay1.json()["data"]["recipient_name"] == "Phạm Quốc Anh"
+    assert replay1.json()["data"]["delivery_address"] == expected_addr1_full
+
+    replay2 = api.post(
+        "/api/v1/orders", json=order2_body, headers=headers(engine, key="key-order-2")
+    )
+    assert replay2.status_code == 200
+    assert replay2.json()["data"]["id"] == order2["id"]
+    assert replay2.json()["data"]["recipient_name"] == "Ngô Thị Bích"
+    assert replay2.json()["data"]["delivery_address"] == expected_addr2_full
+
+    # 9. New checkout attempt with the deleted address returns 404
+    fill(engine)
+    res_new_with_deleted = api.post(
+        "/api/v1/orders", json=saved(addr1_v2), headers=headers(engine, key="key-order-3")
+    )
+    assert res_new_with_deleted.status_code == 404
+    assert res_new_with_deleted.json()["error"]["code"] == "ERR_ADDRESS_NOT_FOUND"
+

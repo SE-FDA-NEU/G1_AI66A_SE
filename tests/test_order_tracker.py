@@ -230,6 +230,119 @@ def test_buyer_cancels_pending_order(client: TestClient, tracker_fixture):
         assert so.status == "CANCELLED"
 
 
+def test_buyer_cancellation_validates_every_multi_seller_sub_order(
+    client: TestClient, tracker_fixture
+):
+    with Session(engine) as session:
+        order = Order(
+            buyer_id=tracker_fixture["buyer_id"],
+            total_amount=400_000,
+            status="CONFIRMED",
+            recipient_name="Tracker Buyer",
+            delivery_address="456 Tracking Way",
+            phone_number="0987654321",
+            created_at=datetime.now(UTC),
+        )
+        session.add(order)
+        session.flush()
+        seller_order_a = SellerOrder(
+            order_id=order.id,
+            seller_id=tracker_fixture["seller_a_id"],
+            status="CONFIRMED",
+        )
+        seller_order_b = SellerOrder(
+            order_id=order.id,
+            seller_id=tracker_fixture["seller_b_id"],
+            status="PENDING",
+        )
+        session.add_all([seller_order_a, seller_order_b])
+        session.flush()
+        session.add_all(
+            [
+                OrderItem(
+                    seller_order_id=seller_order_a.id,
+                    product_id=tracker_fixture["product_a_id"],
+                    quantity=2,
+                    unit_price=150_000,
+                ),
+                OrderItem(
+                    seller_order_id=seller_order_b.id,
+                    product_id=tracker_fixture["product_b_id"],
+                    quantity=1,
+                    unit_price=250_000,
+                ),
+            ]
+        )
+        for product_id, quantity in (
+            (tracker_fixture["product_a_id"], 2),
+            (tracker_fixture["product_b_id"], 1),
+        ):
+            product = session.get(Product, product_id)
+            assert product is not None
+            product.stock_quantity -= quantity
+            product.version += 1
+            session.add(product)
+        session.commit()
+        order_id = order.id
+        seller_order_a_id = seller_order_a.id
+        seller_order_b_id = seller_order_b.id
+
+    buyer_hdr = {"Authorization": "Bearer " + tracker_fixture["buyer_token"]}
+    seller_b_hdr = {"Authorization": "Bearer " + tracker_fixture["seller_b_token"]}
+
+    requested = client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=buyer_hdr,
+        json={"status": "CANCELLATION_REQUESTED"},
+    )
+    assert requested.status_code == 200
+    cancelled_by_seller = client.patch(
+        f"/api/v1/seller/orders/{seller_order_b_id}/status",
+        headers=seller_b_hdr,
+        json={"status": "CANCELLED"},
+    )
+    assert cancelled_by_seller.status_code == 200
+
+    with Session(engine) as session:
+        before = {
+            "parent": session.get(Order, order_id).status,
+            "seller_a": session.get(SellerOrder, seller_order_a_id).status,
+            "seller_b": session.get(SellerOrder, seller_order_b_id).status,
+            "stock_a": session.get(Product, tracker_fixture["product_a_id"]).stock_quantity,
+            "stock_b": session.get(Product, tracker_fixture["product_b_id"]).stock_quantity,
+            "history": [
+                (row.seller_order_id, row.from_status, row.to_status)
+                for row in session.exec(select(OrderHistory)).all()
+            ],
+        }
+
+    rejected = client.patch(
+        f"/api/v1/orders/{order_id}/status",
+        headers=buyer_hdr,
+        json={"status": "CANCELLED"},
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["code"] == "ERR_INVALID_TRANSITION"
+
+    with Session(engine) as session:
+        assert session.get(Order, order_id).status == before["parent"]
+        assert session.get(SellerOrder, seller_order_a_id).status == before["seller_a"]
+        assert session.get(SellerOrder, seller_order_b_id).status == before["seller_b"]
+        assert (
+            session.get(Product, tracker_fixture["product_a_id"]).stock_quantity
+            == before["stock_a"]
+        )
+        assert (
+            session.get(Product, tracker_fixture["product_b_id"]).stock_quantity
+            == before["stock_b"]
+        )
+        after_history = [
+            (row.seller_order_id, row.from_status, row.to_status)
+            for row in session.exec(select(OrderHistory)).all()
+        ]
+        assert after_history == before["history"]
+
+
 def test_disallowed_transition_from_pending_rejected(client: TestClient, tracker_fixture):
     _, so_id = _create_single_order(tracker_fixture, initial_status="PENDING")
     seller_hdr = {"Authorization": f"Bearer {tracker_fixture['seller_a_token']}"}
@@ -739,4 +852,3 @@ def test_order_api_supports_malicious_xss_payloads_safely(client: TestClient, tr
     assert len(items) >= 1
     item = next(it for it in items if it["product_id"] == prod_id)
     assert xss_payload in item["product_name"]
-

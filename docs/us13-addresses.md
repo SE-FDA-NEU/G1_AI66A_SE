@@ -1,4 +1,4 @@
-# US13 — Address book and delivery snapshots
+﻿# US13 â€” Address book and delivery snapshots
 
 Implementation for #105 and tasks #122, #123, #124, #125, rebased onto `main` at
 `1d809f0bcb0b3fecf38568dc249f76196e23fcf4` (includes the US15 reviews and
@@ -21,7 +21,7 @@ a guest receives 401 and a seller receives 403. User identity always comes from 
 The six required fields are `recipient_name`, `phone_number`, `province`, `district`,
 `ward`, `detailed_address`. Text is trimmed, must contain visible characters, and has
 limits 100 for names/administrative fields, 500 for detailed_address and 20 for phone.
-Phone permits only ASCII digits and `+ ()-`, and must contain 7–15 digits. Separators
+Phone permits only ASCII digits and `+ ()-`, and must contain 7â€“15 digits. Separators
 are preserved. `is_default` is a strict boolean; body IDs and versions are strict
 positive integers. Requests forbid extra fields, including server-owned fields.
 Responses also contain `id`, `version`, `created_at`, `updated_at`; they exclude user_id.
@@ -41,6 +41,197 @@ Unknown and foreign IDs both return 404 `ERR_ADDRESS_NOT_FOUND`. Stale versions 
 Validation returns 422 `ERR_VALIDATION` plus `error.fields`; shape/mixed/extra-field
 errors use `_form`. Raw input and union model names are excluded. Database failures
 return 500 `ERR_DATABASE_FAILURE` without SQL. Seller-product validation is unchanged.
+
+## UserAddress field specification
+
+The `user_addresses` table stores buyer-owned delivery addresses. `user_id` is
+derived from the authenticated buyer and is never accepted from request bodies or
+returned in the public response.
+
+| Field | Type | Required | Constraints and default |
+|---|---|---:|---|
+| `id` | integer | response only | Positive primary key; SQLite autoincrement prevents ID reuse |
+| `user_id` | integer | server-managed | Foreign key to `users.id`; every read/write is owner-scoped |
+| `recipient_name` | string | create/update | Trimmed visible text; 1â€“100 characters |
+| `phone_number` | string | create/update | 7â€“20 characters, 7â€“15 ASCII digits, separators limited to `+`, spaces, `(`, `)` and `-` |
+| `province` | string | create/update | Trimmed visible text; 1â€“100 characters |
+| `district` | string | create/update | Trimmed visible text; 1â€“100 characters |
+| `ward` | string | create/update | Trimmed visible text; 1â€“100 characters |
+| `detailed_address` | string | create/update | Trimmed visible text; 1â€“500 characters |
+| `is_default` | boolean | optional | Strict boolean; defaults to `false`; the first address is forced to `true` |
+| `version` | integer | response; update/default request | Positive integer starting at `1`; increments on successful mutation |
+| `created_at` | datetime | response only | Server-generated UTC timestamp |
+| `updated_at` | datetime | response only | Server-generated UTC timestamp, updated on mutation |
+
+`AddressCreate` and `AddressUpdate` reject unknown fields. `AddressUpdate` and
+`AddressDefault` require a strict positive `version`. The database partial unique
+index `ux_user_addresses_one_default` permits at most one default address per
+buyer.
+
+## Address API examples
+
+All examples use `/api/v1/addresses` and require
+`Authorization: Bearer <buyer-token>`.
+
+### Create
+
+```http
+POST /api/v1/addresses
+Authorization: Bearer <buyer-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "recipient_name": "Nguyen Minh",
+  "phone_number": "0912345678",
+  "province": "Ha Noi",
+  "district": "Dong Da",
+  "ward": "Lang Thuong",
+  "detailed_address": "12 Pho Chua Lang",
+  "is_default": true
+}
+```
+
+Response: `201 Created`.
+
+```json
+{
+  "data": {
+    "id": 12,
+    "recipient_name": "Nguyen Minh",
+    "phone_number": "0912345678",
+    "province": "Ha Noi",
+    "district": "Dong Da",
+    "ward": "Lang Thuong",
+    "detailed_address": "12 Pho Chua Lang",
+    "is_default": true,
+    "version": 1,
+    "created_at": "2026-10-28T15:00:00Z",
+    "updated_at": "2026-10-28T15:00:00Z"
+  }
+}
+```
+
+When this is the buyer's first address, `is_default` is `true` even if the
+request omits it or sends `false`.
+
+### List
+
+```http
+GET /api/v1/addresses
+Authorization: Bearer <buyer-token>
+```
+
+```json
+{
+  "data": [
+    {
+      "id": 12,
+      "recipient_name": "Nguyen Minh",
+      "phone_number": "0912345678",
+      "province": "Ha Noi",
+      "district": "Dong Da",
+      "ward": "Lang Thuong",
+      "detailed_address": "12 Pho Chua Lang",
+      "is_default": true,
+      "version": 1,
+      "created_at": "2026-10-28T15:00:00Z",
+      "updated_at": "2026-10-28T15:00:00Z"
+    }
+  ]
+}
+```
+
+The default address is returned first, followed by other addresses in ascending
+`id` order. Addresses belonging to other buyers are not included.
+
+### Full update with optimistic version checking
+
+```http
+PUT /api/v1/addresses/12
+Authorization: Bearer <buyer-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "recipient_name": "Nguyen Minh",
+  "phone_number": "0912345678",
+  "province": "Ha Noi",
+  "district": "Dong Da",
+  "ward": "Lang Thuong",
+  "detailed_address": "14 Pho Chua Lang",
+  "is_default": false,
+  "version": 1
+}
+```
+
+The response is `200 OK` and contains `version: 2`. A stale version returns
+`409 Conflict` without changing the address:
+
+```json
+{
+  "error": {
+    "code": "ERR_ADDRESS_CHANGED",
+    "message": "Address changed. Review it before continuing."
+  }
+}
+```
+
+### Set default
+
+```http
+PATCH /api/v1/addresses/12/default
+Authorization: Bearer <buyer-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "version": 2
+}
+```
+
+The response is `200 OK`. The operation atomically clears the previous default,
+increments the affected versions, and increments the selected address version.
+A stale version returns the same `409 ERR_ADDRESS_CHANGED` response.
+
+### Delete
+
+```http
+DELETE /api/v1/addresses/12
+Authorization: Bearer <buyer-token>
+```
+
+The response is `204 No Content` with an empty body. An unknown or foreign ID
+returns `404 Not Found`:
+
+```json
+{
+  "error": {
+    "code": "ERR_ADDRESS_NOT_FOUND",
+    "message": "Address not found. Reload your address book."
+  }
+}
+```
+
+Invalid phone values, missing fields, wrong strict types, and extra fields return
+`422 ERR_VALIDATION`. For example:
+
+```json
+{
+  "error": {
+    "code": "ERR_VALIDATION",
+    "message": "Please correct the highlighted fields.",
+    "fields": {
+      "phone_number": [
+        "Phone number must contain 7 to 15 digits; use only +, spaces, (), or - as separators."
+      ]
+    }
+  }
+}
+```
 
 ## Checkout and retry
 
@@ -88,13 +279,50 @@ review. Auth context is checked before requests and after responses; account cha
 hide/clear old address data and block submit/retry/CRUD. Cross-tab token changes also
 invalidate the view.
 
+## Task #123 follow-up — address UI only
+
+The address book and checkout selector already exist from PR #167. This follow-up
+changes only their frontend behavior, UI tests and this documentation. Address APIs,
+ownership/version rules, database migrations and order snapshots are unchanged.
+
+- Address cards and their Edit/Delete/Set default actions have distinct accessible
+  names identifying the recipient and street. Stable action IDs allow focus to
+  return after the cards are refreshed.
+- Delete confirmation shows the exact recipient, phone and full address as plain
+  text. Cancel receives initial focus, sends no DELETE, clears the confirmation
+  details and returns focus to the initiating Delete button. A failed deletion
+  retains the target and confirmation for review/retry. Opening an address form or
+  starting any address-list refresh invalidates that confirmation, including when
+  the refresh fails. Updated address details require a fresh Delete confirmation;
+  stale Confirm events send no DELETE and do not announce a successful deletion.
+- Cancelling an edit returns to its Edit button. Successful edits return to the
+  refreshed Edit button; adding, deleting or setting a default returns to the
+  checkout address selector. These actions preserve the user's current delivery
+  selection where that address still exists.
+- The existing live address status announces saves and successful changes. Its
+  `tabindex="-1"` also lets failed card actions focus their visible error feedback.
+  Field-level validation continues to preserve entered values and focus the first
+  invalid input. Pending mutations disable address controls and refuse duplicates.
+  Every failed mutation replaces the saving status with error guidance, whether
+  the editor is open or closed. Cancelling after a rejected save cannot leave an
+  indefinite progress message.
+
+Run `node tests/addresses_ui.mjs` and `node tests/checkout_ui.mjs` to verify these
+behaviors alongside saved/manual checkout selection, account isolation and pending
+checkout protection. Review regressions also cover Delete → Edit → Save → stale
+Confirm, refresh success/failure, fresh confirmation of updated details, and 422/
+network errors followed by cancellation. A native Chromium spot check using disposable API fixtures
+also confirmed edit/default/delete focus, targeted delete confirmation and no
+horizontal overflow at 360/768/1280px. This spot check does not replace the existing
+SQLite persistence tests or claim real-user validation.
+
 ## Acceptance evidence — 27 October 2026
 
 | Acceptance criterion | Automated evidence | Browser evidence |
 |---|---|---|
 | Persistent CRUD and account isolation | `test_crud_defaults_and_persistence`, `test_ownership_auth_and_stale_version_do_not_clear_defaults`, `test_write_predicates_are_owner_scoped` | A creates/edits/deletes; B sees only B; B creates with empty cart |
 | One default, available at checkout | `test_constraint_no_id_reuse_and_init_upgrade`, `test_concurrent_default_operations_keep_one_default`, `test_concurrent_first_addresses_keep_one_default`, `test_default_failure_rolls_back_clear` | Switch default, reload, automatic preselection, buy using non-default |
-| Immutable snapshots and replay | `test_snapshot_edit_delete_replay_and_new_order`, `test_saved_checkout_concurrent_same_key`, `test_legacy_hash_stays_compatible`, `test_saved_checkout_selected_only_and_stock_rollback` | Buy → edit/delete source → unchanged receipt; abort response after commit → delete source → reload/retry returns same order |
+| Immutable snapshots and replay | `test_snapshot_edit_delete_replay_and_new_order`, `test_saved_checkout_concurrent_same_key`, `test_legacy_hash_stays_compatible`, `test_saved_checkout_selected_only_and_stock_rollback` | Buy â†’ edit/delete source â†’ unchanged receipt; abort response after commit â†’ delete source â†’ reload/retry returns same order |
 | Actionable field errors | `test_address_validation`, `test_malformed_json_and_missing_fields_have_safe_guidance`, `test_checkout_address_validation`; `addresses_ui.mjs` | Invalid phone displays allowed digit/separator guidance, focuses input; no horizontal overflow at 360px |
 
 Screenshots from the real app on a disposable database:
@@ -108,6 +336,30 @@ Final verification on 27 October 2026, after rebasing onto `main` at `1d809f0`:
 **490 pytest tests passed** (including 49 US13 tests), Ruff passed, all six Node
 scripts passed, and the Chromium acceptance run passed and regenerated the screenshots. The repeatable browser run also verifies initialization twice and retry
 after a committed response is lost and its source address is deleted.
+
+The focused address verification was run with the following exact PowerShell
+command:
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q tests/test_addresses.py
+```
+
+The observed output was:
+
+```text
+============================= test session starts =============================
+platform win32 -- Python 3.12.7, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\G1_AI66A_SE
+configfile: pyproject.toml
+collected 32 items
+
+tests\test_addresses.py ................................                 [100%]
+
+============================== 32 passed, 1 warning in 9.62s ==================
+```
+
+The warning is a Starlette deprecation warning about using `httpx` with
+`starlette.testclient`; it did not fail any test.
 
 Run the automated checks with the repository virtual environment:
 
@@ -141,3 +393,20 @@ sandbox; the test application uses disposable databases.
 
 External PR review, merge and issue closure remain repository workflow steps. The local
 implementation and verification do not claim that another person has reviewed the work.
+
+## Task #122 Implementation & Verification Summary
+
+- **Target Issue:** [#122 [Task] Add address data model and API](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/122) (Parent Story: #105)
+- **Data Model:** `UserAddress` mapped to table `user_addresses`:
+  - Enforced version check (`ck_address_version: version >= 1`).
+  - Partial unique index `ux_user_addresses_one_default` preventing multiple active defaults per buyer account.
+  - SQLite autoincrement enabled ensuring deleted address primary keys are never recycled.
+- **REST APIs (`/api/v1/addresses`):**
+  - Authenticated buyer protection (`BuyerUser`). Returns `401 Unauthorized` for anonymous guests and `403 Forbidden` for sellers.
+  - Endpoints: `GET /` (list ordered by default-first then ID), `POST /` (create with automatic first-address default assignment), `PUT /{id}` (full replacement with optimistic version check), `PATCH /{id}/default` (switch default with automatic clearing and version increments), `DELETE /{id}` (owner-scoped atomic deletion).
+- **Error Codes & Security:**
+  - `ERR_ADDRESS_NOT_FOUND` (404) for foreign or non-existent IDs.
+  - `ERR_ADDRESS_CHANGED` (409) for stale version updates.
+  - `ERR_CONCURRENCY_CONFLICT` (409) with 5-attempt retry backoff on database lock/collision.
+- **Automated Verification:**
+  - `tests/test_addresses.py`: 32 test cases passed covering CRUD lifecycle, ownership isolation, phone number / visible text validators, concurrent default switching, and database rollback safety.
