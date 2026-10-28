@@ -326,10 +326,15 @@ function isWholePrice(value) {
   return value === "" || /^\d+$/.test(value);
 }
 
+/** A number input holding text it cannot parse, such as "-" or "1e", reports its value as "". */
+function hasUnreadablePrice() {
+  return [elements.filterMinPrice, elements.filterMaxPrice].some((input) => input.validity?.badInput);
+}
+
 function priceBoundsError() {
   const min = elements.filterMinPrice.value.trim();
   const max = elements.filterMaxPrice.value.trim();
-  if (!isWholePrice(min) || !isWholePrice(max)) {
+  if (hasUnreadablePrice() || !isWholePrice(min) || !isWholePrice(max)) {
     return "Enter prices as whole numbers of 0 ₫ or more.";
   }
   if (min !== "" && max !== "" && Number(min) > Number(max)) {
@@ -394,6 +399,22 @@ function resetAllFilters() {
   loadProducts();
 }
 
+/** Rebuild a filter's options, keeping its current choice when that option still exists. */
+function replaceOptions(select, defaultLabel, items, labelOf) {
+  const selected = select.value;
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = defaultLabel;
+  const options = items.map((item) => {
+    const option = document.createElement("option");
+    option.value = String(item.id);
+    option.textContent = labelOf(item);
+    return option;
+  });
+  select.replaceChildren(defaultOption, ...options);
+  select.value = options.some((option) => option.value === selected) ? selected : "";
+}
+
 async function loadFilterOptions() {
   if (
     !elements.filterCategory ||
@@ -412,34 +433,27 @@ async function loadFilterOptions() {
     if (categoriesRes && categoriesRes.ok && elements.filterCategory) {
       const categories = await categoriesRes.json();
       if (Array.isArray(categories)) {
-        const defaultCatOpt = document.createElement("option");
-        defaultCatOpt.value = "";
-        defaultCatOpt.textContent = "All categories";
-        elements.filterCategory.replaceChildren(defaultCatOpt);
-        for (const cat of categories) {
-          const opt = document.createElement("option");
-          opt.value = String(cat.id);
-          const prefix = cat.parent_id ? "— " : "";
-          opt.textContent = `${prefix}${cat.name}`;
-          elements.filterCategory.append(opt);
-        }
+        replaceOptions(elements.filterCategory, "All categories", categories,
+          (cat) => `${cat.parent_id ? "— " : ""}${cat.name}`);
       }
     }
 
     if (sellersRes && sellersRes.ok && elements.filterSeller) {
       const sellers = await sellersRes.json();
       if (Array.isArray(sellers)) {
-        const defaultSellerOpt = document.createElement("option");
-        defaultSellerOpt.value = "";
-        defaultSellerOpt.textContent = "All sellers";
-        elements.filterSeller.replaceChildren(defaultSellerOpt);
-        for (const seller of sellers) {
-          const opt = document.createElement("option");
-          opt.value = String(seller.id);
-          opt.textContent = seller.name;
-          elements.filterSeller.append(opt);
-        }
+        replaceOptions(elements.filterSeller, "All sellers", sellers, (seller) => seller.name);
       }
+    }
+
+    // A restored choice whose option no longer exists now shows as "All"; load what is shown.
+    if (
+      currentCategory !== elements.filterCategory.value ||
+      currentSeller !== elements.filterSeller.value
+    ) {
+      currentCategory = elements.filterCategory.value;
+      currentSeller = elements.filterSeller.value;
+      currentPage = 1;
+      loadProducts();
     }
   } catch (err) {
     // Graceful degradation: filter controls remain functional even if remote options fail
