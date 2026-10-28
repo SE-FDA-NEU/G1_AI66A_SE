@@ -30,6 +30,7 @@ class ProductMeta(BaseModel):
 
     current_page: int = Field(ge=1, description="Current page number")
     limit: int = Field(ge=1, le=100, description="Items per page")
+    page_size: int = Field(ge=1, le=100, description="Items per page (canonical name)")
     total: int = Field(ge=0, description="Total number of items")
     total_items: int = Field(ge=0, description="Total number of items (US11 alias)")
     total_pages: int = Field(ge=0, description="Total number of pages")
@@ -224,8 +225,26 @@ def list_products(
         default=None,
         description="Sort order: newest, bestselling, price_asc, price_desc, rating_desc",
     ),
+    q: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Keyword matching name or description; takes precedence over search",
+    ),
+    sort_by: str | None = Query(
+        default=None,
+        description="newest, bestselling, price_asc, price_desc, rating_desc; overrides sort",
+    ),
+    page_size: int | None = Query(
+        default=None,
+        ge=1,
+        le=100,
+        description="Items per page (default 20); takes precedence over limit",
+    ),
 ) -> ProductListResponse:
-    """Return products matching search, filter, sort and pagination parameters."""
+    """Return matching products, retaining search/sort/limit for existing clients."""
+    search = q if q is not None else search
+    sort = sort_by if sort_by is not None else sort
+    limit = page_size if page_size is not None else limit
     # AC4: Field-level validation on price bounds
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(
@@ -390,6 +409,7 @@ def list_products(
         meta=ProductMeta(
             current_page=effective_page,
             limit=limit,
+            page_size=limit,
             total=total,
             total_items=total,
             total_pages=total_pages,
