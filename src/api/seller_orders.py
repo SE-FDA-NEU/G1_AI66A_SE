@@ -20,32 +20,15 @@ from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
+from src.services.order_states import ORDER_STATUSES, SELLER_TRANSITIONS, is_allowed_transition
 
 router = APIRouter(prefix="/seller/orders", tags=["Seller orders"])
 
-STATUSES = {
-    "PENDING",
-    "CONFIRMED",
-    "PROCESSING",
-    "CANCELLATION_REQUESTED",
-    "SHIPPED",
-    "DELIVERED",
-    "COMPLETED",
-    "CANCELLED",
-    "RETURN_REQUESTED",
-    "RETURNED_REFUNDED",
-}
-TRANSITIONS: dict[str, set[str]] = {
-    "PENDING": {"CONFIRMED", "PROCESSING", "CANCELLED"},
-    "CONFIRMED": {"PROCESSING", "SHIPPED", "CANCELLATION_REQUESTED", "CANCELLED"},
-    "PROCESSING": {"CONFIRMED", "SHIPPED", "CANCELLATION_REQUESTED", "CANCELLED"},
-    "CANCELLATION_REQUESTED": {"CANCELLED", "CONFIRMED", "PROCESSING"},
-    "SHIPPED": {"DELIVERED", "COMPLETED"},
-    "DELIVERED": {"COMPLETED"},
-    "COMPLETED": set(),
-    "CANCELLED": set(),
-    "RETURN_REQUESTED": set(),
-    "RETURNED_REFUNDED": set(),
+STATUSES = ORDER_STATUSES | {"RETURN_REQUESTED", "RETURNED_REFUNDED"}
+TRANSITIONS = {
+    **SELLER_TRANSITIONS,
+    "RETURN_REQUESTED": frozenset(),
+    "RETURNED_REFUNDED": frozenset(),
 }
 
 
@@ -248,7 +231,7 @@ def update_seller_order_status(
         )
 
     new_status = request.status
-    if new_status not in TRANSITIONS.get(seller_order.status, set()):
+    if not is_allowed_transition("seller", seller_order.status, new_status):
         raise _bad_request(
             "ERR_INVALID_TRANSITION",
             f"Transition from {seller_order.status} to {new_status} is not allowed.",
