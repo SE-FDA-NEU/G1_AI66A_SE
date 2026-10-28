@@ -13,5 +13,7 @@ class OrderHistory(SQLModel, table=True):
     from_status: str = Field(max_length=30)
     to_status: str = Field(max_length=30)
     changed_by_user_id: int = Field(foreign_key="users.id", index=True)
+    # Legacy events have no reliable historical role; do not infer it from today's user.
+    actor_role: str | None = Field(default=None, max_length=20)
     note: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
