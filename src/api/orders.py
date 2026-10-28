@@ -17,21 +17,10 @@ from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.schemas.orders import CheckoutInput, OrderResponse
 from src.services.inventory import restore_order_item_stock
+from src.services.order_states import is_allowed_transition
 from src.services.orders import CheckoutError, checkout, receipt
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-
-TRANSITIONS: dict[str, set[str]] = {
-    "PENDING": {"CONFIRMED", "PROCESSING", "CANCELLED"},
-    "CONFIRMED": {"PROCESSING", "SHIPPED", "CANCELLATION_REQUESTED", "CANCELLED"},
-    "PROCESSING": {"CONFIRMED", "SHIPPED", "CANCELLATION_REQUESTED", "CANCELLED"},
-    "CANCELLATION_REQUESTED": {"CANCELLED", "CONFIRMED", "PROCESSING"},
-    "SHIPPED": {"DELIVERED", "COMPLETED"},
-    "DELIVERED": {"COMPLETED"},
-    "COMPLETED": set(),
-    "CANCELLED": set(),
-}
-
 
 class OrderStatusUpdateRequest(BaseModel):
     status: Literal[
@@ -126,7 +115,7 @@ def update_buyer_order_status(
             )
 
         for sub_order in seller_sub_orders:
-            if new_status not in TRANSITIONS.get(sub_order.status, set()):
+            if not is_allowed_transition("seller", sub_order.status, new_status):
                 raise HTTPException(
                     400,
                     detail=error_detail(
@@ -241,7 +230,7 @@ def update_buyer_order_status(
         raise HTTPException(404, detail=error_detail("ERR_ORDER_NOT_FOUND", "Order not found."))
 
     if new_status == "CANCELLED":
-        if order.status != "PENDING":
+        if not is_allowed_transition("buyer", order.status, new_status):
             raise HTTPException(
                 400,
                 detail=error_detail(
@@ -288,7 +277,7 @@ def update_buyer_order_status(
         return OrderResponse(data=receipt(session, user.id, order.id))
 
     elif new_status == "CANCELLATION_REQUESTED":
-        if order.status not in ("CONFIRMED", "PROCESSING"):
+        if not is_allowed_transition("buyer", order.status, new_status):
             raise HTTPException(
                 400,
                 detail=error_detail(
@@ -316,7 +305,7 @@ def update_buyer_order_status(
         return OrderResponse(data=receipt(session, user.id, order.id))
 
     elif new_status == "COMPLETED":
-        if order.status not in ("DELIVERED", "SHIPPED"):
+        if not is_allowed_transition("buyer", order.status, new_status):
             raise HTTPException(
                 400,
                 detail=error_detail(
@@ -381,4 +370,3 @@ def confirm_buyer_order_delivery(
         user=user,
         session=session,
     )
-
