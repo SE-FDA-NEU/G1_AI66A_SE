@@ -30,6 +30,8 @@ const elements = {
   reviews: document.getElementById("reviews-section"),
   reviewsSummary: document.getElementById("reviews-summary"),
   reviewsError: document.getElementById("reviews-error"),
+  reviewsRetry: document.getElementById("reviews-retry"),
+  reviewsFeedback: document.getElementById("reviews-feedback"),
   reviewsList: document.getElementById("reviews-list"),
   reviewFormSection: document.getElementById("review-form-section"),
   reviewLoginPrompt: document.getElementById("review-login-prompt"),
@@ -41,6 +43,11 @@ const elements = {
   reviewMediaUrl: document.getElementById("review-media-url"),
   reviewSubmit: document.getElementById("review-submit"),
   reviewFormStatus: document.getElementById("review-form-status"),
+  reviewEligibilityRetry: document.getElementById("review-eligibility-retry"),
+  reviewOrderError: document.getElementById("review-order-item-error"),
+  reviewRatingError: document.getElementById("review-rating-error"),
+  reviewCommentError: document.getElementById("review-comment-error"),
+  reviewMediaError: document.getElementById("review-media-error"),
   variantManager: document.getElementById("variant-manager"),
   variantManagerStatus: document.getElementById("variant-manager-status"),
   variantCreateForm: document.getElementById("variant-create-form"),
@@ -51,6 +58,12 @@ let currentProduct = null;
 let selectedVariantId = null;
 let currentIdentity = null;
 let authRevision = 0;
+let reviewsRevision = 0;
+let eligibilityRevision = 0;
+let reviewFormAuth = null;
+let reviewSubmitting = false;
+const MAX_REVIEW_MEDIA = 5;
+const REVIEW_REQUEST_TIMEOUT = 15000;
 
 function isCurrentAuth(token, revision) {
   return authRevision === revision && localStorage.getItem("access_token") === token;
@@ -283,6 +296,9 @@ elements.logout.addEventListener("click", () => {
   localStorage.removeItem("access_token");
   authRevision += 1;
   currentIdentity = null;
+  reviewFormAuth = null;
+  elements.reviewComment.value = "";
+  elements.reviewMediaUrl.value = "";
   elements.reviewForm.hidden = true;
   elements.reviewLoginPrompt.hidden = false;
   elements.reviewFormStatus.textContent = "";
@@ -293,21 +309,59 @@ elements.logout.addEventListener("click", () => {
 });
 elements.reviewForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (reviewSubmitting) return;
   const token = localStorage.getItem("access_token");
+  const revision = authRevision;
   if (!token) {
     elements.reviewFormStatus.textContent = "Log in with your buyer account to submit a review.";
     return;
   }
+  if (!reviewFormAuth || reviewFormAuth.token !== token
+      || !isCurrentAuth(token, reviewFormAuth.revision)) {
+    reviewFormAuth = null;
+    elements.reviewComment.value = "";
+    elements.reviewMediaUrl.value = "";
+    elements.reviewFormStatus.textContent = "Account changed. Check your completed purchases again.";
+    await loadReviewForm({ preserveStatus: true });
+    return;
+  }
+  const mediaUrls = elements.reviewMediaUrl.value.split(/\r?\n/).map(url => url.trim()).filter(Boolean);
+  const orderItem = Number(elements.reviewOrderItem.value);
+  const rating = Number(elements.reviewRating.value);
+  const validations = [
+    [elements.reviewOrderItem, elements.reviewOrderError,
+      reviewFormAuth.items.has(orderItem) ? "" : "Choose an eligible completed purchase."],
+    [elements.reviewRating, elements.reviewRatingError,
+      Number.isInteger(rating) && rating >= 1 && rating <= 5 ? "" : "Choose a rating from 1 to 5."],
+    [elements.reviewComment, elements.reviewCommentError,
+      elements.reviewComment.value.trim().length <= 2000 ? "" : "Keep your comment within 2000 characters."],
+    [elements.reviewMediaUrl, elements.reviewMediaError,
+      mediaUrls.length > MAX_REVIEW_MEDIA ? "Attach at most 5 image or video URLs."
+        : mediaUrls.some(url => !safeReviewMediaUrl(url))
+          ? "Use an absolute HTTP(S) media URL of at most 2048 characters on each line." : ""],
+  ];
+  for (const [field, error, message] of validations) {
+    field.setAttribute("aria-invalid", message ? "true" : "false");
+    error.textContent = message;
+    error.hidden = !message;
+  }
+  const invalid = validations.find(([, , message]) => message);
+  if (invalid) {
+    elements.reviewFormStatus.textContent = invalid[2];
+    invalid[0].focus?.();
+    return;
+  }
   const requestBody = {
-    order_item_id: Number(elements.reviewOrderItem.value),
-    rating: Number(elements.reviewRating.value),
+    order_item_id: orderItem,
+    rating,
     comment: elements.reviewComment.value.trim() || null,
-    media_url: elements.reviewMediaUrl.value.trim() || null,
+    media_urls: mediaUrls,
   };
-  elements.reviewSubmit.disabled = true;
+  reviewSubmitting = true;
+  setReviewFormPending(true);
   elements.reviewFormStatus.textContent = "Submitting review…";
   try {
-    const response = await fetch(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
+    const response = await reviewRequest(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -317,6 +371,13 @@ elements.reviewForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(requestBody),
     });
     const payload = await response.json().catch(() => null);
+    if (!isCurrentAuth(token, revision)) return;
+    if (!response.ok && ["ERR_REVIEW_ALREADY_EXISTS", "ERR_REVIEW_NOT_COMPLETED",
+      "ERR_REVIEW_NOT_ELIGIBLE"].includes(payload?.error?.code)) {
+      elements.reviewFormStatus.textContent = payload.error.message;
+      await loadReviewForm({ preserveStatus: true });
+      return;
+    }
     if (!response.ok) throw new Error(payload?.error?.message || "Unable to submit review.");
     elements.reviewComment.value = "";
     elements.reviewMediaUrl.value = "";
@@ -324,25 +385,35 @@ elements.reviewForm.addEventListener("submit", async (event) => {
     await loadReviews();
     await loadReviewForm({ preserveStatus: true });
   } catch (error) {
+    if (!isCurrentAuth(token, revision)) return;
     elements.reviewFormStatus.textContent = error instanceof Error ? error.message : "Unable to submit review.";
   } finally {
-    elements.reviewSubmit.disabled = false;
+    reviewSubmitting = false;
+    setReviewFormPending(false);
   }
 });
 elements.retry.addEventListener("click", loadProduct);
+elements.reviewsRetry.addEventListener("click", () => loadReviews());
+elements.reviewEligibilityRetry.addEventListener("click", () => loadReviewForm());
 configureNavigation();
 loadProduct();
 
 async function loadReviews() {
+  const requestId = ++reviewsRevision;
+  elements.reviews.setAttribute("aria-busy", "true");
+  elements.reviewsSummary.textContent = "Loading reviews…";
   elements.reviewsError.hidden = true;
+  elements.reviewsRetry.hidden = true;
+  elements.reviewsList.hidden = true;
   try {
     const token = localStorage.getItem("access_token");
     const revision = authRevision;
-    if (!token) currentIdentity = null;
-    const response = await fetch(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
+    currentIdentity = null;
+    const response = await reviewRequest(`/api/v1/products/${encodeURIComponent(code)}/reviews`, {
       headers: { Accept: "application/json" },
     });
     const payload = await response.json().catch(() => null);
+    if (requestId !== reviewsRevision) return;
     if (!response.ok) throw new Error(payload?.error?.message || "Unable to load reviews.");
     const reviews = Array.isArray(payload.data) ? payload.data : [];
     elements.reviewsSummary.textContent = payload.review_count
@@ -351,7 +422,7 @@ async function loadReviews() {
     elements.rating.textContent = elements.reviewsSummary.textContent;
     if (token) {
       try {
-        const identityResponse = await fetch("/api/v1/auth/me", {
+        const identityResponse = await reviewRequest("/api/v1/auth/me", {
           headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
         });
         if (identityResponse.ok) {
@@ -375,14 +446,48 @@ async function loadReviews() {
         }
       }
     }
+    if (requestId !== reviewsRevision) return;
     if (!isCurrentAuth(token, revision)) currentIdentity = null;
     elements.reviewsList.replaceChildren(...reviews.map(createReviewCard));
+    elements.reviewsList.hidden = false;
   } catch (error) {
+    if (requestId !== reviewsRevision) return;
+    elements.reviewsSummary.textContent = "Reviews could not be loaded.";
     elements.reviewsError.textContent = error instanceof Error ? error.message : "Unable to load reviews.";
     elements.reviewsError.hidden = false;
+    elements.reviewsRetry.hidden = false;
   } finally {
-    await loadSellerVariantControls();
+    if (requestId === reviewsRevision) {
+      elements.reviews.setAttribute("aria-busy", "false");
+      await loadSellerVariantControls();
+    }
   }
+}
+
+async function reviewRequest(url, options = {}) {
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), REVIEW_REQUEST_TIMEOUT) : null;
+  try {
+    return await fetch(url, { ...options, ...(controller ? { signal: controller.signal } : {}) });
+  } catch (error) {
+    throw new Error(error?.name === "AbortError"
+      ? "The request timed out. Please try again." : "We could not reach the server. Please try again.");
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
+function setReviewFormPending(pending) {
+  [elements.reviewSubmit, elements.reviewOrderItem, elements.reviewRating,
+    elements.reviewComment, elements.reviewMediaUrl].forEach(field => { field.disabled = pending; });
+}
+
+function safeReviewMediaUrl(value) {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url : null;
+  } catch { return null; }
 }
 
 async function loadSellerVariantControls() {
@@ -560,24 +665,16 @@ function createReviewCard(review) {
   const card = document.createElement("article");
   card.className = "review-card";
   const heading = document.createElement("h3");
-  heading.textContent = `${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)} · Verified purchase`;
-  const date = document.createElement("time");
-  date.dateTime = review.created_at;
-  date.textContent = new Date(review.created_at).toLocaleDateString();
-  card.append(heading, date);
+  const rating = Math.max(1, Math.min(5, Math.trunc(Number(review.rating) || 1)));
+  heading.textContent = `${rating}/5 ${"★".repeat(rating)}${"☆".repeat(5 - rating)} · Verified purchase`;
+  card.append(heading);
+  appendReviewTime(card, review.created_at, "Reviewed");
   if (review.comment) {
     const comment = document.createElement("p");
     comment.textContent = review.comment;
     card.append(comment);
   }
-  if (review.media_url) {
-    const media = document.createElement("a");
-    media.href = review.media_url;
-    media.target = "_blank";
-    media.rel = "noopener noreferrer";
-    media.textContent = "View review media";
-    card.append(media);
-  }
+  appendReviewMedia(card, review);
   if (review.seller_reply) {
     const reply = document.createElement("div");
     reply.className = "review-card__reply";
@@ -585,10 +682,8 @@ function createReviewCard(review) {
     replyHeading.textContent = "Seller reply";
     const replyText = document.createElement("p");
     replyText.textContent = review.seller_reply;
-    const replyDate = document.createElement("time");
-    replyDate.dateTime = review.seller_replied_at;
-    replyDate.textContent = new Date(review.seller_replied_at).toLocaleDateString();
-    reply.append(replyHeading, replyText, replyDate);
+    reply.append(replyHeading, replyText);
+    appendReviewTime(reply, review.seller_replied_at, "Seller replied");
     card.append(reply);
   }
   if (
@@ -600,20 +695,79 @@ function createReviewCard(review) {
   return card;
 }
 
+function appendReviewTime(container, value, label) {
+  if (!value) return;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return;
+  const time = document.createElement("time");
+  time.dateTime = date.toISOString();
+  time.textContent = `${label} ${date.toLocaleString()}`;
+  container.append(time);
+}
+
+function appendReviewMedia(card, review) {
+  const refs = [...new Set([...(Array.isArray(review.media_urls) ? review.media_urls : []),
+    ...(review.media_url ? [review.media_url] : [])])].slice(0, MAX_REVIEW_MEDIA);
+  const gallery = document.createElement("div");
+  gallery.className = "review-media";
+  for (const [index, value] of refs.entries()) {
+    const url = safeReviewMediaUrl(value);
+    if (!url) continue;
+    const figure = document.createElement("figure");
+    const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(url.pathname);
+    const isVideo = /\.(mp4|webm|ogv|ogg)$/i.test(url.pathname);
+    if (isImage || isVideo) {
+      const preview = document.createElement(isImage ? "img" : "video");
+      preview.className = isImage ? "review-media__image" : "review-media__video";
+      if (isImage) {
+        preview.alt = `Review photo ${index + 1}`;
+        preview.loading = "lazy";
+      } else {
+        preview.controls = true;
+        preview.preload = "metadata";
+        preview.setAttribute("aria-label", `Review video ${index + 1}`);
+      }
+      const unavailable = document.createElement("p");
+      unavailable.textContent = "Preview unavailable. Open the media link below.";
+      unavailable.hidden = true;
+      preview.addEventListener("error", () => {
+        preview.hidden = true;
+        unavailable.hidden = false;
+      }, { once: true });
+      preview.src = url.href;
+      figure.append(preview, unavailable);
+    }
+    const link = document.createElement("a");
+    link.className = "review-media__link";
+    link.href = url.href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = `Open ${isImage ? "image" : isVideo ? "video" : "media"} ${index + 1} (new tab)`;
+    figure.append(link);
+    gallery.append(figure);
+  }
+  if (gallery.children.length) card.append(gallery);
+}
+
 async function loadReviewForm({ preserveStatus = false } = {}) {
+  const requestId = ++eligibilityRevision;
   const token = localStorage.getItem("access_token");
   const revision = authRevision;
+  const isCurrentForm = () => requestId === eligibilityRevision && isCurrentAuth(token, revision);
+  reviewFormAuth = null;
+  elements.reviewEligibilityRetry.hidden = true;
   elements.reviewFormSection.hidden = false;
   elements.reviewForm.hidden = true;
   elements.reviewLoginPrompt.hidden = Boolean(token);
   if (!preserveStatus) elements.reviewFormStatus.textContent = "";
   elements.reviewLoginLink.href = `/login?return_to=${encodeURIComponent(window.location.pathname)}`;
   if (!token) return;
+  if (!preserveStatus) elements.reviewFormStatus.textContent = "Checking completed purchases…";
   try {
-    const identityResponse = await fetch("/api/v1/auth/me", {
+    const identityResponse = await reviewRequest("/api/v1/auth/me", {
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     });
-    if (!isCurrentAuth(token, revision)) return;
+    if (!isCurrentForm()) return;
     if (identityResponse.status === 401) {
       localStorage.removeItem("access_token");
       authRevision += 1;
@@ -625,19 +779,20 @@ async function loadReviewForm({ preserveStatus = false } = {}) {
       throw new Error("Unable to verify the current account.");
     }
     const identity = await identityResponse.json();
-    if (!isCurrentAuth(token, revision)) return;
+    if (!isCurrentForm()) return;
     if (identity.role !== "buyer") {
       elements.reviewFormStatus.textContent = "Only buyer accounts can submit product reviews.";
       return;
     }
-    const response = await fetch(
+    const response = await reviewRequest(
       `/api/v1/products/${encodeURIComponent(code)}/reviewable-items`,
       { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } },
     );
     const payload = await response.json().catch(() => null);
-    if (!isCurrentAuth(token, revision)) return;
+    if (!isCurrentForm()) return;
     if (!response.ok) throw new Error(payload?.error?.message || "Unable to check completed purchases.");
     const items = Array.isArray(payload.data) ? payload.data : [];
+    reviewFormAuth = { token, revision, items: new Set(items.map(item => Number(item.order_item_id))) };
     elements.reviewOrderItem.replaceChildren(...items.map((item) => {
       const option = document.createElement("option");
       option.value = String(item.order_item_id);
@@ -653,17 +808,25 @@ async function loadReviewForm({ preserveStatus = false } = {}) {
       elements.reviewFormStatus.textContent = "";
     }
   } catch (error) {
-    if (!isCurrentAuth(token, revision)) return;
-    elements.reviewFormStatus.textContent = error instanceof Error ? error.message : "Unable to check completed purchases.";
+    if (!isCurrentForm()) return;
+    const message = error instanceof Error ? error.message : "Unable to check completed purchases.";
+    elements.reviewFormStatus.textContent = preserveStatus && elements.reviewFormStatus.textContent
+      ? `${elements.reviewFormStatus.textContent} ${message}` : message;
+    elements.reviewEligibilityRetry.hidden = false;
   }
 }
 
 function appendSellerReplyForm(card, review) {
+  const ownerToken = localStorage.getItem("access_token");
+  const ownerRevision = authRevision;
+  let saving = false;
   const form = document.createElement("form");
   form.className = "seller-reply-form";
   const label = document.createElement("label");
   label.textContent = review.seller_reply ? "Update your reply" : "Reply to this review";
   const input = document.createElement("textarea");
+  input.id = `seller-reply-${review.id}`;
+  label.htmlFor = input.id;
   input.required = true;
   input.maxLength = 2000;
   input.rows = 3;
@@ -673,35 +836,72 @@ function appendSellerReplyForm(card, review) {
   button.className = "button";
   button.textContent = review.seller_reply ? "Update reply" : "Reply";
   const status = document.createElement("p");
+  status.id = `seller-reply-status-${review.id}`;
   status.setAttribute("role", "status");
+  input.setAttribute("aria-describedby", status.id);
   form.append(label, input, button, status);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (saving) return;
     const token = localStorage.getItem("access_token");
     if (!token) {
       status.textContent = "Log in with your seller account to reply to reviews.";
       return;
     }
+    if (token !== ownerToken || !isCurrentAuth(ownerToken, ownerRevision)) {
+      status.textContent = "Account changed. Reload reviews before replying.";
+      return;
+    }
+    const reply = input.value.trim();
+    if (!reply || reply.length > 2000) {
+      status.textContent = "Enter a reply from 1 to 2000 characters.";
+      input.setAttribute("aria-invalid", "true");
+      input.focus?.();
+      return;
+    }
+    input.setAttribute("aria-invalid", "false");
+    saving = true;
     button.disabled = true;
+    input.disabled = true;
+    status.textContent = "Saving reply…";
     try {
-      const replyResponse = await fetch(`/api/v1/seller/reviews/${review.id}/reply`, {
+      const replyResponse = await reviewRequest(`/api/v1/seller/reviews/${review.id}/reply`, {
         method: "PATCH",
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ reply: input.value.trim() }),
+        body: JSON.stringify({ reply }),
       });
       const replyPayload = await replyResponse.json().catch(() => null);
+      if (!isCurrentAuth(ownerToken, ownerRevision)) return;
       if (!replyResponse.ok) throw new Error(replyPayload?.error?.message || "Unable to save reply.");
       status.textContent = "Reply saved.";
+      elements.reviewsFeedback.textContent = "Seller reply saved.";
       await loadReviews();
     } catch (cause) {
+      if (!isCurrentAuth(ownerToken, ownerRevision)) return;
       status.textContent = cause instanceof Error ? cause.message : "Unable to save reply.";
     } finally {
+      saving = false;
       button.disabled = false;
+      input.disabled = false;
     }
   });
   card.append(form);
 }
+
+window.addEventListener?.("storage", (event) => {
+  if (event.key !== "access_token" && event.key !== null) return;
+  authRevision += 1;
+  reviewFormAuth = null;
+  currentIdentity = null;
+  elements.reviewForm.hidden = true;
+  elements.reviewComment.value = "";
+  elements.reviewMediaUrl.value = "";
+  elements.reviewsList.querySelectorAll(".seller-reply-form").forEach(form => form.remove());
+  configureNavigation();
+  loadReviews();
+  loadReviewForm();
+});
