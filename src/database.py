@@ -286,11 +286,53 @@ def migrate_db(connection: Connection | None = None) -> None:
                     connection.execute(
                         text(f"ALTER TABLE seller_orders ADD COLUMN {name} VARCHAR(100)")
                     )
-            for name in ("shipped_at", "delivered_at"):
+            for name in ("shipped_at", "delivered_at", "completed_at"):
                 if name not in columns:
                     connection.execute(
                         text(f"ALTER TABLE seller_orders ADD COLUMN {name} DATETIME")
                     )
+
+            subtotal_missing = "subtotal" not in columns
+            for name in (
+                "subtotal",
+                "shop_discount",
+                "platform_discount",
+                "shipping_fee",
+                "shipping_discount",
+                "total_amount",
+            ):
+                if name not in columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE seller_orders "
+                            f"ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                        )
+                    )
+            if "pricing_policy_version" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE seller_orders "
+                        "ADD COLUMN pricing_policy_version VARCHAR(20) NOT NULL DEFAULT 'LEGACY'"
+                    )
+                )
+
+            if subtotal_missing and "order_items" in tables:
+                connection.execute(
+                    text(
+                        "UPDATE seller_orders SET "
+                        "subtotal = COALESCE(("
+                        "    SELECT SUM(quantity * unit_price) "
+                        "    FROM order_items "
+                        "    WHERE order_items.seller_order_id = seller_orders.id"
+                        "), 0), "
+                        "total_amount = COALESCE(("
+                        "    SELECT SUM(quantity * unit_price) "
+                        "    FROM order_items "
+                        "    WHERE order_items.seller_order_id = seller_orders.id"
+                        "), 0) "
+                        "WHERE subtotal = 0"
+                    )
+                )
         if "notifications" in tables:
             columns = {c["name"] for c in inspector.get_columns("notifications")}
             if "target_path" not in columns:
