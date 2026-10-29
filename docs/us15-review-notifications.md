@@ -48,6 +48,13 @@ Notifications are private to their recipient and are available from the shared
   `INSERT ... ON CONFLICT DO NOTHING` in the same transaction as the order/review
   event. A failed transaction rolls the notification back with the rest of the
   event, and a retried one cannot leave a duplicate.
+- Regression coverage for #132 is in `tests/test_order_notifications.py`: a failing
+  notification rolls back the seller transition and the buyer delivery confirmation;
+  repeated statuses after a rejected cancellation request each notify; replays do
+  not; multi-shop cancellation, cancellation requests, seller transitions and
+  delivery confirmations reach only the owning shop or the buyer. Duplicate return
+  requests and duplicate reviews leave exactly one seller notification
+  (`tests/test_return_refund.py`, `tests/test_us15_reviews_notifications.py`).
 - The center displays the newest 100 notifications and the total unread count. A
   recipient can mark their own notification as read; other accounts cannot access it.
 
