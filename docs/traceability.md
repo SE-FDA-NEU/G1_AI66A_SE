@@ -451,16 +451,9 @@ separate tasks. Contract and implemented boundary:
 |---|---|---|
 | #133 voucher model and validation | 3, 6, 7 | One test per eligibility code; cap races on two connections; usage rollback and restore; migration fresh, legacy and rerun |
 | #134 seller voucher UI | 5.5 | Seller-scoped CRUD with field errors; `scope` and `seller_id` cannot be set |
-| #135 pricing and shipping | 2, 4 | Section 2.1 example and 2.2 boundary cases; allocation sums equal the discount |
+| #135 pricing and shipping | 2, 4; `services/pricing.py`, `services/order_errors.py` | [Pricing test matrix and commands](testing.md#task-135-multi-vendor-pricing-and-shipping) |
 | #136 checkout voucher UI | 5.1–5.4 | Quote rendering, apply/remove, stale quote, persisted receipt breakdown on confirmation and `/orders/{orderId}`, seller-scoped breakdown |
 | #137 combo rules | 8 | Deferral or agreed rules recorded before any combo discount |
-
-| #135 requirement | Implementation | Verification in `tests/test_pricing.py` |
-|---|---|---|
-| Per-shop discounts and post-shop platform basis | `PricingLine`, `ItemDiscount`, `price_order` | Contract example; eight stacking combinations; fully discounted shop |
-| Exact proportional allocation and deterministic remainder | `allocate_platform_discount`, integer `divmod` with ascending seller-ID ties | Section 2.2 cases, zero basis, values above float precision; 300 seeded allocations |
-| Shipping/free-shipping and reconciled totals | `SHIPPING_FEE_VND`, `ShippingDiscount`, immutable per-shop/aggregate results | Per-seller fee/cap cases; 433.000 VND example; 100 seeded full orders |
-| Safe calculation within caller-owned transaction | Pure service with no session, writes or global mutable state | Repeatability, input/result immutability, invalid-rule and zero-effect rejection |
 
 Exclusions for #135: voucher persistence/eligibility/usage/migration (#133), seller
 management/UI (#134), quote/revision/checkout/receipt wiring (#136), and combo rules (#137).

@@ -27,13 +27,12 @@ from src.schemas.orders import (
 )
 from src.services.addresses import AddressError, owned_address
 from src.services.notifications import create_notification
+from src.services.order_errors import OrderError
 from src.services.order_history import history_by_seller_order
 
 
-class CheckoutError(Exception):
-    def __init__(self, code: str, message: str, status: int = 409):
-        super().__init__(message)
-        self.code, self.message, self.status = code, message, status
+class CheckoutError(OrderError):
+    """A checkout business rejection; retained here for existing callers."""
 
 
 def receipt(

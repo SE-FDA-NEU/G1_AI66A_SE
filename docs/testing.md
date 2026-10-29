@@ -48,8 +48,24 @@ comes from US16 sections 2 and 4; no database or production data is required.
 | Malformed numbers/types, cap/rate bounds, voucher for an absent seller | Reject calculation without an output or side effects | `test_invalid_item_discount_rules_fail_before_calculation`, numeric/allocation guard tests |
 | Same snapshots in another line order | Equal, immutable result; caller inputs unchanged | `test_pricing_is_repeatable_without_changing_inputs_or_result_snapshots` |
 | Random full orders with fixed seed | Each seller formula holds; all aggregate components and grand total reconcile | `test_random_order_totals_reconcile_with_each_seller_breakdown` |
+| Three/four sellers with equal platform remainders and reordered lines | Whole-order calculation awards leftover VND to the smallest seller IDs and reconciles totals | `test_full_order_equal_remainders_prefer_lowest_seller_ids` |
+| Boolean shop-discount key matching integer seller ID | Reject `True`/`False` instead of treating them as seller IDs | `test_shop_discount_rejects_boolean_seller_keys` |
+| One shop's item basis is zero; another has a platform discount; free shipping applies | Zero-basis shop gets no platform allocation but still receives its shipping discount | `test_shipping_discount_applies_to_zero_basis_shop_in_a_mixed_order` |
+| 1-bps shop voucher on 1 VND plus another valid shop | Reject the whole calculation with no partial price; quote/checkout adapter behavior is in US16 section 2.4 | `test_one_zero_effect_shop_voucher_rejects_the_whole_multi_shop_calculation` |
+| Business rejection versus invalid input | Only business rejections inherit `OrderError`; existing checkout code/message/status contract stays compatible | `test_business_rejections_are_distinct_from_invalid_pricing_input`, `test_order_business_errors_share_the_adapter_contract`, `test_existing_business_error_default_status_stays_compatible` |
+| Inject an allocation whose sum differs from the platform discount | Raise internal `RuntimeError` before returning an order price | `test_allocation_conservation_failure_is_an_internal_error` |
 
-Run `python -m pytest tests/test_pricing.py tests/test_checkout.py tests/test_ui_docs_contract.py -q`
-with `DEBUG=false` and the README Python 3.12 environment. Voucher permissions,
-consumption/rollback, persisted receipts and browser checkout tests remain with
-#133/#136 integration. No new UI or real-user test result is claimed here.
+Use the README Python 3.12 environment:
+
+```powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_pricing.py -q --cov=src.services.pricing --cov-fail-under=100 --cov-report=term-missing
+python -m pytest tests/test_checkout.py tests/test_atomic_cancellation.py tests/test_ui_docs_contract.py -q
+python -m ruff check src tests/test_pricing.py
+git diff --check
+```
+
+The pricing command enforces the statement-coverage threshold; results are
+recorded in the PR. Voucher permissions, consumption/rollback, persisted receipts
+and browser checkout tests remain with #133/#136 integration. No new UI or
+real-user test result is claimed here.

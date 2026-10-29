@@ -9,17 +9,15 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+from src.services.order_errors import OrderError
+
 BASIS_POINTS = 10_000
 SHIPPING_FEE_VND = 20_000
 PRICING_POLICY_VERSION = "US16-V1"
 
 
-class PricingError(ValueError):
-    """A requested price cannot be produced; the controller maps code/status to HTTP."""
-
-    def __init__(self, code: str, message: str, status: int = 409):
-        super().__init__(message)
-        self.code, self.message, self.status = code, message, status
+class PricingError(OrderError):
+    """A pricing business rejection, distinct from invalid calculation input."""
 
 
 def _check_integer(value: int, name: str, minimum: int = 0) -> None:
@@ -143,6 +141,13 @@ def _applied_item_discount(rule: ItemDiscount | None, basis: int, slot: str) -> 
     return discount
 
 
+def _shipping_discount_amount(rule: ShippingDiscount | None) -> int:
+    if rule is None:
+        return 0
+    cap = SHIPPING_FEE_VND if rule.max_discount is None else rule.max_discount
+    return min(SHIPPING_FEE_VND, cap)
+
+
 def price_order(
     lines: Iterable[PricingLine],
     *,
@@ -178,15 +183,11 @@ def price_order(
     }
     platform_amount = _applied_item_discount(platform_discount, sum(bases.values()), "platform")
     platform_amounts = allocate_platform_discount(platform_amount, bases)
+    if sum(platform_amounts.values()) != platform_amount:
+        # Keep the guard enabled under python -O; a broken allocation is an internal fault.
+        raise RuntimeError("Platform discount allocation must conserve money.")
 
-    shipping_amount = 0
-    if shipping_discount is not None:
-        shipping_amount = min(
-            SHIPPING_FEE_VND,
-            shipping_discount.max_discount
-            if shipping_discount.max_discount is not None
-            else SHIPPING_FEE_VND,
-        )
+    shipping_amount = _shipping_discount_amount(shipping_discount)
     seller_orders = tuple(
         SellerOrderPrice(
             seller_id=seller_id,

@@ -6,6 +6,8 @@ from random import Random
 
 import pytest
 
+from src.services.order_errors import OrderError
+from src.services.orders import CheckoutError
 from src.services.pricing import (
     PRICING_POLICY_VERSION,
     SHIPPING_FEE_VND,
@@ -100,12 +102,12 @@ def test_largest_remainder_allocation_contract_cases(bases, discount, expected):
 
 
 def test_allocation_conserves_money_for_deterministic_random_inputs():
-    random = Random(135)
+    rng = Random(135)
     for _ in range(300):
-        bases = {seller: random.randrange(0, 10**18) for seller in range(1, 9)}
+        bases = {seller: rng.randrange(0, 10**18) for seller in range(1, 9)}
         bases[1] = 0
         total = sum(bases.values())
-        discount = random.randrange(total + 1)
+        discount = rng.randrange(total + 1)
 
         allocated = allocate_platform_discount(discount, bases)
 
@@ -319,21 +321,20 @@ def test_free_shipping_can_cover_fees_after_shop_vouchers_cover_all_items():
 
 
 def test_random_order_totals_reconcile_with_each_seller_breakdown():
-    random = Random(108)
+    rng = Random(108)
     for _ in range(100):
         lines = [
-            PricingLine(seller, random.randint(1, 5), random.randint(10_000, 10**12))
+            PricingLine(seller, rng.randint(1, 5), rng.randint(10_000, 10**12))
             for seller in range(1, 6)
             for _ in range(2)
         ]
         result = price_order(
             lines,
             shop_discounts={
-                seller: ItemDiscount("PERCENTAGE", random.randint(1, 9000))
-                for seller in range(1, 6)
+                seller: ItemDiscount("PERCENTAGE", rng.randint(1, 9000)) for seller in range(1, 6)
             },
-            platform_discount=ItemDiscount("PERCENTAGE", random.randint(1, 10_000)),
-            shipping_discount=ShippingDiscount(random.randint(1, 30_000)),
+            platform_discount=ItemDiscount("PERCENTAGE", rng.randint(1, 10_000)),
+            shipping_discount=ShippingDiscount(rng.randint(1, 30_000)),
         )
 
         assert result.subtotal == sum(line.quantity * line.unit_price for line in lines)
@@ -366,3 +367,96 @@ def test_random_order_totals_reconcile_with_each_seller_breakdown():
                 + row.shipping_fee
                 - row.shipping_discount
             )
+
+
+def test_business_rejections_are_distinct_from_invalid_pricing_input():
+    with pytest.raises(PricingError) as business_error:
+        price_order([])
+    assert not isinstance(business_error.value, ValueError)
+
+    with pytest.raises(ValueError) as invalid_input:
+        ItemDiscount("PERCENTAGE", 10_001)
+    assert not isinstance(invalid_input.value, PricingError)
+
+
+@pytest.mark.parametrize(
+    "sellers,discount,expected_shares",
+    [
+        ([4, 3, 2], 100, [34, 33, 33]),
+        ([2, 4, 3], 100, [34, 33, 33]),
+        ([5, 3, 4, 2], 2, [1, 1, 0, 0]),
+    ],
+)
+def test_full_order_equal_remainders_prefer_lowest_seller_ids(sellers, discount, expected_shares):
+    result = price_order(
+        [PricingLine(seller, 1, 100) for seller in sellers],
+        platform_discount=ItemDiscount("FIXED_AMOUNT", discount),
+    )
+
+    assert [row.seller_id for row in result.seller_orders] == sorted(sellers)
+    assert [row.platform_discount for row in result.seller_orders] == expected_shares
+    assert result.grand_total == len(sellers) * 20_100 - discount
+    assert sum(row.total_amount for row in result.seller_orders) == result.grand_total
+
+
+@pytest.mark.parametrize("seller_key", [True, False])
+def test_shop_discount_rejects_boolean_seller_keys(seller_key):
+    with pytest.raises(ValueError, match="seller_id"):
+        price_order(
+            [PricingLine(1, 1, 100)],
+            shop_discounts={seller_key: ItemDiscount("FIXED_AMOUNT", 1)},
+        )
+
+
+def test_shipping_discount_applies_to_zero_basis_shop_in_a_mixed_order():
+    result = price_order(
+        [PricingLine(2, 1, 100), PricingLine(3, 1, 300)],
+        shop_discounts={2: ItemDiscount("FIXED_AMOUNT", 1000)},
+        platform_discount=ItemDiscount("FIXED_AMOUNT", 99),
+        shipping_discount=ShippingDiscount(15_000),
+    )
+
+    free_items, other_shop = result.seller_orders
+    assert (
+        free_items.shop_discount,
+        free_items.platform_discount,
+        free_items.shipping_discount,
+        free_items.total_amount,
+    ) == (100, 0, 15_000, 5000)
+    assert (other_shop.platform_discount, other_shop.total_amount) == (99, 5201)
+    assert result.grand_total == 10_201
+
+
+def test_one_zero_effect_shop_voucher_rejects_the_whole_multi_shop_calculation():
+    lines = [PricingLine(2, 1, 1), PricingLine(3, 1, 100_000)]
+    with pytest.raises(PricingError) as error:
+        price_order(lines, shop_discounts={2: ItemDiscount("PERCENTAGE", 1)})
+
+    assert error.value.code == "ERR_VOUCHER_NOT_APPLICABLE"
+    assert error.value.status == 409
+    assert lines == [PricingLine(2, 1, 1), PricingLine(3, 1, 100_000)]
+
+
+def test_allocation_conservation_failure_is_an_internal_error(monkeypatch):
+    monkeypatch.setattr("src.services.pricing.allocate_platform_discount", lambda *_: {2: 0})
+
+    with pytest.raises(RuntimeError, match="conserve"):
+        price_order(
+            [PricingLine(2, 1, 100)],
+            platform_discount=ItemDiscount("FIXED_AMOUNT", 1),
+        )
+
+
+@pytest.mark.parametrize("error_type", [CheckoutError, PricingError])
+def test_order_business_errors_share_the_adapter_contract(error_type):
+    error = error_type("ERR_EMPTY_CART", "Select an item.", 400)
+
+    assert isinstance(error, OrderError)
+    assert not isinstance(error, ValueError)
+    assert (error.code, error.message, error.status) == ("ERR_EMPTY_CART", "Select an item.", 400)
+    assert str(error) == "Select an item."
+
+
+@pytest.mark.parametrize("error_type", [CheckoutError, PricingError])
+def test_existing_business_error_default_status_stays_compatible(error_type):
+    assert error_type("ERR_EMPTY_CART", "Select an item.").status == 409

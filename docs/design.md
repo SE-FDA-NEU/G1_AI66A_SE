@@ -1348,8 +1348,12 @@ Partial implementation: #135 adds `services/pricing.py`, a pure integer-VND
 calculator with immutable input/output snapshots, bounded item discounts,
 largest-remainder allocation and flat/per-shop shipping adjustments. It has no
 database access or commit; the checkout coordinator retains transaction ownership.
-The integration boundary and tests are in
+The integration boundary is in
 [US16 section 2.3](us16-promotions.md#23-implemented-calculation-boundary-135).
+`PricingError` and `CheckoutError` share `services/order_errors.OrderError`;
+input `ValueError` and invariant `RuntimeError` faults remain outside that
+business-rejection hierarchy. Test cases and commands are maintained in
+[the pricing test matrix](testing.md#task-135-multi-vendor-pricing-and-shipping).
 No quote endpoint or checkout behavior is changed by this service alone.
 
 The contract for #133–#137 is in [US16 vouchers and shipping](us16-promotions.md): integer-VND

@@ -139,6 +139,15 @@ assert price.grand_total == 433_000
   quote/checkout adapter maps these errors into the existing API envelope. This
   task adds no HTTP endpoint or new response body.
 
+`PricingError` and the existing `CheckoutError` inherit from the shared
+`OrderError(Exception)` in `services/order_errors.py`. They retain the same
+`code`, `message` and `status` contract, so #136 can catch `OrderError` for expected
+business rejections. Invalid calculation inputs still raise `ValueError`; an
+allocation that does not conserve the platform discount raises `RuntimeError`,
+including under `python -O`. These indicate internal faults at this boundary and
+must not be translated into ordinary 400/409 voucher rejections. Request schemas
+and voucher eligibility validation run before this service is called.
+
 For #136, read current cart/voucher state, validate eligibility, and call the same
 calculator for quote and inside checkout's existing transaction. Consume usages
 and persist the returned snapshots only in that transaction. A calculation or
@@ -146,30 +155,27 @@ later write failure must roll back the coordinator's work; this service never
 commits or restores anything. Historical receipts continue to read stored facts.
 Legacy checkout behavior is unchanged until the section 5.4 integration phase.
 
-Verification: `tests/test_pricing.py` covers the worked example, the eight voucher
-stacking combinations, discount/cap boundaries, invalid numeric inputs, empty and
-zero-effect cases, free shipping per shop, deterministic ordering and immutable
-snapshots. Seeded checks exercise 300 allocations and 100 full orders, asserting
-conservation, non-negative bounded components and seller/order reconciliation.
+The test matrix and verification commands have one source:
+[Task #135 in testing.md](testing.md#task-135-multi-vendor-pricing-and-shipping).
 
-```powershell
-$env:DEBUG = 'false'
-python -m pytest tests/test_pricing.py tests/test_checkout.py tests/test_ui_docs_contract.py -q
-python -m ruff check src/services/pricing.py tests/test_pricing.py
-```
+### 2.4 Zero-effect voucher decision and adapter behavior
 
-Local verification on 2026-10-29 (Windows, CPython 3.12.16): **80 pricing tests
-passed**, with 100% statement coverage of `src/services/pricing.py`; the full
-suite reported **919 passed, 1 skipped, 1 warning** in 364.81 seconds. The optional
-catalog browser module was skipped because the README dependency set does not
-install Playwright; the warning is the existing Starlette/httpx deprecation.
-Ruff passed for `src` and the new test file. The restricted runner initially
-could not access pytest's temporary fixture directory, so the full suite was
-rerun successfully outside that restriction with a fresh temporary base.
+A requested item voucher whose discount rounds to zero rejects the entire
+`price_order` calculation with `ERR_VOUCHER_NOT_APPLICABLE`, status 409. For
+example, a 1-bps shop voucher on 1 VND fails even when another shop has a positive
+subtotal. The calculator returns no partial `OrderPrice` and does not silently
+drop the requested voucher. This implements eligibility row 9 in section 3.2.
 
-AI assistance: OpenAI Codex assisted with requirement/code inspection, the pure
-service, tests and documentation. CI, human review, clean-clone/user validation
-and merge are separate delivery steps, not established by these local tests.
+The #133 validator must reject the same zero-effect rule. Under the proposed
+#136 quote contract (section 5.1), the adapter reports that voucher as `REJECTED`
+and omits its calculation rule before pricing the remaining valid promotions;
+the buyer can remove or replace the rejected code. Submitted checkout retains
+the requested voucher set and aborts atomically on rejection (section 5.2).
+The pure calculator itself never consumes usage or writes an order.
+
+Coordination: explicit owner acknowledgement of this boundary from #133 and
+#136 is still pending. The contract and tests record the decision; they do not
+claim that cross-task confirmation has occurred.
 
 ## 3. Voucher rules
 
