@@ -453,7 +453,7 @@ separate tasks. Contract and implemented boundary:
 | #134 seller voucher UI | 5.5 | Seller-scoped CRUD with field errors; `scope` and `seller_id` cannot be set |
 | #135 pricing and shipping | 2, 4; `services/pricing.py`, `services/order_errors.py` | [Pricing test matrix and commands](testing.md#task-135-multi-vendor-pricing-and-shipping) |
 | #136 checkout voucher UI | 5.1–5.4 | Quote rendering, apply/remove, stale quote, persisted receipt breakdown on confirmation and `/orders/{orderId}`, seller-scoped breakdown |
-| #137 combo rules | 8 | Deferral or agreed rules recorded before any combo discount |
+| #137 combo rules | 8 | Deferred decision records eligibility, formula and stacking as unspecified; no combo input or discount is implemented |
 
 Exclusions for #135: voucher persistence/eligibility/usage/migration (#133), seller
 management/UI (#134), quote/revision/checkout/receipt wiring (#136), and combo rules (#137).
