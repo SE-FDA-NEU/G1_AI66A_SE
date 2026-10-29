@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 
 from pydantic import field_validator
-from sqlalchemy import CheckConstraint
+from sqlalchemy import CheckConstraint, event
+from sqlalchemy.orm import validates
 from sqlmodel import Field, SQLModel
 
 
@@ -69,6 +70,37 @@ class Voucher(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+    def __init__(self, **data):
+        for field in ("starts_at", "ends_at"):
+            val = data.get(field)
+            if isinstance(val, str):
+                try:
+                    val = datetime.fromisoformat(val)
+                except ValueError:
+                    pass
+            if isinstance(val, datetime):
+                if val.tzinfo is None:
+                    val = val.replace(tzinfo=UTC)
+                else:
+                    val = val.astimezone(UTC)
+                data[field] = val
+        super().__init__(**data)
+
+    @validates("starts_at", "ends_at")
+    def _validate_voucher_dates(self, key, value):
+        if value is None:
+            return value
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value)
+            except ValueError:
+                return value
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=UTC)
+            return value.astimezone(UTC)
+        return value
+
     @field_validator("starts_at", "ends_at", mode="after")
     @classmethod
     def _normalize_utc(cls, v: datetime) -> datetime:
@@ -77,4 +109,18 @@ class Voucher(SQLModel, table=True):
         if v.tzinfo is None:
             return v.replace(tzinfo=UTC)
         return v.astimezone(UTC)
+
+
+@event.listens_for(Voucher, "before_insert")
+@event.listens_for(Voucher, "before_update")
+def _ensure_voucher_utc(mapper, connection, target):
+    for attr in ("starts_at", "ends_at"):
+        val = getattr(target, attr, None)
+        if isinstance(val, datetime):
+            if val.tzinfo is None:
+                setattr(target, attr, val.replace(tzinfo=UTC))
+            else:
+                setattr(target, attr, val.astimezone(UTC))
+
+
 
