@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy import func, update
@@ -20,6 +21,20 @@ class ReviewError(Exception):
         self.code = code
         self.message = message
         self.status = status
+
+
+def review_media_urls(review: Review) -> list[str]:
+    """Read the canonical collection, retaining single-link legacy compatibility."""
+    try:
+        refs = json.loads(review.images_json)
+    except (ValueError, TypeError):
+        refs = []
+    if not isinstance(refs, list):
+        refs = []
+    return list(dict.fromkeys(
+        [ref for ref in refs if isinstance(ref, str)]
+        + ([review.media_url] if review.media_url else [])
+    ))
 
 
 def list_product_reviews(session: Session, product_code: str) -> tuple[Product, list[Review]]:
@@ -64,6 +79,8 @@ def create_product_review(
     rating: int,
     comment: str | None,
     media_url: str | None,
+    *,
+    media_urls: list[str] | None = None,
 ) -> Review:
     row = session.exec(
         select(OrderItem, SellerOrder, Order, Product)
@@ -86,13 +103,17 @@ def create_product_review(
             409,
         )
 
+    media_refs = list(dict.fromkeys(
+        (media_urls or []) + ([media_url] if media_url else [])
+    ))
     review = Review(
         order_item_id=item.id,
         product_id=product.id,
         buyer_id=buyer.id,
         rating=rating,
         comment=comment,
-        media_url=media_url,
+        media_url=media_url or (media_refs[0] if media_refs else None),
+        images_json=json.dumps(media_refs),
     )
     try:
         session.add(review)
