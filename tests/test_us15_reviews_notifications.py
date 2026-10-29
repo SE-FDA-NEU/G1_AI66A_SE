@@ -176,6 +176,11 @@ def test_only_owner_can_review_completed_order_item_and_aggregate_updates(
     )
     assert duplicate.status_code == 409
     assert duplicate.json()["error"]["code"] == "ERR_REVIEW_ALREADY_EXISTS"
+    with Session(engine) as session:
+        review_events = session.exec(
+            select(Notification.event_key).where(Notification.event_key.like("review:%"))
+        ).all()
+    assert review_events == [f"review:{body['id']}:created"]
 
     second_review = client.post(
         f"/api/v1/products/{PRODUCT_CODE}/reviews",

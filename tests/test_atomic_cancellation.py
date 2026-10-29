@@ -118,10 +118,16 @@ def assert_cancelled(engine, order_id, children, products):
         history = session.exec(select(OrderHistory)).all()
         assert len(history) == len(children)
         assert all(row.to_status == "CANCELLED" for row in history)
-        notifications = session.exec(
-            select(Notification).where(Notification.recipient_user_id == 2)
-        ).all()
-        assert len(notifications) == len(children)
+        assert_one_notification_per_history(session, history)
+
+
+def assert_one_notification_per_history(session, history):
+    notifications = session.exec(
+        select(Notification).where(Notification.event_key.like("order-history:%"))
+    ).all()
+    assert sorted(int(row.event_key.split(":")[1]) for row in notifications) == sorted(
+        row.id for row in history
+    )
 
 
 @pytest.mark.parametrize("route", ["buyer-post", "buyer-patch", "seller-patch", "seller-legacy"])
@@ -153,7 +159,7 @@ def test_failure_rolls_back_all_effects_and_allows_retry(engine, monkeypatch, st
     before = snapshot(engine)
     function_name = {
         "inventory": "restore_order_item_stock",
-        "notification": "create_notification",
+        "notification": "notify_transition",
         "parent": "_sync_parent",
     }.get(stage)
     original = getattr(workflow, function_name) if function_name else None
@@ -359,10 +365,7 @@ def test_competing_requests_cannot_duplicate_restore_or_resurrect_order(engine, 
         assert session.get(Product, products[0]).stock_quantity == (10 if restored else 8)
         history = session.exec(select(OrderHistory)).all()
         assert sum(row.to_status == "CANCELLED" for row in history) == int(restored)
-        notifications = session.exec(
-            select(Notification).where(Notification.recipient_user_id == 2)
-        ).all()
-        assert len(notifications) == len(history)
+        assert_one_notification_per_history(session, history)
 
 
 def test_foreign_actor_and_shipped_child_cannot_cancel(api, engine):
