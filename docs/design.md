@@ -368,6 +368,7 @@ optional media URL and the seller's reply.
 | `rating` | INTEGER | NOT NULL, CHECK `1 <= rating <= 5` |
 | `comment` | VARCHAR(2000) | Optional |
 | `media_url` | VARCHAR(2048) | Optional HTTP(S) URL |
+| `images_json` | JSON-encoded text | NOT NULL; serialized media URL list, default `[]` (#131) |
 | `seller_reply` | VARCHAR(2000) | Optional |
 | `seller_replied_at` | DATETIME | Optional |
 | `created_at` | DATETIME | NOT NULL |
@@ -376,6 +377,11 @@ The API verifies buyer ownership and `seller_orders.status = COMPLETED`; the
 unique `order_item_id` constraint prevents repeat reviews. The transaction
 updates `product_metadata.rating` and `product_metadata.review_count` from the
 saved reviews.
+
+Task #131 adds at most five validated image/video URL references to `images_json`.
+The API exposes these as `media_urls`, retaining `media_url` compatibility.
+Migration copies known single legacy links once and preserves later collections
+on reruns. No file-upload storage or media fetching service is introduced.
 
 ---
 

@@ -55,6 +55,52 @@
   font-weight: 500;
 }
 
+.review-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 0.85rem;
+}
+
+.review-media figure {
+  margin: 0;
+  min-width: 0;
+}
+
+.review-media__image,
+.review-media__video {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+}
+
+.review-media__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+.review-card p,
+.review-card textarea {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.review-field-error {
+  color: var(--color-danger, #b42318);
+  font-weight: 600;
+  margin: 0;
+}
+
+.review-form [aria-invalid="true"],
+.seller-reply-form [aria-invalid="true"] {
+  border-color: var(--color-danger, #b42318);
+}
+
 .review-card__reply {
   display: grid;
   gap: 0.5rem;
