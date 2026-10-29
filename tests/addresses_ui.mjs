@@ -8,6 +8,11 @@ const cart={payload:{data:{items:[{name:"Mouse",quantity:1,line_total:100,is_sel
 const a={id:1,version:1,recipient_name:"Buyer",phone_number:"0912345678",province:"Hà Nội",district:"Đống Đa",ward:"Láng",detailed_address:"<script>street</script>",is_default:true};
 const b={...a,id:2,is_default:false};
 const list=rows=>({payload:{data:rows}});
+// #136: confirmation waits for a server quote, whose revision the order POST carries.
+const quote={payload:{data:{quote_revision:"b".repeat(64),seller_orders:[],platform_voucher:null,
+  shipping_voucher:null,subtotal:100,shop_discount:0,platform_discount:0,shipping_fee:20000,
+  shipping_discount:0,grand_total:20100}}};
+const orderPost=test=>test.calls.find(c=>c.url==="/api/v1/orders"&&c.options.method==="POST");
 let test=setup([user,empty],null,undefined,[list([b,a])]);await tick();
 assert.equal(test.nodes.get("address-book").hidden,false,"Address management works with an empty cart");
 assert.equal(test.nodes.get("checkout-form").hidden,true);
@@ -100,10 +105,10 @@ assert.match(test.nodes.get("error").textContent,/Review/);
 test.nodes.get("address-choice").handlers.change();
 assert.equal(vm.runInContext("reviewRequired",test.context),false);
 // A real submit selects the saved address; the pending state freezes the selection/mutations.
-test=setup([user,cart,new Error("timeout")],null,undefined,[list([a])]);await tick();
+test=setup([user,cart,quote,new Error("timeout")],null,undefined,[list([a])]);await tick();await tick();
 test.nodes.get("checkout-form").handlers.submit({preventDefault(){}});await tick();
-const post=test.calls.find(c=>c.options.method==="POST");
-assert.deepEqual(JSON.parse(post.options.body),pending.body);
+const post=orderPost(test);
+assert.deepEqual(JSON.parse(post.options.body),{...pending.body,quote_revision:"b".repeat(64)});
 assert.equal(test.nodes.get("address-choice").disabled,true);
 const before=test.calls.length;
 test.nodes.get("add-address").handlers.click();
@@ -142,10 +147,10 @@ assert.equal(test.calls.length,callsWhileSaving);
 finishDefault({payload:{data:{...b,is_default:true,version:2}}});await tick();
 assert.equal(test.nodes.get("address-status").textContent,"Default address updated.");
 // Manual submit is a whitelist, regardless of saved-address/form controls elsewhere.
-test=setup([user,cart,new Error("timeout")],null,undefined,[list([a])]);await tick();
+test=setup([user,cart,quote,new Error("timeout")],null,undefined,[list([a])]);await tick();await tick();
 test.nodes.get("address-choice").value="";test.nodes.get("address-choice").handlers.change();
 test.nodes.get("checkout-form").handlers.submit({preventDefault(){}});await tick();
-assert.deepEqual(Object.keys(JSON.parse(test.calls.find(c=>c.options.method==="POST").options.body)).sort(),["delivery_address","phone_number","recipient_name"]);
+assert.deepEqual(Object.keys(JSON.parse(orderPost(test).options.body)).sort(),["delivery_address","phone_number","quote_revision","recipient_name"]);
 // A late response from the previous account cannot render addresses.
 let resolve;
 const late=new Promise(done=>{resolve=done;});
