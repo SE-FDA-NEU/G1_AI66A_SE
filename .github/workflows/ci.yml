@@ -76,6 +76,7 @@ jobs:
           node tests/seller_orders_ui.mjs
           node tests/product_detail_ui.mjs
           node tests/catalog_ui.mjs
+          node tests/buyer_returns_ui.mjs
 
       - name: Publish test summary
         if: always()

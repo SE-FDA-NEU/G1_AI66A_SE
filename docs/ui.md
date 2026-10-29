@@ -415,3 +415,13 @@ shop and selected totals, separates unavailable rows and discloses price changes
 Checkout shows and orders only selected items; unselected rows remain after success.
 See [runtime contract, migration and acceptance checks](us12-cart-selection.md).
 The earlier screenshots show Sprint 3; new US12 browser screenshots remain pending.
+
+### US17 buyer return requests (#139)
+
+On either order-detail alias, buyers can request a return/refund for a delivered
+shop order, enter reason/evidence, correct validation errors and read every
+request's status. Drafts remain attached to each shop, duplicate clicks are locked,
+and uncertain submissions require a status read before another attempt.
+See the [buyer UI contract and screenshots](us17-buyer-returns.md) and
+[test matrix](testing.md#task-139-buyer-return-request-ui). Existing seller/admin
+decisions and backend refund/restock rules are unchanged.

@@ -451,6 +451,12 @@ def test_order_web_routes_and_xss_protection(client, test_setup):
     )
     assert res_orders.status_code == 200
     assert "<title>Order Details & Returns" in res_orders.text
+    for asset in ("buyer-returns.js", "buyer-returns.css"):
+        assert f'/static/{asset}' in res_orders.text
+        assert client.get(f"/static/{asset}").status_code == 200
+    assert res_orders.text.index("/static/buyer-returns.js") < res_orders.text.index(
+        "/static/order.js"
+    )
 
     res_order = client.get(
         f"/order/{test_setup['order_id']}",

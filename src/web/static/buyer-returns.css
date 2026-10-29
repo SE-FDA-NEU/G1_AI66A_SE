@@ -1,0 +1,21 @@
+/* Scoped additions for the buyer return-request task; existing tracker layout stays intact. */
+.buyer-returns { margin-top: 1rem; }
+.buyer-returns p { margin: .7rem 0; line-height: 1.5; }
+.buyer-returns label { display: block; font-weight: 600; margin-top: 1rem; }
+.buyer-returns select {
+  width: 100%; min-height: 44px; padding: .7rem; margin-top: .5rem;
+  border: 1px solid var(--ios-border); border-radius: 8px; background: white;
+  font: inherit; text-overflow: ellipsis;
+}
+.buyer-returns textarea { box-sizing: border-box; font-size: 1rem; }
+.buyer-returns button { min-height: 44px; margin: .4rem .3rem .4rem 0; white-space: normal; }
+.buyer-returns :focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+.buyer-returns [aria-invalid="true"] { border-color: #b91c1c; }
+.buyer-returns .return-field-error, #return-form-error, #return-load-error { color: #991b1b; }
+#return-feedback { color: #166534; font-weight: 600; }
+.buyer-return-request { border: 1px solid var(--ios-border); border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+.buyer-return-request p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .6rem 0; }
+.buyer-return-request h4 { overflow-wrap: anywhere; line-height: 1.5; }
+@media (max-width: 480px) {
+  .buyer-returns button { width: 100%; margin-right: 0; }
+}

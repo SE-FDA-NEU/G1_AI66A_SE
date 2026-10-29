@@ -440,6 +440,22 @@ design rationale: [US14 order history](us14-order-history.md). Expected results:
 Scope: product-detail reviews UI and its required media persistence bridge only;
 no upload service, notification redesign or changes to backend review eligibility.
 
+## US17 buyer return-request UI (#109, #139)
+
+The existing return endpoints, ownership checks and refund/restock workflow are
+reused. #139 completes the buyer presentation only; no backend rule or migration
+is changed. Boundary: [buyer return contract](us17-buyer-returns.md).
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Action for eligible delivered shop orders, including mixed orders | `buyer-returns.js` identity/request reads; explicit shop selector on both order-page aliases | [Single test matrix](testing.md#task-139-buyer-return-request-ui) |
+| Reason/evidence form, validation and recovery | Labelled form, bounded requests, per-shop drafts, pending locks and field focus after unlock | Same test matrix; native browser fixtures |
+| Confirmation and current status for every request | Safe text-only request cards; persistent live feedback; explicit read-only reconciliation after uncertain writes | Same test matrix; [screenshots and verification limits](us17-buyer-returns.md#verification-and-screenshots) |
+| Prevent stale order/account UI and mobile overflow | Context guards in controller/order loader; tracker header/badge wrapping | Same test matrix; native 390/768/1280px checks |
+
+CI runs the controller's DOM suite. Human review, user validation and CI success
+remain separate delivery checks; local implementation does not close story #109.
+
 ## US16 contract (#108, #133–#137)
 
 Runtime: **Partial.** #135 implements the pure pricing service and its tests;
