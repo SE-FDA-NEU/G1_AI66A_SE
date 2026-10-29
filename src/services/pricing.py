@@ -5,6 +5,7 @@ ownership, dates, minimums and usage limits by #133. Checkout (#136) owns that
 validation, persistence and its single commit; this module only calculates money.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -107,3 +108,29 @@ def calculate_item_discount(rule: ItemDiscount, basis: int) -> int:
     if rule.max_discount is not None:
         discount = min(discount, rule.max_discount)
     return min(discount, basis)
+
+
+def allocate_platform_discount(discount: int, bases: Mapping[int, int]) -> dict[int, int]:
+    """Use largest remainders; equal remainders prefer the smaller seller ID."""
+    _check_integer(discount, "discount")
+    for seller_id, basis in bases.items():
+        _check_integer(seller_id, "seller_id", 1)
+        _check_integer(basis, "basis")
+    total_basis = sum(bases.values())
+    if discount > total_basis:
+        raise ValueError("Platform discount must not exceed the total post-shop basis.")
+    if total_basis == 0:
+        return dict.fromkeys(sorted(bases), 0)
+
+    shares = {
+        seller_id: divmod(discount * bases[seller_id], total_basis) for seller_id in sorted(bases)
+    }
+    allocated = {seller_id: quotient for seller_id, (quotient, _) in shares.items()}
+    remaining = discount - sum(allocated.values())
+    ranked = sorted(
+        (seller_id for seller_id in bases if bases[seller_id] > 0),
+        key=lambda seller_id: (-shares[seller_id][1], seller_id),
+    )
+    for seller_id in ranked[:remaining]:
+        allocated[seller_id] += 1
+    return allocated
