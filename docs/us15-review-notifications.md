@@ -30,12 +30,24 @@ Notifications are private to their recipient and are available from the shared
 **Notifications** navigation link at `/notifications`.
 
 - A seller receives one notification for each new seller order created at checkout.
-- The buyer receives one notification after each successful seller-order transition
-  in the US14 flow (`PENDING` → `PROCESSING` → `SHIPPED` → `COMPLETED`, or
-  `PENDING` → `CANCELLED`).
-- A seller receives a notification when a buyer submits a verified review.
-- Event keys are unique, and each notification is inserted in the same transaction as
-  the order/review event. A failed or retried transaction cannot leave a duplicate.
+- Every seller-order transition made through the shared order workflow notifies the
+  other party (#132). A seller transition (confirm, process, ship, deliver, complete,
+  cancel, reject a cancellation request) notifies the buyer and links to
+  `/orders/{orderId}`. A buyer cancellation, cancellation request or delivery
+  confirmation notifies the seller of that sub-order only and links to
+  `/seller/orders`. In a multi-shop order each shop is told only about its own
+  sub-order, and the message names the sub-order and its parent order.
+- Transition notifications use the event key
+  `order-history:{historyId}:recipient:{userId}:event:status`. The history row is
+  flushed first so its ID is known. A replay of the same event inserts nothing,
+  while a status reached twice (for example `CONFIRMED` again after a rejected
+  cancellation request) is a new history row and so a new notification.
+- A seller receives a notification when a buyer submits a verified review, and when
+  a buyer submits a return request (`return_request:{requestId}:created`).
+- Event keys are unique, and each notification is inserted with
+  `INSERT ... ON CONFLICT DO NOTHING` in the same transaction as the order/review
+  event. A failed transaction rolls the notification back with the rest of the
+  event, and a retried one cannot leave a duplicate.
 - The center displays the newest 100 notifications and the total unread count. A
   recipient can mark their own notification as read; other accounts cannot access it.
 
@@ -130,7 +142,7 @@ regressions and browser evidence. Human review remains a separate delivery step.
 Focused tests:
 
 ```powershell
-python -m pytest tests/test_us15_reviews_notifications.py tests/test_seller_orders.py tests/test_checkout.py -q
+python -m pytest tests/test_us15_reviews_notifications.py tests/test_order_notifications.py tests/test_atomic_cancellation.py tests/test_seller_orders.py tests/test_checkout.py -q
 ```
 
 Full suite:
