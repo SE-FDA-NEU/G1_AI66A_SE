@@ -3,7 +3,7 @@
 Provides three read-only views:
   GET /api/v1/seller/analytics              — time-based revenue & order summary
   GET /api/v1/seller/analytics/best-sellers — products ranked by units sold / revenue
-  GET /api/v1/seller/analytics/low-stock    — active products with available stock ≤ threshold
+  GET /api/v1/seller/analytics/low-stock    — active stock units with available stock ≤ threshold
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -100,6 +100,9 @@ class LowStockItem(BaseModel):
     product_id: int
     product_code: str
     product_name: str
+    variant_id: int | None = None
+    variant_sku: str | None = None
+    variant_name: str | None = None
     stock_quantity: int
     reserved_stock: int
     available_stock: int
@@ -199,7 +202,7 @@ def get_low_stock_endpoint(
         description="Products with available_stock ≤ threshold are returned (default 5).",
     ),
 ) -> LowStockResponse:
-    """Return active products whose available stock is at or below *threshold*.
+    """Return active products and variants whose available stock is at or below *threshold*.
 
     Available stock = `stock_quantity − reserved_stock`.
     Results are ordered by available stock ascending (most critical first).
