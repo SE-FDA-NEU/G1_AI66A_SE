@@ -251,6 +251,20 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
         assert p2_meta[2] == 0.0
         assert p2_meta[3] == 0
 
+        metadata_sql = connection.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'product_metadata'"
+        ).fetchone()[0]
+        assert "ck_product_metadata_rating_range" in metadata_sql
+        assert "ck_product_metadata_review_count_nonnegative" in metadata_sql
+        assert "ck_product_metadata_sales_count_nonnegative" in metadata_sql
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                'UPDATE product_metadata SET sales_count = -1 WHERE product_id = 1'
+            )
+            connection.commit()
+
         # Foreign key constraint must now be enforced by SQLite
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
