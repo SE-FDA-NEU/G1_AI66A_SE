@@ -338,10 +338,22 @@ to `CANCELLATION_REQUESTED`, or rejecting a request (back to `CONFIRMED` or
 
 ## 8. Combo promotions (#137)
 
-Combo promotions have no defined eligibility, stacking order or formula, so they are
-**deferred**. The pricing API has no combo input, and no combo discount is ever applied
-automatically. If the team schedules them later, #137 records the rules here first,
-under a new policy version.
+**Decision: deferred.** No team-approved combo-promotion rules are in scope for US16.
+In particular, this contract intentionally does not define:
+
+- eligibility (qualifying products, quantities, sellers or customer segments);
+- a discount formula, cap or rounding rule; or
+- stacking order or interaction with shop, platform or shipping vouchers.
+
+Until a later decision records those rules in this section under a new policy version:
+
+- the voucher model and pricing API accept no combo-promotion input;
+- checkout does not infer or apply a combo discount; and
+- no combo discount is shown, persisted, consumed or restored.
+
+This is a scope boundary, not a default discount rule. #137 is complete when this
+deferral is recorded; implementing combo promotions requires a follow-up contract and
+tests before any production behavior is added.
 
 ## 9. Acceptance tests
 
@@ -351,7 +363,7 @@ under a new policy version.
 | Limit, expiry, inactive and other-shop vouchers are rejected without consuming | One test per code in section 3.2; global and per-user cap races with two independent connections on a file SQLite database | #133 |
 | Per-shop discount and proportional platform allocation | Section 2.2 cases; `sum(D_platform_s) = D_platform` for random inputs | #135 |
 | Seller-order and grand totals | Section 2.1 example end to end; the persisted totals equal the quote; the receipt reads persisted values | #135, #136 |
-| Combo rules recorded before implementation | Section 8 confirmed in #137 | #137 |
+| Combo promotions remain out of scope | Section 8 records the deferred decision and confirms there is no combo input or automatic discount | #137 |
 | Rollback and restore keep usage consistent | Failure injected after consumption leaves no usage rows and unchanged counters; one restore per cancellation through each entry point in section 7, including approval of a cancellation request; no restore on request or rejection; platform restore only after every allocated seller order is cancelled; replay never consumes twice | #133, #128 |
 | Seller receipt scope | A seller reading a two-shop order sees only their own items and breakdown | #136 |
 | Compatibility | Legacy hash test unchanged; key reuse with other vouchers conflicts; migration fresh, legacy and rerun | #133, #136 |
