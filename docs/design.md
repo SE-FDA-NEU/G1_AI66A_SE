@@ -841,6 +841,7 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
+| `409 Conflict` | `ERR_VOUCHER_NOT_APPLICABLE` | A requested item voucher yields zero discount, including a zero post-shop basis for platform allocation | US16 pricing service; HTTP mapping belongs to quote/checkout integration |
 | `409 Conflict` | `ERR_INVALID_PAYMENT_STATE` | Cancellation finds a payment state other than `PAID`, `UNPAID` or `FAILED`; payment reconciliation is required before cancellation, and no cancellation effects are committed | Buyer and seller order cancellation |
 | `409 Conflict` | `ERR_VOUCHER_SCOPE_MISMATCH` | Scope or discount type does not match requested slot, or shop voucher belongs to another seller | Vouchers, checkout |
 | `409 Conflict` | `ERR_VOUCHER_INACTIVE` | Voucher is currently inactive | Vouchers, checkout |
@@ -1352,8 +1353,19 @@ response. Seller-product validation retains its original contract.
 
 ## US16 vouchers and shipping contract (#108)
 
-Design only; no voucher, quote or shipping code is on `main` yet. The proposed contract
-for #133–#137 is in [US16 vouchers and shipping](us16-promotions.md): integer-VND
+Partial implementation: #135 adds `services/pricing.py`, a pure integer-VND
+calculator with immutable input/output snapshots, bounded item discounts,
+largest-remainder allocation and flat/per-shop shipping adjustments. It has no
+database access or commit; the checkout coordinator retains transaction ownership.
+The integration boundary is in
+[US16 section 2.3](us16-promotions.md#23-implemented-calculation-boundary-135).
+`PricingError` and `CheckoutError` share `services/order_errors.OrderError`;
+input `ValueError` and invariant `RuntimeError` faults remain outside that
+business-rejection hierarchy. Test cases and commands are maintained in
+[the pricing test matrix](testing.md#task-135-multi-vendor-pricing-and-shipping).
+No quote endpoint or checkout behavior is changed by this service alone.
+
+The contract for #133–#137 is in [US16 vouchers and shipping](us16-promotions.md): integer-VND
 formulas, largest-remainder platform allocation, one shop voucher per seller order plus
 one platform and one free-shipping voucher per checkout, a flat 20.000 ₫ fee per seller
 order under policy `US16-V1`, `POST /api/v1/orders/quote` with a `quote_revision` that
