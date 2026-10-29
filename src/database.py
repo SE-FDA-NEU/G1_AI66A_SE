@@ -1,3 +1,4 @@
+import json
 from collections.abc import Generator
 from contextlib import nullcontext
 from pathlib import Path
@@ -230,6 +231,23 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "WHERE snapshot_initialized = FALSE"
                     )
                 )
+
+        if "reviews" in tables:
+            columns = {c["name"] for c in inspector.get_columns("reviews")}
+            if "images_json" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE reviews ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'"
+                ))
+                if "media_url" in columns:
+                    # Copy known legacy references once; do not rewrite existing media lists.
+                    rows = connection.execute(text(
+                        "SELECT id, media_url FROM reviews WHERE media_url IS NOT NULL"
+                    )).all()
+                    for review_id, media_url in rows:
+                        connection.execute(
+                            text("UPDATE reviews SET images_json = :refs WHERE id = :id"),
+                            {"refs": json.dumps([media_url]), "id": review_id},
+                        )
 
         if "order_history" in tables:
             columns = {c["name"] for c in inspector.get_columns("order_history")}

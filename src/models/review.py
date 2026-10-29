@@ -18,6 +18,7 @@ class Review(SQLModel, table=True):
     rating: int = Field(ge=1, le=5)
     comment: str | None = Field(default=None, max_length=2000)
     media_url: str | None = Field(default=None, max_length=2048)
+    images_json: str = Field(default="[]")
     seller_reply: str | None = Field(default=None, max_length=2000)
     seller_replied_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
