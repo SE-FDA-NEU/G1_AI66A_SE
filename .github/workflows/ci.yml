@@ -74,6 +74,7 @@ jobs:
           node tests/addresses_ui.mjs
           node tests/seller_products_ui.mjs
           node tests/seller_orders_ui.mjs
+          node tests/seller_analytics_ui.mjs
           node tests/product_detail_ui.mjs
           node tests/catalog_ui.mjs
 
