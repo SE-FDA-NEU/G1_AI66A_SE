@@ -101,6 +101,72 @@ def test_seller_voucher_validation_and_ownership(api, engine):
     assert buyer.status_code == 403
 
 
+def test_duplicate_voucher_code_returns_conflict_even_when_database_rejects_it(api, engine):
+    first = api.post(
+        "/api/v1/seller/vouchers",
+        headers=headers(engine),
+        json=valid_payload(),
+    )
+    assert first.status_code == 201
+
+    duplicate = api.post(
+        "/api/v1/seller/vouchers",
+        headers=headers(engine),
+        json=valid_payload(code="shop10"),
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "ERR_VOUCHER_EXISTS"
+
+
+def test_patch_validates_discount_dates_usage_and_nullable_fields(api, engine):
+    created = api.post(
+        "/api/v1/seller/vouchers",
+        headers=headers(engine),
+        json=valid_payload(),
+    ).json()
+    voucher_id = created["id"]
+
+    incompatible = api.patch(
+        f"/api/v1/seller/vouchers/{voucher_id}",
+        headers=headers(engine),
+        json={"discount_type": "FREE_SHIPPING", "discount_value": 100},
+    )
+    assert incompatible.status_code == 400
+    assert incompatible.json()["error"]["code"] == "ERR_INVALID_DISCOUNT"
+
+    invalid_dates = api.patch(
+        f"/api/v1/seller/vouchers/{voucher_id}",
+        headers=headers(engine),
+        json={"starts_at": valid_payload()["ends_at"]},
+    )
+    assert invalid_dates.status_code == 400
+    assert invalid_dates.json()["error"]["code"] == "ERR_INVALID_DATES"
+
+    with Session(engine) as session:
+        voucher = session.get(Voucher, voucher_id)
+        voucher.used_count = 3
+        session.add(voucher)
+        session.commit()
+
+    invalid_limit = api.patch(
+        f"/api/v1/seller/vouchers/{voucher_id}",
+        headers=headers(engine),
+        json={"usage_limit": 2},
+    )
+    assert invalid_limit.status_code == 400
+    assert invalid_limit.json()["error"]["code"] == "ERR_INVALID_USAGE_LIMIT"
+
+    cleared = api.patch(
+        f"/api/v1/seller/vouchers/{voucher_id}",
+        headers=headers(engine),
+        json={"max_discount": None, "usage_limit": None, "per_user_limit": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["max_discount"] is None
+    assert cleared.json()["usage_limit"] is None
+    assert cleared.json()["per_user_limit"] is None
+
+
 def test_seller_cannot_manage_another_shop_voucher(api, engine):
     created = api.post(
         "/api/v1/seller/vouchers",

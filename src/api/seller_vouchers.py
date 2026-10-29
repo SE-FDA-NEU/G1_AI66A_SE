@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from src.auth import SellerUser
@@ -43,6 +44,14 @@ def _validate_discount(discount_type: str, discount_value: int) -> None:
                 "Fixed amount discount must be greater than 0.",
             ),
         )
+    if discount_type == "FREE_SHIPPING" and discount_value != 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_detail(
+                "ERR_INVALID_DISCOUNT",
+                "Free-shipping vouchers must have a discount value of 0.",
+            ),
+        )
 
 
 def _validate_dates(starts_at: datetime, ends_at: datetime) -> tuple[datetime, datetime]:
@@ -83,7 +92,7 @@ def create_seller_voucher(
             ),
         )
     starts_at, ends_at = _validate_dates(payload.starts_at, payload.ends_at)
-    discount_value = 0 if payload.discount_type == "FREE_SHIPPING" else payload.discount_value
+    discount_value = payload.discount_value
     _validate_discount(payload.discount_type, discount_value)
     now = datetime.now(UTC)
     voucher = Voucher(
@@ -103,7 +112,18 @@ def create_seller_voucher(
         updated_at=now,
     )
     session.add(voucher)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        if "vouchers.code" not in str(exc.orig) and "uq_vouchers_code" not in str(exc.orig):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error_detail(
+                "ERR_VOUCHER_EXISTS", f"A voucher with code '{code}' already exists."
+            ),
+        ) from exc
     session.refresh(voucher)
     return _response(voucher)
 
@@ -123,10 +143,21 @@ def update_seller_voucher(
         )
 
     values = payload.model_dump(exclude_unset=True)
+    for field in ("discount_type", "discount_value", "min_order_value"):
+        if field in values and values[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_detail(
+                    (
+                        "ERR_INVALID_DISCOUNT"
+                        if field != "min_order_value"
+                        else "ERR_INVALID_MIN_ORDER"
+                    ),
+                    f"{field.replace('_', ' ').capitalize()} cannot be null.",
+                ),
+            )
     discount_type = values.get("discount_type", voucher.discount_type)
     discount_value = values.get("discount_value", voucher.discount_value)
-    if discount_type == "FREE_SHIPPING":
-        discount_value = 0
     _validate_discount(discount_type, discount_value)
 
     starts_at = values.get("starts_at", voucher.starts_at)

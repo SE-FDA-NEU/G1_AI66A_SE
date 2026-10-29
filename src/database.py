@@ -188,6 +188,14 @@ def migrate_db(connection: Connection | None = None) -> None:
                             )
                         )
 
+        if "vouchers" in tables:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_vouchers_code "
+                    "ON vouchers (code)"
+                )
+            )
+
         if "categories" in tables:
             columns = {c["name"] for c in inspector.get_columns("categories")}
             if "is_active" not in columns:

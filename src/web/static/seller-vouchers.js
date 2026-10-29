@@ -24,6 +24,26 @@ document.addEventListener('DOMContentLoaded', () => {
         return data && data.error && data.error.message ? data.error.message : fallback;
     }
 
+    function redirectToLogin() {
+        localStorage.removeItem('access_token');
+        sessionStorage.removeItem('access_token');
+        window.location.href = '/login?next=/seller/vouchers';
+    }
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, {
+            ...options,
+            headers: { Accept: 'application/json', ...headers(), ...(options.headers || {}) },
+        });
+        const data = await response.json().catch(() => null);
+        if (response.status === 401) {
+            redirectToLogin();
+            return null;
+        }
+        if (!response.ok) throw new Error(apiError(data, 'The server could not complete the request.'));
+        return data;
+    }
+
     function formatMoney(value) {
         return `${Number(value).toLocaleString('vi-VN')} ₫`;
     }
@@ -77,9 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         try {
-            const response = await fetch('/api/v1/seller/vouchers', { headers: headers() });
-            const data = await response.json();
-            if (!response.ok) throw new Error(apiError(data, 'Unable to load shop vouchers.'));
+            const data = await apiRequest('/api/v1/seller/vouchers');
+            if (data === null) return;
             render(data);
         } catch (error) {
             body.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${error.message}</td></tr>`;
@@ -88,15 +107,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function toggle(voucher) {
         try {
-            const response = await fetch(`/api/v1/seller/vouchers/${voucher.id}`, {
+            const data = await apiRequest(`/api/v1/seller/vouchers/${voucher.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json', ...headers() },
                 body: JSON.stringify({ is_active: !voucher.is_active }),
             });
-            const data = await response.json();
-            if (!response.ok) throw new Error(apiError(data, 'Unable to update voucher status.'));
+            if (data === null) return;
             showAlert(`Voucher ${voucher.code} updated.`, 'success');
-            load();
+            await load();
         } catch (error) {
             showAlert(error.message, 'error');
         }
@@ -147,16 +165,15 @@ document.addEventListener('DOMContentLoaded', () => {
             is_active: true,
         };
         try {
-            const response = await fetch('/api/v1/seller/vouchers', {
+            const data = await apiRequest('/api/v1/seller/vouchers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...headers() },
                 body: JSON.stringify(payload),
             });
-            const data = await response.json();
-            if (!response.ok) throw new Error(apiError(data, 'Unable to create voucher.'));
+            if (data === null) return;
             modal.hidden = true;
             showAlert(`Voucher ${payload.code} created.`, 'success');
-            load();
+            await load();
         } catch (error) {
             showAlert(error.message, 'error');
         }
