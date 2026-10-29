@@ -99,7 +99,7 @@ for (const values of [{from: ""}, {from: "2026-02-30"}, {from: "2026-12-01", to:
 page = setup({mode: "legacy"}); await settle();
 assert.equal(page.get("metric-completed_revenue").textContent, "1.140.000 VND");
 assert.ok(page.get("completed-revenue-label").textContent.includes("legacy"));
-assert.ok(page.get("analytics-date-basis").textContent.startsWith("Legacy completed-sales revenue and product rankings use completion dates."));
+assert.ok(page.get("analytics-date-basis").textContent.includes("completion date when available, otherwise creation date"));
 for (const key of ["gross_order_value", "pending_escrow_revenue", "cancellation_rate"]) assert.equal(page.get(`metric-${key}`).textContent, "Not available");
 page.get("analytics-chart-metric").value = "gross_order_value"; page.get("analytics-chart-metric").dispatch("change");
 assert.equal(page.get("analytics-chart").hidden, true); assert.equal(page.get("analytics-values").hidden, true);

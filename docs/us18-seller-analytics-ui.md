@@ -34,9 +34,10 @@ available to other clients. Monthly grouping can make a longer range easier to r
 The four cards are separately labelled `gross_order_value`, `completed_revenue`,
 `pending_escrow_revenue` (integer VND) and `cancellation_rate` (percentage). Values
 come from the API, including the aggregate cancellation rate: the UI neither
-averages bucket rates nor multiplies an already-percent value by 100. Financial
-metrics under the #142 contract use order creation dates. Completed-product sales
-use completion dates and historical item prices. Ranking is units descending;
+averages bucket rates nor multiplies an already-percent value by 100. Reporting
+dates follow the current backend timeline: completion date when present, otherwise
+creation date. Completed-product sales use historical item prices. Ranking is units
+descending;
 equal returned quantities use product ID ascending for stable display. `units_sold`
 is the current API's name for the story's sold-count measure.
 
@@ -75,9 +76,16 @@ panels, with visible instructions, labelled fields and keyboard focus indicators
 
 The single test matrix and runnable commands are maintained in
 [testing.md](testing.md#task-143-seller-analytics-charts-and-ranking).
-The native-browser checks use deterministic API fixtures for both current and
-#142 response shapes; they do not prove persistence or a merged #142 integration.
-Python regressions exercise the existing real API and served page assets.
+The Node native-browser checks use deterministic API fixtures for both response
+shapes. `tests/test_seller_analytics_integration.py` additionally runs the actual
+page in Chrome/Edge, forwards its HTTP calls through the FastAPI app and reads
+isolated persisted SQLite data. There are no canned API payloads in that suite.
+It checks the legacy API today and automatically exercises the four financial
+metrics once #142 is integrated. `ANALYTICS_REQUIRE_FINANCIAL=1` makes candidate
+verification fail if the financial response is absent, rather than silently using
+the legacy branch. Candidate source verification does not establish a merged #142
+integration; rerun the same suite after #142 lands. Actual commit IDs, results and
+CI links belong in the PR.
 
 Fixture screenshots: [phone](images/us18/analytics-390.png),
 [tablet](images/us18/analytics-768.png), [desktop](images/us18/analytics-1280.png),

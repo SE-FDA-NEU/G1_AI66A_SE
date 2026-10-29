@@ -519,4 +519,5 @@ human review and CI are separate from local UI implementation.
 |---|---|---|
 | Inclusive seller-scoped date range, day/month filters | [US18 UI contract](us18-seller-analytics-ui.md); `seller-analytics.js` calls existing seller-only APIs with matching aliases | [A143-02–04, 09, 11](testing.md#task-143-seller-analytics-charts-and-ranking) |
 | Separate financial summary and time series | Four labelled cards; native SVG and exact-value table; honest unavailable/legacy states until #142 | A143-05–08 in the same matrix |
+| Actual API integration and reporting dates | Chrome uses production assets and FastAPI with persisted SQLite orders, without canned responses; strict candidate mode rejects legacy-only verification | A143-12 in the same matrix; post-merge #142 verification remains pending |
 | Best-selling quantity ranking | `/seller/analytics/products` shares the dashboard; `units_sold DESC` and purchase-price sales values from existing API | A143-01, 03, 06–08, 10–11 in the same matrix |

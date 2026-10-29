@@ -125,7 +125,7 @@ try {
   await waitFor('!document.getElementById("analytics-report").hidden');
   assert.equal(await evaluate('document.getElementById("metric-gross_order_value").textContent'), "Not available");
   assert.equal(await evaluate('document.getElementById("analytics-compatibility").hidden'), false);
-  assert.ok((await evaluate('document.getElementById("analytics-date-basis").textContent')).startsWith("Legacy completed-sales revenue and product rankings use completion dates."));
+  assert.ok((await evaluate('document.getElementById("analytics-date-basis").textContent')).includes("completion date when available, otherwise creation date"));
   await screenshot("analytics-legacy-390.png", 390);
   mode = "modern"; await send("Page.navigate", {url: `${base}/seller/analytics/products`});
   await waitFor('document.activeElement.id === "best-sellers-title"');

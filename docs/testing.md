@@ -87,12 +87,14 @@ Contract and exclusions: [US18 UI boundary](us18-seller-analytics-ui.md).
 | A143-09 | Superseded request, stale 401, account switch, logout | Old responses cannot replace current data; account changes immediately clear private data; logout clears both token keys | DOM race tests |
 | A143-10 | Native controls, chart/table at 390/768/1280px | No page overflow; chart/table can scroll within panels; labelled controls, exact values, validation focus and Retry work | `tests/seller_analytics_browser.mjs` |
 | A143-11 | Existing seller analytics ownership, periods, completion dates and historical prices | Existing API results and authorization remain unchanged | `tests/test_us18_seller_analytics.py` |
+| A143-12 | Chrome page calls actual FastAPI/SQLite; owned completed/pending/paused/cancelled orders, foreign seller and out-of-range data | Correct day/month report, units ranking and historical prices; current API labels legacy values honestly; financial API gives 700k gross, 500k completed, 150k pending and weighted 20% cancellation, independent of bucket rates | `tests/test_seller_analytics_integration.py`; strict financial mode for #142 candidate |
 
 Run with the README Python 3.12 environment and dependencies:
 
 ```powershell
 python -m pytest tests/test_us18_seller_analytics.py tests/test_seller_analytics_ui.py tests/test_ui_docs_contract.py tests/test_ui_styling.py -q
-ruff check src tests/test_seller_analytics_ui.py
+python -m pytest tests/test_seller_analytics_integration.py -q
+ruff check src tests/test_seller_analytics_ui.py tests/test_seller_analytics_integration.py
 node tests/seller_analytics_ui.mjs
 node tests/seller_analytics_browser.mjs
 git diff --check
@@ -104,6 +106,22 @@ location. It uses an isolated profile and local fixture server and rewrites the
 screenshots under `docs/images/us18/`. CI's Page script checks run the DOM suite;
 the native-browser command is an explicit local verification step. Report actual
 run results in the PR, not as a permanent claim in this contract.
+
+The FastAPI/SQLite browser suite reuses the optional Playwright tool already
+installed by CI, plus installed Chrome/Edge (`BROWSER_PATH` can override its path).
+For local setup, install it with `python -m pip install playwright`; no browser
+download is needed when Chrome/Edge is installed. The suite is collected by the
+existing CI pytest step. It skips only if Playwright is absent. For an isolated
+#142 candidate or after that API merges, require the financial response explicitly:
+
+```powershell
+$env:ANALYTICS_REQUIRE_FINANCIAL = '1'
+python -m pytest tests/test_seller_analytics_integration.py -q
+Remove-Item Env:ANALYTICS_REQUIRE_FINANCIAL
+```
+
+The strict mode is expected to fail against the legacy API. Keep the post-merge
+financial acceptance item pending until it passes on the integrated branch.
 
 ## Task #139: buyer return-request UI
 

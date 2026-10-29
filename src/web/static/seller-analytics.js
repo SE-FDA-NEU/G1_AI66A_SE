@@ -5,6 +5,7 @@
   const DEFAULT_RANGE_DAYS = 30;
   const GROUPS = ["day", "month"];
   const RANKING_LIMITS = ["5", "10", "20"];
+  const REPORTING_DATE = "completion date when available, otherwise creation date";
   const get = id => document.getElementById(id);
   const token = () => localStorage.getItem("access_token") || localStorage.getItem("token");
   const labels = {
@@ -161,7 +162,7 @@
     const unavailable = points.some(point => point.value == null) || summary.meta[key] == null && !(legacy && key === "completed_revenue");
     const chart = get("analytics-chart"), empty = get("analytics-chart-empty"), body = get("analytics-values-body");
     chart.replaceChildren(); body.replaceChildren();
-    get("analytics-chart-description").textContent = `${label}. UTC periods; ${legacy && key === "completed_revenue" ? "filtered by completion date" : "financial metrics filtered by order creation date"}.`;
+    get("analytics-chart-description").textContent = `${label}. UTC reporting date: ${REPORTING_DATE}.`;
     get("analytics-value-heading").textContent = label;
     get("analytics-values-caption").textContent = `${label} by ${report.filters.group}, ${report.filters.from} to ${report.filters.to} (inclusive, UTC)`;
     get("analytics-values").hidden = unavailable || !points.length;
@@ -177,15 +178,13 @@
     const {summary, ranking, filters, legacy} = report;
     const missing = Object.keys(labels).some(key => summary.meta[key] == null);
     get("analytics-applied-range").textContent = `${filters.from} to ${filters.to} (inclusive, UTC) | Group: ${filters.group} | Top ${filters.limit} products`;
-    get("analytics-date-basis").textContent = legacy
-      ? "Legacy completed-sales revenue and product rankings use completion dates. Available financial metrics use order creation dates."
-      : "Financial metrics use order creation dates. Completed-product rankings use completion dates.";
+    get("analytics-date-basis").textContent = `UTC reporting date: ${REPORTING_DATE}.`;
     get("completed-revenue-label").textContent = legacy ? "Completed-sales revenue (legacy)" : labels.completed_revenue;
     get("completed-revenue-description").textContent = legacy
-      ? "Completed item value, filtered by completion date."
-      : "Completed order value, filtered by order creation date.";
+      ? "Completed item value for the reporting dates."
+      : "Completed order value for the reporting dates.";
     get("analytics-compatibility").hidden = !missing;
-    get("analytics-compatibility").textContent = "Some financial metrics are not available from the current API. Legacy completed-sales revenue uses completion dates and item prices; it is not the new creation-date financial metric. Missing values are not zero.";
+    get("analytics-compatibility").textContent = "Some financial metrics are not available from the current API. Legacy completed-sales revenue uses historical item prices and is different from financial order totals. Missing values are not zero.";
     for (const key of Object.keys(labels)) {
       const value = legacy && key === "completed_revenue" ? summary.meta.total_revenue : summary.meta[key];
       get(`metric-${key}`).textContent = format(value, key);

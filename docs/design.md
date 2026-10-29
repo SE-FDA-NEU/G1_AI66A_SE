@@ -299,8 +299,9 @@ seller_orders.status = COMPLETED
 
 The selected completed-sales period is evaluated using `seller_orders.completed_at`,
 with the existing legacy fallback to creation time when it is absent. This is
-distinct from the new creation-date financial metrics in #142; the #143 UI
-displays their separate meanings as described in [US18 UI](us18-seller-analytics-ui.md).
+also the reporting timeline used by the current #142 API candidate. The #143 UI
+distinguishes legacy item revenue from financial order totals as described in
+[US18 UI](us18-seller-analytics-ui.md).
 
 ---
 
