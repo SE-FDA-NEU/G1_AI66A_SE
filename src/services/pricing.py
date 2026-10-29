@@ -96,3 +96,14 @@ class OrderPrice:
     shipping_discount: int
     grand_total: int
     pricing_policy_version: str = PRICING_POLICY_VERSION
+
+
+def calculate_item_discount(rule: ItemDiscount, basis: int) -> int:
+    """Floor percentages, then cap by the configured maximum and the item basis."""
+    _check_integer(basis, "basis")
+    if rule.discount_type == "FIXED_AMOUNT":
+        return min(basis, rule.discount_value)
+    discount = basis * rule.discount_value // BASIS_POINTS
+    if rule.max_discount is not None:
+        discount = min(discount, rule.max_discount)
+    return min(discount, basis)
