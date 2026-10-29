@@ -444,7 +444,18 @@ def admin_create_voucher(
             ),
         )
 
-    if payload.starts_at >= payload.ends_at:
+    starts_at = (
+        payload.starts_at.replace(tzinfo=UTC)
+        if payload.starts_at.tzinfo is None
+        else payload.starts_at.astimezone(UTC)
+    )
+    ends_at = (
+        payload.ends_at.replace(tzinfo=UTC)
+        if payload.ends_at.tzinfo is None
+        else payload.ends_at.astimezone(UTC)
+    )
+
+    if starts_at >= ends_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_detail(
@@ -485,8 +496,8 @@ def admin_create_voucher(
         usage_limit=payload.usage_limit,
         per_user_limit=payload.per_user_limit,
         used_count=0,
-        starts_at=payload.starts_at,
-        ends_at=payload.ends_at,
+        starts_at=starts_at,
+        ends_at=ends_at,
         is_active=payload.is_active,
         created_at=now,
         updated_at=now,
@@ -562,7 +573,7 @@ def admin_update_voucher(
                     "ERR_INVALID_DATES", "Voucher end date must be after start date."
                 ),
             )
-        v.ends_at = payload.ends_at
+        v.ends_at = ends_at
 
     v.updated_at = datetime.now(UTC)
     session.add(v)

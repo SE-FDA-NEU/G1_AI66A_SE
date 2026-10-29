@@ -458,16 +458,22 @@ remain separate delivery checks; local implementation does not close story #109.
 
 ## US16 contract (#108, #133–#137)
 
-Runtime: **Not implemented.** Contract proposed in
-[docs/us16-promotions.md](us16-promotions.md); each task PR confirms or amends its part.
+Runtime: **Partial.** #135 implements the pure pricing service and its tests;
+voucher eligibility/persistence, the quote API and checkout integration remain
+separate tasks. Contract and implemented boundary:
+[docs/us16-promotions.md](us16-promotions.md#23-implemented-calculation-boundary-135).
 
 | Task | Contract section | Evidence required before closing |
 |---|---|---|
 | #133 voucher model and validation | 3, 6, 7 | One test per eligibility code; cap races on two connections; usage rollback and restore; migration fresh, legacy and rerun |
 | #134 seller voucher UI | 5.5 | Seller-scoped CRUD with field errors; `scope` and `seller_id` cannot be set |
-| #135 pricing and shipping | 2, 4 | Section 2.1 example and 2.2 boundary cases; allocation sums equal the discount |
+| #135 pricing and shipping | 2, 4; `services/pricing.py`, `services/order_errors.py` | [Pricing test matrix and commands](testing.md#task-135-multi-vendor-pricing-and-shipping) |
 | #136 checkout voucher UI | 5.1–5.4 | Quote rendering, apply/remove, stale quote, persisted receipt breakdown on confirmation and `/orders/{orderId}`, seller-scoped breakdown |
-| #137 combo rules | 8 | Deferral or agreed rules recorded before any combo discount |
+| #137 combo rules | 8 | Deferred decision records eligibility, formula and stacking as unspecified; no combo input or discount is implemented |
+
+Exclusions for #135: voucher persistence/eligibility/usage/migration (#133), seller
+management/UI (#134), quote/revision/checkout/receipt wiring (#136), and combo rules (#137).
+Local calculation completion does not establish story-wide acceptance or CI/review.
 
 
 ## US20 contract (#112, #148–#150)

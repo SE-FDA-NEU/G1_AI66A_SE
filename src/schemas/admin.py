@@ -1,9 +1,9 @@
 """Pydantic schemas for the platform admin portal."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -78,12 +78,31 @@ class CreateVoucherRequest(BaseModel):
     ends_at: datetime
     is_active: bool = True
 
+    @field_validator("starts_at", "ends_at", mode="after")
+    @classmethod
+    def normalize_utc(cls, v: datetime) -> datetime:
+        if v is None:
+            return v
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
 
 class UpdateVoucherRequest(BaseModel):
     is_active: bool | None = None
     usage_limit: int | None = Field(default=None, ge=1)
     per_user_limit: int | None = Field(default=None, ge=1)
     ends_at: datetime | None = None
+
+    @field_validator("ends_at", mode="after")
+    @classmethod
+    def normalize_utc(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
 
 
 class VoucherAdminResponse(BaseModel):
