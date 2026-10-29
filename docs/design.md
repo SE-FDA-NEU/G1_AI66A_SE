@@ -850,6 +850,7 @@ implementation"). This table lists every code the code raises, checked by
 | `400 Bad Request` | `ERR_CATEGORY_CYCLE` | Category parent assignment would cause a cycle | Admin categories |
 | `400 Bad Request` | `ERR_INVALID_DATES` | Voucher end date is before start date | Admin vouchers |
 | `400 Bad Request` | `ERR_INVALID_DISCOUNT` | Voucher discount value exceeds limits | Admin vouchers |
+| `400 Bad Request` | `ERR_INVALID_MIN_ORDER` | Voucher minimum order value cannot be null | Seller vouchers |
 | `400 Bad Request` | `ERR_INVALID_USAGE_LIMIT` | Voucher per-user limit exceeds total usage limit | Admin vouchers |
 | `400 Bad Request` | `ERR_SUB_ORDER_MISMATCH` | Sub-order does not belong to the specified parent order | Admin disputes |
 | `400 Bad Request` | `ERR_INVALID_DISPUTE_STATE` | Sub-order is not in a permitted return state for dispute creation | Admin disputes |

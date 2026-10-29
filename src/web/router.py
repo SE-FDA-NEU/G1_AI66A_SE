@@ -56,6 +56,12 @@ def seller_products_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "seller-products.html")
 
 
+@router.get("/seller/vouchers", response_class=FileResponse, include_in_schema=False)
+def seller_vouchers_page() -> FileResponse:
+    """Serve the seller shop-voucher management screen."""
+    return FileResponse(PAGES_DIR / "seller-vouchers.html")
+
+
 @router.get("/seller/products/new", response_class=FileResponse, include_in_schema=False)
 def seller_product_new_page() -> FileResponse:
     """Serve the seller product form (US06); POST /api/v1/seller/products enforces the role."""
