@@ -1,6 +1,10 @@
 
 # US10 - Seller Views Best-Selling Products
 
+Historical planning document. The current #143 implementation is the ranking in
+the shared [US18 dashboard](us18-seller-analytics-ui.md); both analytics routes
+serve that page. The existing API ranks by `units_sold` from completed sales.
+
 - **Issue:** #22
 - **Epic:** F6 Analytics
 - **Priority:** P2 - Nice to have

@@ -1,5 +1,9 @@
 # US09 - Seller Revenue Analytics
 
+Historical planning document. The current #143 UI follows the
+[US18 contract](us18-seller-analytics-ui.md), including last-30-UTC-days defaults,
+day/month grouping and distinct financial metrics with an explicit legacy fallback.
+
 **Issue:** #21
 **Priority:** P1 - Should have
 **Story Points:** 5

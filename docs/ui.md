@@ -54,8 +54,9 @@ the M1 diagram in [requirements.md](requirements.md#screen-flow-diagram):
   the page that sent them.
 - The M1 "seller navigation bar" is the shared top navigation: **Create product** and
   **Seller orders** sit next to **Products** and **Cart**.
-- `/` opens the catalog in a browser. Edit, analytics and order history (US05, US07,
-  US09, US10) are not built.
+- `/` opens the catalog in a browser. This M3 diagram predates the later edit,
+  order-history and analytics tasks. The current analytics UI is documented in
+  [US18 #143](us18-seller-analytics-ui.md).
 
 ### Known limits
 
@@ -415,3 +416,11 @@ shop and selected totals, separates unavailable rows and discloses price changes
 Checkout shows and orders only selected items; unselected rows remain after success.
 See [runtime contract, migration and acceptance checks](us12-cart-selection.md).
 The earlier screenshots show Sprint 3; new US12 browser screenshots remain pending.
+
+### US18 seller analytics (#143)
+
+`/seller/analytics` and `/seller/analytics/products` show separate financial
+metrics, a selectable SVG time series with exact-value table, date/day/month
+filters and a units-based product ranking. Loading, empty, error and current-API
+fallback states remain explicit. See the [scope and API boundary](us18-seller-analytics-ui.md)
+and [single verification matrix](testing.md#task-143-seller-analytics-charts-and-ranking).
