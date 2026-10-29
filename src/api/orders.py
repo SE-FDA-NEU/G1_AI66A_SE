@@ -10,7 +10,8 @@ from src.errors import error_detail
 from src.models.order import Order
 from src.models.seller_order import SellerOrder
 from src.schemas.order_status import OrderStatusChange
-from src.schemas.orders import CheckoutInput, OrderResponse
+from src.schemas.orders import CheckoutInput, OrderResponse, QuoteResponse, VoucherSelection
+from src.services.checkout_pricing import QuoteError, price_selection, to_quote
 from src.services.notifications import notify_transition
 from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
@@ -42,8 +43,30 @@ def place_order(
         data, created = checkout(session, buyer.id, body, key)
         response.status_code = 201 if created else 200
         return OrderResponse(data=data)
+    except QuoteError as exc:
+        raise _quote_http_error(exc) from exc
     except CheckoutError as exc:
         raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
+
+
+def _quote_http_error(exc: QuoteError) -> HTTPException:
+    detail = error_detail(exc.code, exc.message)
+    if exc.field:
+        # US16 section 5.2: name the voucher slot so the page shows the error beside it.
+        detail["error"]["fields"] = {exc.field: exc.message}
+    return HTTPException(exc.status, detail=detail)
+
+
+@router.post("/quote", response_model=QuoteResponse)
+def quote_order(body: VoucherSelection, buyer: BuyerUser, session: SessionDep) -> QuoteResponse:
+    """Price the selected cart with the requested vouchers; never writes anything."""
+    try:
+        return QuoteResponse(data=to_quote(price_selection(session, buyer.id, body)))
+    except QuoteError as exc:
+        raise _quote_http_error(exc) from exc
+    finally:
+        # Read-only: release the transaction the reads opened.
+        session.rollback()
 
 
 @router.get("", response_model=list[OrderResponse])

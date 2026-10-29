@@ -16,8 +16,11 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
+from src.models.voucher import Voucher
+from src.models.voucher_usage import VoucherUsage
 from src.schemas.order_history import order_timestamp_utc
 from src.schemas.orders import (
+    AppliedVoucher,
     CheckoutInput,
     CheckoutRequest,
     DeliverySnapshot,
@@ -26,9 +29,16 @@ from src.schemas.orders import (
     SubOrderSummary,
 )
 from src.services.addresses import AddressError, owned_address
+from src.services.checkout_pricing import (
+    PricedSelection,
+    QuoteError,
+    price_selection,
+    require_applied,
+)
 from src.services.notifications import create_notification
 from src.services.order_errors import OrderError
 from src.services.order_history import history_by_seller_order
+from src.services.vouchers import VoucherError, consume_voucher
 
 
 class CheckoutError(OrderError):
@@ -127,11 +137,52 @@ def receipt(
                 delivered_at=order_timestamp_utc(so.delivered_at) if so.delivered_at else None,
                 completed_at=order_timestamp_utc(so.completed_at) if so.completed_at else None,
                 history=history.get(so.id, []),
+                subtotal=so.subtotal,
+                shop_discount=so.shop_discount,
+                platform_discount=so.platform_discount,
+                shipping_fee=so.shipping_fee,
+                shipping_discount=so.shipping_discount,
+                total_amount=so.total_amount,
+                pricing_policy_version=so.pricing_policy_version,
             )
             for so in visible_sub_orders
             if so.id is not None
         ],
+        vouchers=applied_vouchers(session, order.id, visible_sub_orders, seller_id),
     )
+
+
+def applied_vouchers(
+    session: Session,
+    order_id: int,
+    visible_sub_orders: list[SellerOrder],
+    seller_id: int | None,
+) -> list[AppliedVoucher]:
+    """Codes read from stored usages; a seller sees only their own shop voucher."""
+    visible_ids = {so.id for so in visible_sub_orders}
+    rows = session.exec(
+        select(VoucherUsage, Voucher)
+        .join(Voucher, Voucher.id == VoucherUsage.voucher_id)
+        .where(VoucherUsage.order_id == order_id)
+        .order_by(VoucherUsage.id)
+    ).all()
+    return [
+        AppliedVoucher(
+            code=usage.code,
+            slot=(
+                "SHOP"
+                if voucher.scope == "SHOP"
+                else "SHIPPING"
+                if voucher.discount_type == "FREE_SHIPPING"
+                else "PLATFORM"
+            ),
+            seller_order_id=usage.seller_order_id,
+            discount_amount=usage.discount_amount,
+            status=usage.status,
+        )
+        for usage, voucher in rows
+        if seller_id is None or usage.seller_order_id in visible_ids
+    ]
 
 
 def resolve_delivery_snapshot(
@@ -152,11 +203,62 @@ def resolve_delivery_snapshot(
     )
 
 
+def apply_quoted_price(
+    session: Session,
+    buyer_id: int,
+    order: Order,
+    sellers: dict[int, SellerOrder],
+    priced: PricedSelection,
+) -> None:
+    """Store the quoted breakdown and consume its vouchers in checkout's transaction."""
+    price = priced.price
+    for row in price.seller_orders:
+        suborder = sellers[row.seller_id]
+        if suborder.subtotal != row.subtotal:
+            # Same transaction, same rows: a difference means the cart changed under us.
+            raise QuoteError(
+                "ERR_QUOTE_STALE",
+                "Prices or vouchers changed. Review the updated total and try again.",
+            )
+        suborder.shop_discount = row.shop_discount
+        suborder.platform_discount = row.platform_discount
+        suborder.shipping_fee = row.shipping_fee
+        suborder.shipping_discount = row.shipping_discount
+        suborder.total_amount = row.total_amount
+        suborder.pricing_policy_version = row.pricing_policy_version
+    order.total_amount = price.grand_total
+
+    applied = priced.applied
+    usages = [
+        (voucher, f"shop_vouchers.{seller_id}", sellers[seller_id].id, row.shop_discount)
+        for seller_id, voucher in applied.shop.items()
+        for row in price.seller_orders
+        if row.seller_id == seller_id
+    ]
+    if applied.platform:
+        usages.append((applied.platform, "platform_voucher", None, price.platform_discount))
+    if applied.shipping:
+        usages.append((applied.shipping, "shipping_voucher", None, price.shipping_discount))
+    for voucher, field, seller_order_id, amount in usages:
+        try:
+            consume_voucher(
+                session,
+                voucher,
+                buyer_id=buyer_id,
+                order_id=order.id,
+                seller_order_id=seller_order_id,
+                discount_amount=amount,
+            )
+        except VoucherError as exc:
+            raise QuoteError(exc.code, exc.message, exc.status_code, field=field) from exc
+
+
 def checkout(
     session: Session, buyer_id: int, body: CheckoutInput, key: str
 ) -> tuple[OrderData, bool]:
     """Own the request session transaction; auth may already have begun it."""
-    fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
+    # Unset voucher fields are left out, so a legacy body keeps its original hash.
+    fingerprint = hashlib.sha256(body.model_dump_json(exclude_unset=True).encode()).hexdigest()
     for attempt in range(5):
         try:
             existing = session.exec(select(Order).where(Order.request_key == key)).first()
@@ -189,6 +291,15 @@ def checkout(
                         "ERR_EMPTY_CART", "Select at least one item for checkout.", 400
                     )
                 raise CheckoutError("ERR_EMPTY_CART", "Your cart is empty.", 400)
+            priced = None
+            if body.quote_revision is not None:
+                priced = price_selection(session, buyer_id, body)
+                if priced.revision != body.quote_revision:
+                    raise QuoteError(
+                        "ERR_QUOTE_STALE",
+                        "Prices or vouchers changed. Review the updated total and try again.",
+                    )
+                require_applied(priced)
             order = Order(
                 buyer_id=buyer_id,
                 total_amount=0,
@@ -354,6 +465,8 @@ def checkout(
                 )
                 if removed.rowcount != 1:
                     raise CheckoutError("ERR_CONCURRENCY_CONFLICT", "Cart changed. Please retry.")
+            if priced is not None:
+                apply_quoted_price(session, buyer_id, order, sellers, priced)
             for suborder in sellers.values():
                 session.add(suborder)
             session.add(order)
