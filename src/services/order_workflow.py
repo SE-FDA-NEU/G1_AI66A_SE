@@ -14,7 +14,7 @@ from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.services.inventory import restore_order_item_stock
-from src.services.notifications import create_notification
+from src.services.notifications import notify_transition
 from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
 from src.services.orders import CheckoutError
@@ -140,7 +140,7 @@ def _apply_status(
         note = "Delivered."
     elif status == "CONFIRMED":
         note = "Confirmed by seller."
-    record_transition(
+    history = record_transition(
         session,
         seller_order_id=child.id,
         from_status=old_status,
@@ -149,15 +149,26 @@ def _apply_status(
         note=audit_note if audit_note is not None else note,
         occurred_at=now,
     )
-    create_notification(
-        session,
-        recipient_user_id=parent.buyer_id,
-        order_id=parent.id,
-        event_key=f"seller-order:{child.id}:status:{status}",
-        message=f"Seller order #{child.id} in your order #{parent.id} is now {status.lower()}.",
-        target_path=f"/checkout/confirmation/{parent.id}",
-    )
-
+    # Notify the other party: the seller when the buyer acts, otherwise the buyer.
+    if buyer:
+        action = "cancelled" if status == "CANCELLED" else "requested cancellation of"
+        notify_transition(
+            session,
+            history,
+            recipient_user_id=child.seller_id,
+            order_id=parent.id,
+            message=f"The buyer {action} seller order #{child.id} in order #{parent.id}.",
+            target_path="/seller/orders",
+        )
+    else:
+        notify_transition(
+            session,
+            history,
+            recipient_user_id=parent.buyer_id,
+            order_id=parent.id,
+            message=f"Seller order #{child.id} in your order #{parent.id} is now {status.lower()}.",
+            target_path=f"/orders/{parent.id}",
+        )
 
 def _sync_parent(session: Session, parent: Order) -> None:
     session.flush()

@@ -428,6 +428,18 @@ cancellation/inventory redesign or payment implementation. Contract and course
 design rationale: [US14 order history](us14-order-history.md). Expected results:
 [regression cases](testing.md#task-127-order-history-and-shipping-milestones).
 
+## US15 product reviews and seller replies (#107, #131)
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Review summary, ratings/comments, replies and optional reply time | Product-detail HTML/script; safe text nodes, UTC API timestamps | `tests/product_detail_ui.mjs`; `tests/reviews_browser.mjs` |
+| Image/video references persisted in `images_json` | Additive `media_urls` API contract; existing review service and repeatable legacy migration | `tests/test_review_media.py`; existing #130 API regressions |
+| Form only for eligible completed purchases; actionable validation | Server eligibility reused; associated field errors, draft retention, pending locks and account guards | DOM and native browser scenarios |
+| Loading/data/empty/error and responsive media | Reviews Retry, bounded requests and existing styling extended at 390/768/1280px | [US15 evidence and scope](us15-review-notifications.md#product-detail-ui-follow-up-131) |
+
+Scope: product-detail reviews UI and its required media persistence bridge only;
+no upload service, notification redesign or changes to backend review eligibility.
+
 ## US16 contract (#108, #133–#137)
 
 Runtime: **Not implemented.** Contract proposed in

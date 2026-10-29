@@ -33,6 +33,10 @@ class Element {
     (this.handlers[name] ??= []).push(handler);
   }
 
+  setAttribute(name, value) {
+    this[name] = value;
+  }
+
   append(...items) {
     this.children.push(...items);
   }

@@ -1,7 +1,16 @@
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    UrlConstraints,
+    field_validator,
+    model_validator,
+)
 
 from src.auth import BuyerUser, SellerUser
 from src.database import SessionDep
@@ -14,9 +23,12 @@ from src.services.reviews import (
     list_product_reviews,
     list_reviewable_items,
     reply_to_review,
+    review_media_urls,
 )
 
 router = APIRouter(tags=["Reviews"])
+MAX_REVIEW_MEDIA = 5
+ReviewMediaURL = Annotated[HttpUrl, UrlConstraints(max_length=2048)]
 
 
 class ReviewCreate(BaseModel):
@@ -25,7 +37,17 @@ class ReviewCreate(BaseModel):
     order_item_id: int = Field(gt=0, strict=True)
     rating: int = Field(ge=1, le=5, strict=True)
     comment: str | None = Field(default=None, max_length=2000)
-    media_url: HttpUrl | None = None
+    media_url: ReviewMediaURL | None = None
+    media_urls: list[ReviewMediaURL] = Field(default_factory=list, max_length=MAX_REVIEW_MEDIA)
+
+    @model_validator(mode="after")
+    def combined_media_limit(self):
+        refs = {str(url) for url in self.media_urls}
+        if self.media_url:
+            refs.add(str(self.media_url))
+        if len(refs) > MAX_REVIEW_MEDIA:
+            raise ValueError("Attach at most five image or video URLs.")
+        return self
 
 
 class ReviewReplyRequest(BaseModel):
@@ -39,9 +61,17 @@ class ReviewResponse(BaseModel):
     rating: int
     comment: str | None
     media_url: str | None
+    media_urls: list[str]
     seller_reply: str | None
     seller_replied_at: datetime | None
     created_at: datetime
+
+    @field_validator("created_at", "seller_replied_at")
+    @classmethod
+    def utc_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class ProductReviewList(BaseModel):
@@ -66,7 +96,7 @@ class ReviewableItemsResponse(BaseModel):
 
 
 def _review_response(review: Review) -> ReviewResponse:
-    return ReviewResponse.model_validate(review, from_attributes=True)
+    return ReviewResponse(**review.model_dump(), media_urls=review_media_urls(review))
 
 
 def _raise_review_error(exc: ReviewError) -> HTTPException:
@@ -111,6 +141,7 @@ def post_product_review(
             request.rating,
             request.comment or None,
             str(request.media_url) if request.media_url else None,
+            media_urls=[str(url) for url in request.media_urls],
         )
         return ReviewCreatedResponse(data=_review_response(review))
     except ReviewError as exc:

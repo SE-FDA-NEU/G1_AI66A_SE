@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shop Vouchers - Seller Center</title>
+    <link rel="stylesheet" href="/static/admin-portal.css">
+    <link rel="stylesheet" href="/static/seller-vouchers.css">
+    <script src="/static/seller-vouchers.js" defer></script>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="admin-header-content">
+            <div class="admin-brand">
+                <a href="/products" class="brand-link">Mini Marketplace</a>
+                <span class="admin-badge seller-badge">Seller Center</span>
+            </div>
+            <div class="admin-user-info">
+                <a href="/seller/products" class="btn btn-secondary btn-sm">Products</a>
+                <a href="/seller/orders" class="btn btn-secondary btn-sm">Orders</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="admin-container">
+        <section class="portal-views seller-voucher-content">
+            <div class="view-header">
+                <div>
+                    <h1>Shop vouchers</h1>
+                    <p class="subtitle">Create promotions that apply to products in your shop.</p>
+                </div>
+                <button id="new-voucher-button" class="btn btn-primary" type="button">+ Create voucher</button>
+            </div>
+            <p id="voucher-alert" class="voucher-alert" role="alert" hidden></p>
+            <div class="table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Discount</th>
+                            <th>Minimum order</th>
+                            <th>Usage</th>
+                            <th>Valid period</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vouchers-body">
+                        <tr><td colspan="7" class="text-center">Loading shop vouchers...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="voucher-modal" class="modal-overlay" hidden>
+        <div class="modal-dialog">
+            <h2>Create shop voucher</h2>
+            <form id="voucher-form">
+                <div class="form-grid">
+                    <label>Code *
+                        <input id="voucher-code" class="form-input" required minlength="3" maxlength="32"
+                               pattern="[A-Za-z0-9_-]+" autocomplete="off">
+                    </label>
+                    <label>Discount type *
+                        <select id="discount-type" class="form-select">
+                            <option value="PERCENTAGE">Percentage</option>
+                            <option value="FIXED_AMOUNT">Fixed amount</option>
+                            <option value="FREE_SHIPPING">Free shipping</option>
+                        </select>
+                    </label>
+                    <label id="discount-value-group">Discount value *
+                        <input id="discount-value" class="form-input" type="number" min="1" required>
+                        <small id="discount-help">Basis points: 1000 = 10%</small>
+                    </label>
+                    <label>Maximum discount (VND)
+                        <input id="max-discount" class="form-input" type="number" min="1">
+                    </label>
+                    <label>Minimum order value (VND)
+                        <input id="min-order-value" class="form-input" type="number" min="0" value="0">
+                    </label>
+                    <label>Total usage limit
+                        <input id="usage-limit" class="form-input" type="number" min="1">
+                    </label>
+                    <label>Per-customer limit
+                        <input id="per-user-limit" class="form-input" type="number" min="1">
+                    </label>
+                    <label>Starts at *
+                        <input id="starts-at" class="form-input" type="datetime-local" required>
+                    </label>
+                    <label>Ends at *
+                        <input id="ends-at" class="form-input" type="datetime-local" required>
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button id="cancel-voucher-button" type="button" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create voucher</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

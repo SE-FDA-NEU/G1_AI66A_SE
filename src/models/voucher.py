@@ -3,11 +3,13 @@ from datetime import UTC, datetime
 from pydantic import field_validator
 from sqlalchemy import CheckConstraint, event
 from sqlalchemy.orm import validates
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
 class Voucher(SQLModel, table=True):
     __tablename__ = "vouchers"
+    __table_args__ = (UniqueConstraint("code", name="uq_vouchers_code"),)
 
     __table_args__ = (
         CheckConstraint(
@@ -54,7 +56,7 @@ class Voucher(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(max_length=32, unique=True, index=True)
+    code: str = Field(max_length=32, index=True)
     scope: str = Field(default="PLATFORM", max_length=20)
     seller_id: int | None = Field(default=None, foreign_key="users.id", nullable=True)
     discount_type: str = Field(max_length=20)
