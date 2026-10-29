@@ -241,6 +241,15 @@ def test_submit_return_request_conflict_if_already_pending(client, test_setup):
     assert res2.status_code == 409
     assert res2.json()["error"]["code"] == "ERR_CONFLICT"
 
+    with Session(engine) as session:
+        request_id = session.exec(select(ReturnRequest.id)).one()
+        notifications = session.exec(
+            select(Notification).where(
+                Notification.recipient_user_id == test_setup["seller_a"].id
+            )
+        ).all()
+    assert [n.event_key for n in notifications] == [f"return_request:{request_id}:created"]
+
 
 def test_submit_return_request_authorization_checks(client, test_setup):
     other_buyer_headers = _auth(test_setup["buyer_b"])
