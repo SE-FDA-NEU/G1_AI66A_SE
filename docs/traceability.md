@@ -442,8 +442,10 @@ no upload service, notification redesign or changes to backend review eligibilit
 
 ## US16 contract (#108, #133–#137)
 
-Runtime: **Not implemented.** Contract proposed in
-[docs/us16-promotions.md](us16-promotions.md); each task PR confirms or amends its part.
+Runtime: **Partial.** #135 implements the pure pricing service and its tests;
+voucher eligibility/persistence, the quote API and checkout integration remain
+separate tasks. Contract and implemented boundary:
+[docs/us16-promotions.md](us16-promotions.md#23-implemented-calculation-boundary-135).
 
 | Task | Contract section | Evidence required before closing |
 |---|---|---|
@@ -452,6 +454,17 @@ Runtime: **Not implemented.** Contract proposed in
 | #135 pricing and shipping | 2, 4 | Section 2.1 example and 2.2 boundary cases; allocation sums equal the discount |
 | #136 checkout voucher UI | 5.1–5.4 | Quote rendering, apply/remove, stale quote, persisted receipt breakdown on confirmation and `/orders/{orderId}`, seller-scoped breakdown |
 | #137 combo rules | 8 | Deferral or agreed rules recorded before any combo discount |
+
+| #135 requirement | Implementation | Verification in `tests/test_pricing.py` |
+|---|---|---|
+| Per-shop discounts and post-shop platform basis | `PricingLine`, `ItemDiscount`, `price_order` | Contract example; eight stacking combinations; fully discounted shop |
+| Exact proportional allocation and deterministic remainder | `allocate_platform_discount`, integer `divmod` with ascending seller-ID ties | Section 2.2 cases, zero basis, values above float precision; 300 seeded allocations |
+| Shipping/free-shipping and reconciled totals | `SHIPPING_FEE_VND`, `ShippingDiscount`, immutable per-shop/aggregate results | Per-seller fee/cap cases; 433.000 VND example; 100 seeded full orders |
+| Safe calculation within caller-owned transaction | Pure service with no session, writes or global mutable state | Repeatability, input/result immutability, invalid-rule and zero-effect rejection |
+
+Exclusions for #135: voucher persistence/eligibility/usage/migration (#133), seller
+management/UI (#134), quote/revision/checkout/receipt wiring (#136), and combo rules (#137).
+Local calculation completion does not establish story-wide acceptance or CI/review.
 
 
 ## US20 contract (#112, #148–#150)

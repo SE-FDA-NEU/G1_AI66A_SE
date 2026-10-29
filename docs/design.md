@@ -1,3 +1,4 @@
+
 # System Design - Mini Marketplace
 
 This document is the Sprint 2 system design. Each section has an owner issue;
@@ -711,7 +712,6 @@ model; this contract does not assume that every identifier is a UUID.
 | `PATCH /api/v1/cart/items/{item_id}/select` | U (buyer) | Cart row ID; strict boolean `is_selected` | `200 OK`: full cart and selected total | 401/403; 404 missing/other buyer; 409 unavailable; 422 invalid input | US12 item selection |
 | `PATCH /api/v1/cart/select-shop/{seller_id}` | U (buyer) | Seller ID; strict boolean `is_selected` | `200 OK`: atomic shop selection, unavailable rows deselected | 401/403; 404 no rows in this buyer's shop; 422 invalid input | US12 shop selection |
 | `POST /api/v1/orders` | U (buyer) | Header `Idempotency-Key` (1-64 characters); JSON: `{ "recipient_name": "...", "delivery_address": "...", "phone_number": "..." }`; items are read from the authenticated buyer's cart | `201 Created`: order ID, items (`product_id`, `product_code`, `product_name`, `quantity`, purchase-time `unit_price`, `line_total`), total, status, and delivery information; `200 OK` with the same order when the same key and body are replayed | `400 Bad Request` for an empty cart (`ERR_EMPTY_CART`) or a key with surrounding spaces (`ERR_INVALID_KEY`); `422` (`ERR_VALIDATION`) for invalid delivery fields or a missing key; `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `409 Conflict` when a product is unavailable (`ERR_PRODUCT_UNAVAILABLE`), stock changed (`ERR_STOCK_EXCEEDED`), the cart changed (`ERR_CONCURRENCY_CONFLICT`) or the key was used with another body (`ERR_IDEMPOTENCY_CONFLICT`); `500` (`ERR_DATABASE_FAILURE`) | US04 Checkout and order placement |
-| `409 Conflict` | `ERR_VOUCHER_NOT_APPLICABLE` | A requested item voucher yields zero discount, including a zero post-shop basis for platform allocation | US16 pricing service; HTTP mapping belongs to quote/checkout integration |
 | `GET /api/v1/orders/{orderId}` | U (buyer) | Path: integer `orderId` | `200 OK`: the same order shape as checkout, so the confirmation page names each product | `401 Unauthorized`; `403` (`ERR_BUYER_REQUIRED`); `404 Not Found` (`ERR_ORDER_NOT_FOUND`) for a missing order or another buyer's order; `422` for a non-integer id | US04 Order confirmation |
 | `POST /api/v1/seller/products` | S | JSON product body: `name`, `description`, `price` (integer VND), `stock_quantity`, and `image_url` (absolute http(s) URL); seller, code and status come from the server (#81) | `201 Created`: `{ "data": ... }` with the new listing, its generated `code`, seller ownership and `is_active` status | `422 Unprocessable Entity` (`ERR_VALIDATION`) with messages per field in `error.fields` for empty, invalid or out-of-range values; `401 Unauthorized`; `403 Forbidden` for a non-seller account; `409 Conflict` when no unique product code could be assigned; `500` on database failure | US06 Create product listing |
 | `GET /api/v1/seller/orders` | S | Query: `status`, `from`, `to`, `page`, and `limit` (default `20`) | `200 OK`: paginated seller orders (`seller_orders` rows) owned by the authenticated seller only, each with its `id` (the `subOrderId`), parent `order_id`, status, and its order items (product, quantity, unit price) | `400 Bad Request` for an unknown status (`ERR_INVALID_STATUS`), a date that is not ISO (`ERR_INVALID_DATE`) or `from` after `to` (`ERR_INVALID_DATE_RANGE`); `422` (`ERR_VALIDATION`) for invalid `page`/`limit`; `401 Unauthorized`; `403 Forbidden` (`ERR_SELLER_REQUIRED`) for a non-seller account. Success `meta` is `{page, limit, total}` | US08 Seller order management |
@@ -841,6 +841,7 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
+| `409 Conflict` | `ERR_VOUCHER_NOT_APPLICABLE` | A requested item voucher yields zero discount, including a zero post-shop basis for platform allocation | US16 pricing service; HTTP mapping belongs to quote/checkout integration |
 | `409 Conflict` | `ERR_INVALID_PAYMENT_STATE` | Cancellation finds a payment state other than `PAID`, `UNPAID` or `FAILED`; payment reconciliation is required before cancellation, and no cancellation effects are committed | Buyer and seller order cancellation |
 | `422 Unprocessable Entity` | `ERR_VALIDATION` | A field has the wrong format or type, or is missing | All routes |
 | `422 Unprocessable Entity` | `ERR_CATEGORY_PARENT` | The requested parent category does not exist or is inactive | Categories |
@@ -1343,8 +1344,15 @@ response. Seller-product validation retains its original contract.
 
 ## US16 vouchers and shipping contract (#108)
 
-Design only; no voucher, quote or shipping code is on `main` yet. The proposed contract
-for #133–#137 is in [US16 vouchers and shipping](us16-promotions.md): integer-VND
+Partial implementation: #135 adds `services/pricing.py`, a pure integer-VND
+calculator with immutable input/output snapshots, bounded item discounts,
+largest-remainder allocation and flat/per-shop shipping adjustments. It has no
+database access or commit; the checkout coordinator retains transaction ownership.
+The integration boundary and tests are in
+[US16 section 2.3](us16-promotions.md#23-implemented-calculation-boundary-135).
+No quote endpoint or checkout behavior is changed by this service alone.
+
+The contract for #133–#137 is in [US16 vouchers and shipping](us16-promotions.md): integer-VND
 formulas, largest-remainder platform allocation, one shop voucher per seller order plus
 one platform and one free-shipping voucher per checkout, a flat 20.000 ₫ fee per seller
 order under policy `US16-V1`, `POST /api/v1/orders/quote` with a `quote_revision` that

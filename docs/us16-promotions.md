@@ -3,12 +3,13 @@
 Story #108, tasks #133 (voucher model and validation), #134 (seller voucher UI),
 #135 (pricing and shipping), #136 (checkout voucher UI) and #137 (combo rules).
 
-**Status: contract only.** Nothing in this document is implemented on `main` at
-`d939a13ea679179df3472f39058a1c3ea12d7ed5` (after PR #164, the US14 order tracker). The tables, endpoints and
-error codes below are proposals that the owners of #133–#137 confirm or amend in their
-own pull requests. Error codes join `docs/design.md` section 3.4 only in the PR that
-first raises them; `tests/test_ui_docs_contract.py` requires that table to match the
-codes in `src/` exactly.
+**Status: partial implementation.** Task #135 implements the pure calculation
+service in sections 2 and 4, with the integration boundary in section 2.3. It does
+not activate voucher pricing in checkout. The persistence/eligibility, quote API,
+checkout UI and transaction wiring remain assigned to their respective tasks.
+Those portions below are contracts, not evidence of completed integration. Error
+codes join `docs/design.md` section 3.4 only when first raised in code;
+`tests/test_ui_docs_contract.py` requires that table to match `src/` exactly.
 
 ## 1. Ownership and interfaces
 
@@ -20,9 +21,9 @@ codes in `src/` exactly.
 | `src/api/seller_vouchers.py` | Seller-scoped voucher management | #134 |
 | `src/web/static/checkout.js` | One checkout state: address (US13), vouchers, quote, submit | #136 |
 
-The checkout use case keeps its single commit. Helpers receive the request `Session`,
-may `flush`, and leave commit and rollback to `checkout()`, as US13 does for address
-resolution.
+The checkout use case keeps its single commit. Persistence helpers receive the
+request `Session`, may `flush`, and leave commit and rollback to `checkout()`, as
+US13 does for address resolution. The pure pricing service receives no session.
 
 ## 2. Money model
 
@@ -86,6 +87,89 @@ minimum of 300.000 ₫. The shipping voucher is `FREE_SHIPPING` with `max_discou
 | Equal remainders | 100 over `B` = 100 / 100 / 100 (sellers 2, 3, 4) | 34 / 33 / 33 |
 | Zero-basis shop | 999 over `B` = 0 / 1.000 / 3.000 (sellers 2, 3, 4) | 0 / 250 / 749 |
 | Zero total basis | any platform voucher with `sum(B_s)` = 0 | rejected, `ERR_VOUCHER_NOT_APPLICABLE` |
+
+### 2.3 Implemented calculation boundary (#135)
+
+`src/services/pricing.py` owns the integer money calculation. It has no database,
+network, clock or transaction access. The caller passes selected cart snapshots,
+not client-supplied prices, and voucher rules already authorized/validated by
+#133. Dates, minimums, seller ownership and usage limits are not inferred from a
+calculation rule. Numeric/type guards reject malformed rules with `ValueError`;
+they do not replace voucher eligibility validation.
+
+```python
+from src.services.pricing import (
+    ItemDiscount, PricingLine, ShippingDiscount, price_order,
+)
+
+price = price_order(
+    [PricingLine(seller_id=2, quantity=2, unit_price=150_000),
+     PricingLine(seller_id=3, quantity=1, unit_price=200_000)],
+    shop_discounts={2: ItemDiscount("FIXED_AMOUNT", 30_000)},
+    platform_discount=ItemDiscount("PERCENTAGE", 1000, max_discount=50_000),
+    shipping_discount=ShippingDiscount(max_discount=15_000),
+)
+assert price.grand_total == 433_000
+```
+
+- `PricingLine(seller_id, quantity, unit_price)` accepts positive integer seller
+  IDs/quantities and non-negative integer VND prices. Lines are grouped by seller;
+  shipping is charged once per seller order, including an item subtotal of zero.
+- `ItemDiscount(discount_type, discount_value, max_discount=None)` is a frozen
+  calculation snapshot. It accepts a positive fixed amount, or 1–10000 basis
+  points with an optional positive cap. Fixed amounts do not have a separate cap.
+  After #133 validation, copy those three fields from the resolved voucher. A shop
+  mapping may contain only sellers in the selected lines; one mapping entry is
+  the shop's single voucher slot.
+- `ShippingDiscount(max_discount=None)` represents an eligible platform
+  `FREE_SHIPPING` voucher. Omission means no shipping discount; an instance with
+  no cap covers the fee of every seller order. A cap is applied independently to
+  each seller order, not once to the checkout.
+- `price_order` returns an immutable `OrderPrice`. Its `seller_orders` tuple is
+  sorted by seller ID. Each row contains the six monetary snapshots from section
+  6 plus seller ID and policy version. The order has aggregate `subtotal`,
+  `shop_discount`, `platform_discount`, `shipping_fee`, `shipping_discount` and
+  `grand_total`; allocations and totals reconcile exactly.
+- `calculate_item_discount` and `allocate_platform_discount` expose the pure
+  arithmetic for reuse. Allocation uses largest remainders and seller-ID ties;
+  zero-basis shops receive zero and integer precision is retained above `2**53`.
+- An empty selection raises `PricingError` with `code=ERR_EMPTY_CART` and
+  `status=400`. A requested item voucher producing zero discount (including a
+  zero platform basis) raises `ERR_VOUCHER_NOT_APPLICABLE`, status 409. The later
+  quote/checkout adapter maps these errors into the existing API envelope. This
+  task adds no HTTP endpoint or new response body.
+
+For #136, read current cart/voucher state, validate eligibility, and call the same
+calculator for quote and inside checkout's existing transaction. Consume usages
+and persist the returned snapshots only in that transaction. A calculation or
+later write failure must roll back the coordinator's work; this service never
+commits or restores anything. Historical receipts continue to read stored facts.
+Legacy checkout behavior is unchanged until the section 5.4 integration phase.
+
+Verification: `tests/test_pricing.py` covers the worked example, the eight voucher
+stacking combinations, discount/cap boundaries, invalid numeric inputs, empty and
+zero-effect cases, free shipping per shop, deterministic ordering and immutable
+snapshots. Seeded checks exercise 300 allocations and 100 full orders, asserting
+conservation, non-negative bounded components and seller/order reconciliation.
+
+```powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_pricing.py tests/test_checkout.py tests/test_ui_docs_contract.py -q
+python -m ruff check src/services/pricing.py tests/test_pricing.py
+```
+
+Local verification on 2026-10-29 (Windows, CPython 3.12.16): **80 pricing tests
+passed**, with 100% statement coverage of `src/services/pricing.py`; the full
+suite reported **919 passed, 1 skipped, 1 warning** in 364.81 seconds. The optional
+catalog browser module was skipped because the README dependency set does not
+install Playwright; the warning is the existing Starlette/httpx deprecation.
+Ruff passed for `src` and the new test file. The restricted runner initially
+could not access pytest's temporary fixture directory, so the full suite was
+rerun successfully outside that restriction with a fresh temporary base.
+
+AI assistance: OpenAI Codex assisted with requirement/code inspection, the pure
+service, tests and documentation. CI, human review, clean-clone/user validation
+and merge are separate delivery steps, not established by these local tests.
 
 ## 3. Voucher rules
 
@@ -361,8 +445,8 @@ under a new policy version.
 
 | Decision | Proposal | Confirm in |
 |---|---|---|
-| Shipping fee | Flat 20.000 ₫ per seller order, policy `US16-V1` | #135 |
-| Free shipping | Platform-funded, separate slot, per-seller-order cap | #133, #135 |
+| Shipping fee | Confirmed by #135 calculator: flat 20.000 ₫ per seller order, policy `US16-V1`; activation belongs to #136 | #135 |
+| Free shipping | #135 calculation uses a separate platform-funded slot with a per-seller-order cap; eligibility remains in #133 | #133, #135 |
 | Restore after return or refund | No restore | #133, #137 |
 | Combo promotions | Deferred | #137 |
 | Legacy checkout without a quote | Accepted until #136 merges, then rejected after replay | #136 |
