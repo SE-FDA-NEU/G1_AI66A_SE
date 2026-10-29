@@ -20,22 +20,21 @@ def record_transition(
     actor: User,
     note: str | None = None,
     occurred_at: datetime | None = None,
-) -> None:
+) -> OrderHistory:
     """Snapshot the authenticated actor's role when the transition happens."""
-    append_history(
-        session,
-        OrderHistory(
-            seller_order_id=seller_order_id,
-            from_status=from_status,
-            to_status=to_status,
-            changed_by_user_id=actor.id,
-            actor_role=actor.role,
-            note=note,
-            created_at=(
-                order_timestamp_utc(occurred_at) if occurred_at is not None else datetime.now(UTC)
-            ),
+    event = OrderHistory(
+        seller_order_id=seller_order_id,
+        from_status=from_status,
+        to_status=to_status,
+        changed_by_user_id=actor.id,
+        actor_role=actor.role,
+        note=note,
+        created_at=(
+            order_timestamp_utc(occurred_at) if occurred_at is not None else datetime.now(UTC)
         ),
     )
+    append_history(session, event)
+    return event
 
 
 def history_by_seller_order(

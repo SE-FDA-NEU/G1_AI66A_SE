@@ -5,6 +5,7 @@ from sqlalchemy.dialects.sqlite import insert
 from sqlmodel import Session, select
 
 from src.models.notification import Notification
+from src.models.order_history import OrderHistory
 
 
 def create_notification(
@@ -25,6 +26,25 @@ def create_notification(
             target_path=target_path,
         )
         .on_conflict_do_nothing(index_elements=["event_key"])
+    )
+
+
+def notify_transition(
+    session: Session,
+    history: OrderHistory,
+    recipient_user_id: int,
+    order_id: int,
+    message: str,
+    target_path: str,
+) -> None:
+    """Key on the history row: a retry is deduplicated, a repeated status is not."""
+    create_notification(
+        session,
+        recipient_user_id=recipient_user_id,
+        order_id=order_id,
+        event_key=f"order-history:{history.id}:recipient:{recipient_user_id}:event:status",
+        message=message,
+        target_path=target_path,
     )
 
 

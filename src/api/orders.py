@@ -11,6 +11,7 @@ from src.models.order import Order
 from src.models.seller_order import SellerOrder
 from src.schemas.order_status import OrderStatusChange
 from src.schemas.orders import CheckoutInput, OrderResponse
+from src.services.notifications import notify_transition
 from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
 from src.services.order_workflow import WorkflowError, buyer_cancellation, seller_status_change
@@ -132,7 +133,7 @@ def update_buyer_order_status(
                 sub_order.status = "COMPLETED"
                 sub_order.completed_at = now
                 session.add(sub_order)
-                record_transition(
+                history = record_transition(
                     session,
                     seller_order_id=sub_order.id,
                     from_status=old_sub_status,
@@ -143,6 +144,17 @@ def update_buyer_order_status(
                         else "Delivery confirmed by buyer."
                     ),
                     occurred_at=now,
+                )
+                notify_transition(
+                    session,
+                    history,
+                    recipient_user_id=sub_order.seller_id,
+                    order_id=order.id,
+                    message=(
+                        f"The buyer confirmed receipt of seller order #{sub_order.id} "
+                        f"in order #{order.id}."
+                    ),
+                    target_path="/seller/orders",
                 )
         order.status = "COMPLETED"
         order.completed_at = now
