@@ -1378,6 +1378,17 @@ restoration rules tied to the US14 cancellation paths (#106, PR #164). Section 3
 keep today's hash and pricing until the checkout UI (#136) sends quotes.
 
 
+## US17 buyer return-request presentation (#109, #139)
+
+The order page loads the buyer-specific `buyer-returns.js` controller before
+`order.js`. It uses the existing authenticated receipt/return APIs, keeps request
+history separate from form feedback, and never decides refunds or inventory.
+Context guards prevent a previous order/account response from updating the buyer
+UI; pending submission locks and explicit read-only reconciliation avoid blind
+POST retries. Seller/admin decision handling remains in the existing tracker.
+The [UI boundary](us17-buyer-returns.md) records the data contract; the
+[test matrix](testing.md#task-139-buyer-return-request-ui) owns verification cases.
+
 ## US20 payments and escrow settlement contract (#112)
 
 Design only. `payment_status` and `escrow_status` already exist on `orders` and

@@ -424,3 +424,13 @@ metrics, a selectable SVG time series with exact-value table, date/day/month
 filters and a units-based product ranking. Loading, empty, error and current-API
 fallback states remain explicit. See the [scope and API boundary](us18-seller-analytics-ui.md)
 and [single verification matrix](testing.md#task-143-seller-analytics-charts-and-ranking).
+
+### US17 buyer return requests (#139)
+
+On either order-detail alias, buyers can request a return/refund for a delivered
+shop order, enter reason/evidence, correct validation errors and read every
+request's status. Drafts remain attached to each shop, duplicate clicks are locked,
+and uncertain submissions require a status read before another attempt.
+See the [buyer UI contract and screenshots](us17-buyer-returns.md) and
+[test matrix](testing.md#task-139-buyer-return-request-ui). Existing seller/admin
+decisions and backend refund/restock rules are unchanged.

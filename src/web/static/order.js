@@ -101,17 +101,20 @@ const elements = {
   btnRejectReturn: document.getElementById("btn-reject-return"),
   decisionNotesInput: document.getElementById("decision-notes-input"),
   decisionRestockCheckbox: document.getElementById("decision-restock-checkbox"),
-  buyerReturnFormCard: document.getElementById("buyer-return-form-card"),
-  buyerReturnForm: document.getElementById("buyer-return-form"),
-  returnReasonInput: document.getElementById("return-reason-input"),
-  returnEvidenceInput: document.getElementById("return-evidence-input"),
-  returnSellerOrderGroup: document.getElementById("return-seller-order-group"),
-  returnSellerOrderSelect: document.getElementById("return-seller-order-select"),
   returnRequestsList: document.getElementById("return-requests-list"),
   returnSingleRequestDetails: document.getElementById("return-single-request-details"),
 };
 
 let currentOrder = null;
+let orderLoadRevision = 0;
+const buyerReturns = window.BuyerReturns.create({
+  getToken,
+  onSubmitted: refreshOrderAfterReturn,
+  onPending: pending => {
+    elements.confirmDeliveryBtn.disabled = pending;
+    elements.orderSelect.disabled = pending;
+  },
+});
 
 function getToken() {
   return localStorage.getItem("access_token") || localStorage.getItem("token");
@@ -163,8 +166,10 @@ async function request(url, options = {}) {
   } catch {
     throw new Error("Network error. Please check your connection and retry.");
   }
+  if (getToken() !== token) return null;
   if (response.status === 401) {
     localStorage.removeItem("access_token");
+    localStorage.removeItem("token");
     window.location.replace(`/login?return_to=${encodeURIComponent(window.location.pathname)}`);
     return null;
   }
@@ -318,15 +323,19 @@ let pollTimer = null;
 function startPolling(orderId) {
   if (pollTimer) clearInterval(pollTimer);
   if (!orderId) return;
+  const revision = orderLoadRevision;
+  const token = getToken();
 
   pollTimer = setInterval(async () => {
     try {
       const payload = await request(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+      if (revision !== orderLoadRevision || getToken() !== token || currentOrder?.id !== orderId) return;
       if (payload && payload.data) {
         const updated = payload.data;
         if (
           !currentOrder ||
           currentOrder.status !== updated.status ||
+          JSON.stringify(currentOrder.sub_orders) !== JSON.stringify(updated.sub_orders) ||
           currentOrder.tracking_number !== updated.tracking_number
         ) {
           renderOrder(updated);
@@ -656,6 +665,10 @@ window.addEventListener("load", () => {
 
 async function loadOrder(specifiedId) {
   const id = specifiedId || getOrderId();
+  const revision = ++orderLoadRevision;
+  const token = getToken();
+  if (!id || String(currentOrder?.id) !== String(id)) buyerReturns.reset();
+  else buyerReturns.hide();
   const user = getCurrentUser();
   elements.errorMsg.hidden = true;
   elements.statusMsg.hidden = false;
@@ -686,6 +699,7 @@ async function loadOrder(specifiedId) {
       } catch (_) {}
     }
 
+    if (revision !== orderLoadRevision || getToken() !== token) return;
     if (id) {
       payload = await request(`/api/v1/orders/${encodeURIComponent(id)}`);
     } else {
@@ -705,18 +719,47 @@ async function loadOrder(specifiedId) {
       }
     }
 
-    if (!payload || !payload.data) return;
+    if (revision !== orderLoadRevision || getToken() !== token || !payload?.data) return;
     elements.statusMsg.hidden = true;
     renderOrder(payload.data);
     updateOrderSwitcher(availableOrders, payload.data.id);
     startPolling(payload.data.id);
   } catch (err) {
+    if (revision !== orderLoadRevision || getToken() !== token) return;
     elements.statusMsg.hidden = true;
     elements.errorMsg.hidden = false;
     elements.errorMsg.textContent = err.message;
     elements.retryBtn.hidden = false;
   }
 }
+
+async function refreshOrderAfterReturn(orderId) {
+  const revision = orderLoadRevision;
+  const token = getToken();
+  try {
+    const payload = await request(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+    if (revision !== orderLoadRevision || getToken() !== token || currentOrder?.id !== orderId) return;
+    if (payload?.data) {
+      renderOrder(payload.data);
+      startPolling(orderId);
+    }
+  } catch (_) {
+    if (revision !== orderLoadRevision || getToken() !== token) return;
+    elements.errorMsg.textContent = "Your return request was submitted, but order details could not refresh. Select Retry.";
+    elements.errorMsg.hidden = false;
+    elements.retryBtn.hidden = false;
+  }
+}
+
+window.addEventListener("popstate", () => loadOrder());
+window.addEventListener("storage", event => {
+  if (event.key && !["access_token", "token"].includes(event.key)) return;
+  buyerReturns.reset();
+  currentOrder = null;
+  for (const element of [elements.milestonesCard, elements.detailsCard, elements.itemsCard,
+    elements.actionsCard, elements.summaryMetricsBar, elements.orderSwitcherWrap]) element.hidden = true;
+  void loadOrder();
+});
 
 function updateOrderSwitcher(orders, currentId) {
   if (!elements.orderSwitcherWrap || !elements.orderSelect) return;
@@ -813,7 +856,7 @@ elements.sellerCancelBtn.addEventListener("click", () =>
   handleAction("CANCELLED", "Cancel this order? Restores item inventory to stock.")
 );
 
-elements.retryBtn.addEventListener("click", loadOrder);
+elements.retryBtn.addEventListener("click", () => loadOrder());
 
 loadOrder();
 
@@ -822,58 +865,17 @@ let activeReturnRequest = null;
 async function loadReturnRequests(order) {
   if (!order || !order.id) return;
   const user = getCurrentUser();
+  if (user?.role === "buyer") {
+    await buyerReturns.update(order);
+    return;
+  }
+  buyerReturns.reset();
   try {
+    const token = getToken();
     const res = await request(`/api/v1/orders/${encodeURIComponent(order.id)}/returns`);
+    if (token !== getToken() || currentOrder?.id !== order.id) return;
     const returnRequests = (res && res.data) ? res.data : [];
     activeReturnRequest = returnRequests.length > 0 ? returnRequests[0] : null;
-
-    // Build sub-orders list
-    let subOrders = order.sub_orders || [];
-    if (!subOrders.length && order.items && order.items.length) {
-      const seen = new Set();
-      subOrders = [];
-      order.items.forEach((it) => {
-        if (!seen.has(it.seller_order_id)) {
-          seen.add(it.seller_order_id);
-          subOrders.push({
-            id: it.seller_order_id,
-            status: it.seller_order_status || order.status,
-          });
-        }
-      });
-    }
-
-    const returnMap = new Map();
-    returnRequests.forEach((r) => returnMap.set(r.seller_order_id, r));
-
-    // Determine sub-orders eligible for return
-    const eligibleSubOrders = subOrders.filter((so) => {
-      const isDelivered = (so.status === "DELIVERED") || (!so.status && order.status === "DELIVERED");
-      return isDelivered && !returnMap.has(so.id);
-    });
-
-    // Populate Buyer Return Request Form
-    if (elements.buyerReturnFormCard) {
-      if (user && user.role === "buyer" && eligibleSubOrders.length > 0) {
-        elements.buyerReturnFormCard.hidden = false;
-        if (elements.returnSellerOrderSelect) {
-          elements.returnSellerOrderSelect.replaceChildren();
-          eligibleSubOrders.forEach((so) => {
-            const opt = document.createElement("option");
-            opt.value = String(so.id);
-            const items = (order.items || []).filter((it) => it.seller_order_id === so.id);
-            const summary = items.map((it) => `${it.product_name} × ${it.quantity}`).join(", ");
-            opt.textContent = `Sub-order #${so.id} (${summary || "Item"}) — DELIVERED`;
-            elements.returnSellerOrderSelect.appendChild(opt);
-          });
-        }
-        if (elements.returnSellerOrderGroup) {
-          elements.returnSellerOrderGroup.hidden = subOrders.length <= 1;
-        }
-      } else {
-        elements.buyerReturnFormCard.hidden = true;
-      }
-    }
 
     // Display Return Requests Status per seller order
     if (elements.returnStatusCard) {
@@ -1007,43 +1009,6 @@ async function loadReturnRequests(order) {
       }
     }
   } catch (_) {}
-}
-
-if (elements.buyerReturnForm) {
-  elements.buyerReturnForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const reason = (elements.returnReasonInput && elements.returnReasonInput.value || "").trim();
-    const evidence = (elements.returnEvidenceInput && elements.returnEvidenceInput.value || "").trim();
-    if (!reason || !evidence) return;
-    const orderId = (currentOrder && currentOrder.id) || getOrderId();
-    if (!orderId) return;
-
-    const sellerOrderId = elements.returnSellerOrderSelect ? elements.returnSellerOrderSelect.value : null;
-    const body = { reason, evidence };
-    if (sellerOrderId) {
-      body.seller_order_id = Number(sellerOrderId);
-    }
-
-    elements.statusMsg.hidden = false;
-    elements.statusMsg.textContent = "Submitting return request...";
-    elements.errorMsg.hidden = true;
-
-    try {
-      const res = await request(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      if (res && res.data) {
-        elements.statusMsg.textContent = "Return request submitted. Escrow release paused pending review.";
-        loadOrder();
-        setTimeout(() => { elements.statusMsg.hidden = true; }, 4000);
-      }
-    } catch (err) {
-      elements.statusMsg.hidden = true;
-      elements.errorMsg.hidden = false;
-      elements.errorMsg.textContent = err.message;
-    }
-  });
 }
 
 async function handleReturnDecision(action, reqId) {

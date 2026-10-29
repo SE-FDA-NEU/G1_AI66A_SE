@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import case, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.models.order import Order
@@ -209,8 +210,14 @@ def submit_return_request(
     session.add(ret_req)
     try:
         session.flush()
-    except Exception as exc:
+    except IntegrityError as exc:
         session.rollback()
+        integrity_message = str(exc)
+        if not (
+            "uq_return_requests_seller_order_pending" in integrity_message
+            or "return_requests.seller_order_id" in integrity_message
+        ):
+            raise
         raise ReturnError(
             "ERR_CONFLICT",
             "A return request is already pending review for this order.",
