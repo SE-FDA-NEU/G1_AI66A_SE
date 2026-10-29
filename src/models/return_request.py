@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Index, text
+from sqlalchemy import CheckConstraint, Index, text
 from sqlmodel import Field, SQLModel
 
 
@@ -9,6 +9,10 @@ class ReturnRequest(SQLModel, table=True):
 
     __tablename__ = "return_requests"
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="ck_return_requests_status",
+        ),
         Index(
             "uq_return_requests_seller_order_pending",
             "seller_order_id",
