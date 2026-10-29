@@ -11,7 +11,7 @@ Scenarios:
   3. Low-stock alerts with configurable threshold
   4. Auth / access-control (seller-only)
   5. Edge cases: empty data, bad params
-  6. Revenue period semantics: attribution to order creation date
+  6. Revenue period semantics: attribution to seller-order completion date
 
 Isolation strategy
 ------------------
@@ -427,6 +427,71 @@ class TestRevenueAnalytics:
             "cancellation_rate",
         } <= bucket.keys()
         assert body["meta"]["group_by"] == "daily"
+
+    def test_financial_metrics_have_expected_values(self, client: TestClient, us18_data):
+        seller = us18_data["seller"]
+        today = datetime.now(UTC).date().isoformat()
+        body = client.get(
+            f"{BASE}?from={today}&to={today}&period=daily",
+            headers=_auth(seller),
+        ).json()
+        bucket = body["data"][0]
+        assert bucket["gross_order_value"] == 500_000
+        assert bucket["completed_revenue"] == 400_000
+        assert bucket["pending_escrow_revenue"] == 100_000
+        assert bucket["cancellation_rate"] == 0.0
+        assert body["meta"]["gross_order_value"] == 500_000
+
+    def test_weekly_metrics_use_the_weekly_bucket(self, client: TestClient, us18_data):
+        seller = us18_data["seller"]
+        today = datetime.now(UTC).date()
+        monday = today - timedelta(days=today.weekday())
+        sunday = monday + timedelta(days=6)
+        body = client.get(
+            f"{BASE}?period=weekly&from={monday}&to={sunday}",
+            headers=_auth(seller),
+        ).json()
+        assert body["meta"]["group_by"] == "weekly"
+        assert len(body["data"]) == 1
+        assert body["data"][0]["gross_order_value"] == 1_000_000
+        assert body["data"][0]["completed_revenue"] == 900_000
+        assert body["data"][0]["pending_escrow_revenue"] == 100_000
+
+    def test_cancelled_orders_do_not_count_as_pending_escrow(
+        self, client: TestClient, us18_data
+    ):
+        seller = us18_data["seller"]
+        seller_order_id = us18_data["seller_order_ids"][2]
+        with Session(engine) as session:
+            seller_order = session.get(SellerOrder, seller_order_id)
+            seller_order.status = "CANCELLED"
+            session.add(seller_order)
+            session.commit()
+        try:
+            today = datetime.now(UTC).date().isoformat()
+            body = client.get(
+                f"{BASE}?from={today}&to={today}",
+                headers=_auth(seller),
+            ).json()
+            bucket = body["data"][0]
+            assert bucket["pending_escrow_revenue"] == 0
+            assert bucket["cancellation_rate"] == 50.0
+        finally:
+            with Session(engine) as session:
+                seller_order = session.get(SellerOrder, seller_order_id)
+                seller_order.status = "PENDING"
+                session.add(seller_order)
+                session.commit()
+
+    def test_financial_metrics_are_seller_scoped(self, client: TestClient, us18_data):
+        seller = us18_data["seller2"]
+        today = datetime.now(UTC).date().isoformat()
+        body = client.get(
+            f"{BASE}?from={today}&to={today}",
+            headers=_auth(seller),
+        ).json()
+        assert body["meta"]["gross_order_value"] == 0
+        assert body["meta"]["completed_revenue"] == 0
 
     def test_invalid_group_by_returns_400(self, client: TestClient, us18_data):
         seller = us18_data["seller"]

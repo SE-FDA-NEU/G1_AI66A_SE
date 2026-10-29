@@ -24,7 +24,6 @@ from src.models.seller_order import SellerOrder
 # ---------------------------------------------------------------------------
 
 Period = Literal["daily", "weekly", "monthly"]
-FinancialGroup = Literal["daily", "monthly"]
 
 LOW_STOCK_DEFAULT_THRESHOLD = 5
 
@@ -157,17 +156,18 @@ def get_financial_summary(
     seller_id: int,
     start_date: date,
     end_date: date,
-    group_by: FinancialGroup,
+    group_by: Period,
 ) -> list[dict]:
-    """Return seller-scoped financial metrics grouped by order creation date."""
+    """Return seller-scoped financial metrics on the same timeline as revenue."""
     start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
     end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     rows = session.exec(
-        select(SellerOrder)
+        select(SellerOrder, Order)
+        .join(Order, Order.id == SellerOrder.order_id)
         .where(
             SellerOrder.seller_id == seller_id,
-            SellerOrder.created_at >= start_dt,
-            SellerOrder.created_at <= end_dt,
+            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) >= start_dt,
+            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) <= end_dt,
         )
     ).all()
 
@@ -185,17 +185,22 @@ def get_financial_summary(
             "total_orders": 0,
         }
 
-    for seller_order in rows:
-        order_date = seller_order.created_at.date()
+    for seller_order, order in rows:
+        order_date = (
+            seller_order.completed_at or seller_order.created_at
+        ).date()
         bucket = buckets.get(_period_start(order_date, group_by))
         if bucket is None:
             continue
-        amount = seller_order.total_amount
+        amount = order.total_amount
         bucket["gross_order_value"] += amount
         bucket["total_orders"] += 1
         if seller_order.status == "COMPLETED":
             bucket["completed_revenue"] += amount
-        if seller_order.escrow_status in {"HELD", "PAUSED"}:
+        if (
+            seller_order.status not in {"COMPLETED", "CANCELLED"}
+            and seller_order.escrow_status in {"HELD", "PAUSED"}
+        ):
             bucket["pending_escrow_revenue"] += amount
         if seller_order.status == "CANCELLED":
             bucket["cancelled_orders"] += 1
@@ -204,10 +209,56 @@ def get_financial_summary(
         total_orders = bucket["total_orders"]
         bucket["cancellation_rate"] = (
             round(bucket["cancelled_orders"] * 100 / total_orders, 2)
-            if total_orders
-            else 0
+            if total_orders else 0.0
         )
     return [buckets[key] for key in sorted(buckets)]
+
+
+def get_analytics_summary(
+    session: Session,
+    seller_id: int,
+    start_date: date,
+    end_date: date,
+    period: Period,
+) -> tuple[list[dict], dict]:
+    """Merge the time series and aggregate financial metrics for one seller."""
+    revenue_rows = get_revenue_summary(
+        session, seller_id, start_date, end_date, period
+    )
+    financial_rows = get_financial_summary(
+        session, seller_id, start_date, end_date, period
+    )
+    financial_by_start = {row["period_start"]: row for row in financial_rows}
+    data = []
+    for row in revenue_rows:
+        financial = financial_by_start.get(row["period_start"], {})
+        data.append(
+            {
+                **row,
+                "gross_order_value": financial.get("gross_order_value", 0),
+                "completed_revenue": financial.get("completed_revenue", 0),
+                "pending_escrow_revenue": financial.get("pending_escrow_revenue", 0),
+                "cancellation_rate": financial.get("cancellation_rate", 0.0),
+            }
+        )
+    total_orders = sum(row["total_orders"] for row in financial_rows)
+    meta = {
+        "group_by": period,
+        "gross_order_value": sum(row["gross_order_value"] for row in financial_rows),
+        "completed_revenue": sum(row["completed_revenue"] for row in financial_rows),
+        "pending_escrow_revenue": sum(
+            row["pending_escrow_revenue"] for row in financial_rows
+        ),
+        "cancellation_rate": (
+            round(
+                sum(row["cancelled_orders"] for row in financial_rows) * 100 / total_orders,
+                2,
+            )
+            if total_orders
+            else 0.0
+        ),
+    }
+    return data, meta
 
 
 # ---------------------------------------------------------------------------

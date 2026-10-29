@@ -16,10 +16,9 @@ from src.database import SessionDep
 from src.errors import error_detail
 from src.services.seller_analytics import (
     LOW_STOCK_DEFAULT_THRESHOLD,
+    get_analytics_summary,
     get_best_sellers,
-    get_financial_summary,
     get_low_stock_products,
-    get_revenue_summary,
 )
 
 router = APIRouter(prefix="/seller/analytics", tags=["Seller analytics"])
@@ -141,14 +140,13 @@ def get_analytics(
     to_date: str | None = Query(default=None, alias="to", description="YYYY-MM-DD"),
     period: str = Query(default="daily", description="daily | weekly | monthly"),
     group_by: str | None = Query(default=None, description="day | month"),
-    from_date_param: str | None = Query(default=None, alias="from_date"),
-    to_date_param: str | None = Query(default=None, alias="to_date"),
 ) -> RevenueAnalyticsResponse:
-    """Return time-bucketed revenue and order counts for the authenticated seller.
+    """Return seller-scoped financial metrics grouped by the requested period.
 
     - **from** / **to**: inclusive date range (default: last 30 days).
     - **period**: grouping granularity — `daily`, `weekly`, or `monthly`.
-    - Only **COMPLETED** seller orders are included in revenue figures.
+    - **group_by**: optional `day`/`month` alias for daily/monthly grouping.
+    - `cancellation_rate` is a percentage from 0 to 100.
     """
     group_by = _resolve_group_by(group_by)
     if period not in ("daily", "weekly", "monthly"):
@@ -156,39 +154,12 @@ def get_analytics(
             "ERR_INVALID_PERIOD",
             "period must be one of: daily, weekly, monthly.",
         )
-    start, end = _resolve_date_range(
-        from_date or from_date_param,
-        to_date or to_date_param,
-    )
+    start, end = _resolve_date_range(from_date, to_date)
     effective_period = group_by or period
-    rows = get_revenue_summary(
-        session,
-        seller.id,
-        start,
-        end,
-        effective_period,  # type: ignore[arg-type]
+    rows, financial_meta = get_analytics_summary(
+        session, seller.id, start, end, effective_period  # type: ignore[arg-type]
     )
-    financial_group = group_by or ("monthly" if period == "monthly" else "daily")
-    financial_rows = get_financial_summary(
-        session,
-        seller.id,
-        start,
-        end,
-        financial_group,  # type: ignore[arg-type]
-    )
-    financial_by_start = {row["period_start"]: row for row in financial_rows}
-    data = []
-    for row in rows:
-        financial = financial_by_start.get(row["period_start"], {})
-        data.append(
-            RevenuePeriod(
-                **row,
-                gross_order_value=financial.get("gross_order_value", 0),
-                completed_revenue=financial.get("completed_revenue", 0),
-                pending_escrow_revenue=financial.get("pending_escrow_revenue", 0),
-                cancellation_rate=financial.get("cancellation_rate", 0),
-            )
-        )
+    data = [RevenuePeriod(**row) for row in rows]
     total_revenue = sum(r.revenue for r in data)
     total_orders = sum(r.orders for r in data)
     total_items = sum(r.items_sold for r in data)
@@ -201,20 +172,7 @@ def get_analytics(
             "total_revenue": total_revenue,
             "total_orders": total_orders,
             "total_items_sold": total_items,
-            "group_by": financial_group,
-            "gross_order_value": sum(r.gross_order_value for r in data),
-            "completed_revenue": sum(r.completed_revenue for r in data),
-            "pending_escrow_revenue": sum(r.pending_escrow_revenue for r in data),
-            "cancellation_rate": (
-                round(
-                    sum(row["cancelled_orders"] for row in financial_rows)
-                    * 100
-                    / sum(row["total_orders"] for row in financial_rows),
-                    2,
-                )
-                if sum(row["total_orders"] for row in financial_rows)
-                else 0
-            ),
+            **financial_meta,
         },
     )
 
