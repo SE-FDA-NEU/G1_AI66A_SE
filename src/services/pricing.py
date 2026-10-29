@@ -5,16 +5,12 @@ ownership, dates, minimums and usage limits by #133. Checkout (#136) owns that
 validation, persistence and its single commit; this module only calculates money.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 BASIS_POINTS = 10_000
-
-
 SHIPPING_FEE_VND = 20_000
-
-
 PRICING_POLICY_VERSION = "US16-V1"
 
 
@@ -134,3 +130,83 @@ def allocate_platform_discount(discount: int, bases: Mapping[int, int]) -> dict[
     for seller_id in ranked[:remaining]:
         allocated[seller_id] += 1
     return allocated
+
+
+def _applied_item_discount(rule: ItemDiscount | None, basis: int, slot: str) -> int:
+    if rule is None:
+        return 0
+    discount = calculate_item_discount(rule, basis)
+    if discount == 0:
+        raise PricingError(
+            "ERR_VOUCHER_NOT_APPLICABLE", f"The {slot} voucher yields zero item discount."
+        )
+    return discount
+
+
+def price_order(
+    lines: Iterable[PricingLine],
+    *,
+    shop_discounts: Mapping[int, ItemDiscount] | None = None,
+    platform_discount: ItemDiscount | None = None,
+    shipping_discount: ShippingDiscount | None = None,
+) -> OrderPrice:
+    """Price selected lines in shop -> platform -> shipping order without side effects.
+
+    Stable seller ordering and immutable results make the same snapshots yield
+    the same price for quote and transactional checkout. This does not authorize
+    a voucher, consume it, or re-price any historical order.
+    """
+    subtotals: dict[int, int] = {}
+    for line in lines:
+        subtotals[line.seller_id] = (
+            subtotals.get(line.seller_id, 0) + line.quantity * line.unit_price
+        )
+    if not subtotals:
+        raise PricingError("ERR_EMPTY_CART", "Select at least one item for checkout.", 400)
+
+    shop_rules = dict(shop_discounts or {})
+    for seller_id in shop_rules:
+        _check_integer(seller_id, "seller_id", 1)
+        if seller_id not in subtotals:
+            raise ValueError("Shop discount seller must have selected lines in this order.")
+    shop_amounts = {
+        seller_id: _applied_item_discount(shop_rules.get(seller_id), subtotal, "shop")
+        for seller_id, subtotal in subtotals.items()
+    }
+    bases = {
+        seller_id: subtotal - shop_amounts[seller_id] for seller_id, subtotal in subtotals.items()
+    }
+    platform_amount = _applied_item_discount(platform_discount, sum(bases.values()), "platform")
+    platform_amounts = allocate_platform_discount(platform_amount, bases)
+
+    shipping_amount = 0
+    if shipping_discount is not None:
+        shipping_amount = min(
+            SHIPPING_FEE_VND,
+            shipping_discount.max_discount
+            if shipping_discount.max_discount is not None
+            else SHIPPING_FEE_VND,
+        )
+    seller_orders = tuple(
+        SellerOrderPrice(
+            seller_id=seller_id,
+            subtotal=subtotals[seller_id],
+            shop_discount=shop_amounts[seller_id],
+            platform_discount=platform_amounts[seller_id],
+            shipping_fee=SHIPPING_FEE_VND,
+            shipping_discount=shipping_amount,
+            total_amount=(
+                bases[seller_id] - platform_amounts[seller_id] + SHIPPING_FEE_VND - shipping_amount
+            ),
+        )
+        for seller_id in sorted(subtotals)
+    )
+    return OrderPrice(
+        seller_orders=seller_orders,
+        subtotal=sum(row.subtotal for row in seller_orders),
+        shop_discount=sum(row.shop_discount for row in seller_orders),
+        platform_discount=platform_amount,
+        shipping_fee=sum(row.shipping_fee for row in seller_orders),
+        shipping_discount=sum(row.shipping_discount for row in seller_orders),
+        grand_total=sum(row.total_amount for row in seller_orders),
+    )
