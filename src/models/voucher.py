@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from pydantic import field_validator
 from sqlalchemy import CheckConstraint
 from sqlmodel import Field, SQLModel
 
@@ -20,6 +21,22 @@ class Voucher(SQLModel, table=True):
         CheckConstraint(
             "(discount_type != 'FREE_SHIPPING') OR (scope = 'PLATFORM')",
             name="ck_vouchers_free_shipping_platform",
+        ),
+        CheckConstraint(
+            "(discount_type = 'FIXED_AMOUNT' AND discount_value > 0) "
+            "OR (discount_type = 'PERCENTAGE' AND discount_value >= 1 AND discount_value <= 10000) "
+            "OR (discount_type = 'FREE_SHIPPING' AND discount_value = 0)",
+            name="ck_vouchers_discount_value_bounds",
+        ),
+        CheckConstraint(
+            "(max_discount IS NULL OR max_discount > 0) "
+            "AND ((discount_type IN ('PERCENTAGE', 'FREE_SHIPPING')) OR max_discount IS NULL)",
+            name="ck_vouchers_max_discount",
+        ),
+        CheckConstraint(
+            "(usage_limit IS NULL OR usage_limit > 0) "
+            "AND (per_user_limit IS NULL OR per_user_limit > 0)",
+            name="ck_vouchers_limits",
         ),
         CheckConstraint(
             "starts_at < ends_at",
@@ -51,3 +68,13 @@ class Voucher(SQLModel, table=True):
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("starts_at", "ends_at", mode="after")
+    @classmethod
+    def _normalize_utc(cls, v: datetime) -> datetime:
+        if v is None:
+            return v
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+

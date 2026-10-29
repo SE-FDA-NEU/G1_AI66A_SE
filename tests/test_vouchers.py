@@ -14,11 +14,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.database import migrate_db
+from src.models.cart_item import CartItem
 from src.models.order import Order
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.voucher import Voucher
 from src.models.voucher_usage import VoucherUsage
+from src.schemas.orders import CheckoutRequest
+from src.services.orders import checkout
 from src.services.vouchers import (
     VoucherError,
     calculate_discount,
@@ -863,3 +866,259 @@ def test_migration_fresh_legacy_and_rerun(tmp_path: Path):
         so_rerun = session.get(SellerOrder, 1)
         assert so_rerun.subtotal == 250_000
         assert so_rerun.total_amount == 250_000
+
+
+def test_voucher_timestamp_normalization_with_different_offsets(db):
+    """Normalize voucher timestamps with different timezone offsets before storage.
+
+    Verifies starts_at='2026-10-29T15:00:00+07:00' and ends_at='2026-10-29T09:00:00Z'
+    (which is 08:00–09:00 UTC) persists successfully and satisfies ck_vouchers_dates.
+    """
+    with Session(db) as session:
+        v = Voucher(
+            code="TZNORM",
+            scope="PLATFORM",
+            discount_type="FIXED_AMOUNT",
+            discount_value=10_000,
+            starts_at=datetime.fromisoformat("2026-10-29T15:00:00+07:00"),
+            ends_at=datetime.fromisoformat("2026-10-29T09:00:00Z"),
+        )
+        session.add(v)
+        session.commit()
+        session.refresh(v)
+
+        assert v.starts_at.tzinfo == UTC
+        assert v.ends_at.tzinfo == UTC
+        assert v.starts_at < v.ends_at
+        assert v.starts_at.hour == 8
+        assert v.ends_at.hour == 9
+
+
+def test_discount_value_bounds_and_capping(db):
+    """Enforce discount value bounds, capping percentage discount at basis, and max_discount."""
+    # 1. Percentage voucher with discount_value=20000 (200%) rejected by DB constraint
+    with pytest.raises(IntegrityError):
+        with Session(db) as session:
+            v_bad = Voucher(
+                code="BADPCT200",
+                scope="PLATFORM",
+                discount_type="PERCENTAGE",
+                discount_value=20000,
+                starts_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ends_at=datetime(2026, 12, 31, tzinfo=UTC),
+            )
+            session.add(v_bad)
+            session.commit()
+
+    # 2. Percentage calculation caps at basis even if raw discount exceeds it
+    v_raw_high = Voucher(
+        code="HIGHPCT",
+        scope="PLATFORM",
+        discount_type="PERCENTAGE",
+        discount_value=20000,
+    )
+    # Basis is 100,000 VND; calculated discount must be capped at 100,000 VND
+    assert calculate_discount(v_raw_high, basis=100_000) == 100_000
+
+    # 3. Negative max_discount rejected by DB constraint
+    with pytest.raises(IntegrityError):
+        with Session(db) as session:
+            v_neg_cap = Voucher(
+                code="NEGCAP",
+                scope="PLATFORM",
+                discount_type="PERCENTAGE",
+                discount_value=1000,
+                max_discount=-5000,
+                starts_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ends_at=datetime(2026, 12, 31, tzinfo=UTC),
+            )
+            session.add(v_neg_cap)
+            session.commit()
+
+    # 4. Negative max_discount yields 0 in calculate_discount and rejected by validate_voucher
+    v_neg_obj = Voucher(
+        code="NEGCAPOBJ",
+        scope="PLATFORM",
+        discount_type="PERCENTAGE",
+        discount_value=1000,
+        max_discount=-5000,
+    )
+    assert calculate_discount(v_neg_obj, basis=100_000) == 0
+
+    # 5. Boundary tests: discount_value=1 (0.01%) and discount_value=10000 (100%)
+    v_min = Voucher(code="MINPCT", scope="PLATFORM", discount_type="PERCENTAGE", discount_value=1)
+    assert calculate_discount(v_min, basis=100_000) == 10  # 100,000 * 1 // 10,000 = 10 VND
+
+    v_max = Voucher(
+        code="MAXPCT", scope="PLATFORM", discount_type="PERCENTAGE", discount_value=10000
+    )
+    assert calculate_discount(v_max, basis=100_000) == 100_000
+
+    # 6. FIXED_AMOUNT with discount_value <= 0 or max_discount set rejected by DB
+    with pytest.raises(IntegrityError):
+        with Session(db) as session:
+            v_zero_fixed = Voucher(
+                code="ZEROFIX",
+                scope="PLATFORM",
+                discount_type="FIXED_AMOUNT",
+                discount_value=0,
+                starts_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ends_at=datetime(2026, 12, 31, tzinfo=UTC),
+            )
+            session.add(v_zero_fixed)
+            session.commit()
+
+    with pytest.raises(IntegrityError):
+        with Session(db) as session:
+            v_fixed_with_cap = Voucher(
+                code="FIXCAP",
+                scope="PLATFORM",
+                discount_type="FIXED_AMOUNT",
+                discount_value=20000,
+                max_discount=10000,
+                starts_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ends_at=datetime(2026, 12, 31, tzinfo=UTC),
+            )
+            session.add(v_fixed_with_cap)
+            session.commit()
+
+
+def test_legacy_checkout_populates_monetary_snapshots(tmp_path: Path):
+    """Legacy checkout populates subtotal, total_amount, and LEGACY policy on seller orders."""
+    db_file = tmp_path / "checkout_snapshots.db"
+    engine = create_cart_engine(db_file)
+    product_id = add_product(engine, "SNAPSHOT_PROD", price=100_000)
+
+    with Session(engine) as session:
+        # Add 2 items to cart (200,000 VND total)
+        item = CartItem(
+            buyer_id=BUYER_ID,
+            product_id=product_id,
+            quantity=2,
+            is_selected=True,
+            created_at=datetime.now(UTC),
+        )
+        session.add(item)
+        session.commit()
+
+    # Perform legacy checkout
+    body = CheckoutRequest(
+        recipient_name="Nguyen Van A",
+        phone_number="0987654321",
+        delivery_address="123 Duong Le Loi, Phuong Ben Nghe, Quan 1, TP Ho Chi Minh",
+    )
+    with Session(engine) as session:
+        order_data, created = checkout(session, BUYER_ID, body, key="snap-key-1")
+        assert created is True
+        order_id = order_data.id
+
+    with Session(engine) as session:
+        order_db = session.get(Order, order_id)
+        assert order_db.total_amount == 200_000
+
+        seller_orders = session.exec(
+            select(SellerOrder).where(SellerOrder.order_id == order_id)
+        ).all()
+        assert len(seller_orders) == 1
+        so = seller_orders[0]
+
+        # Verify all monetary snapshots are accurately populated
+        assert so.subtotal == 200_000
+        assert so.total_amount == 200_000
+        assert so.shop_discount == 0
+        assert so.platform_discount == 0
+        assert so.shipping_fee == 0
+        assert so.shipping_discount == 0
+        assert so.pricing_policy_version == "LEGACY"
+        assert order_db.total_amount == so.total_amount
+
+
+def test_migrate_voucher_constraints_on_existing_database(tmp_path: Path):
+    """Migrate voucher table on existing database to enforce all constraints without data loss."""
+    db_file = tmp_path / "upgrade_vouchers.db"
+    engine = create_cart_engine(db_file)
+
+    # 1. Create a pre-PR voucher table without check constraints
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS vouchers"))
+        conn.execute(
+            text(
+                "CREATE TABLE vouchers ("
+                "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                "code VARCHAR(32) NOT NULL, "
+                "scope VARCHAR(20) NOT NULL DEFAULT 'PLATFORM', "
+                "seller_id INTEGER, "
+                "discount_type VARCHAR(20) NOT NULL, "
+                "discount_value INTEGER NOT NULL DEFAULT 0, "
+                "max_discount INTEGER, "
+                "min_order_value INTEGER NOT NULL DEFAULT 0, "
+                "usage_limit INTEGER, "
+                "per_user_limit INTEGER, "
+                "used_count INTEGER NOT NULL DEFAULT 0, "
+                "starts_at DATETIME NOT NULL, "
+                "ends_at DATETIME NOT NULL, "
+                "is_active BOOLEAN NOT NULL DEFAULT 1, "
+                "created_at DATETIME NOT NULL, "
+                "updated_at DATETIME NOT NULL"
+                ")"
+            )
+        )
+        # Insert pre-existing valid voucher
+        conn.execute(
+            text(
+                "INSERT INTO vouchers (id, code, scope, discount_type, discount_value, "
+                "starts_at, ends_at, is_active, created_at, updated_at) "
+                "VALUES (1, 'OLDVALID', 'PLATFORM', 'FIXED_AMOUNT', 20000, "
+                "'2026-01-01 00:00:00', '2026-12-31 23:59:59', 1, "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+
+    # 2. Run migration
+    with engine.begin() as conn:
+        migrate_db(conn)
+
+    # 3. Verify existing data preserved
+    with Session(engine) as session:
+        v_existing = session.get(Voucher, 1)
+        assert v_existing is not None
+        assert v_existing.code == "OLDVALID"
+        assert v_existing.discount_value == 20000
+
+    # 4. Verify upgraded database enforces constraints:
+    # SHOP voucher without seller_id must fail
+    with pytest.raises(IntegrityError):
+        with Session(engine) as session:
+            v_invalid_shop = Voucher(
+                code="BADSHOP",
+                scope="SHOP",
+                seller_id=None,
+                discount_type="FIXED_AMOUNT",
+                discount_value=10000,
+                starts_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ends_at=datetime(2026, 12, 31, tzinfo=UTC),
+            )
+            session.add(v_invalid_shop)
+            session.commit()
+
+    # Percentage voucher with discount_value=20000 must fail
+    with pytest.raises(IntegrityError):
+        with Session(engine) as session:
+            v_invalid_pct = Voucher(
+                code="BADPCT",
+                scope="PLATFORM",
+                discount_type="PERCENTAGE",
+                discount_value=20000,
+                starts_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ends_at=datetime(2026, 12, 31, tzinfo=UTC),
+            )
+            session.add(v_invalid_pct)
+            session.commit()
+
+    # 5. Rerun migration (idempotent)
+    with engine.begin() as conn:
+        migrate_db(conn)
+
+    with Session(engine) as session:
+        assert session.get(Voucher, 1) is not None
+

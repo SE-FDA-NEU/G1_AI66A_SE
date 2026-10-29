@@ -278,6 +278,23 @@ def test_admin_platform_voucher_management(client: TestClient, portal_setup):
     assert v_data["scope"] == "PLATFORM"
     v_id = v_data["id"]
 
+    # Normalize voucher timestamps with different offsets before storage (P2 regression)
+    tz_res = client.post(
+        "/api/v1/admin/vouchers",
+        headers=admin_hdr,
+        json={
+            "code": "ADMTZDIFF",
+            "discount_type": "PERCENTAGE",
+            "discount_value": 1000,
+            "starts_at": "2026-10-29T15:00:00+07:00",
+            "ends_at": "2026-10-29T09:00:00Z",
+            "is_active": True,
+        },
+    )
+    assert tz_res.status_code == 201
+    tz_data = tz_res.json()
+    assert tz_data["code"] == "ADMTZDIFF"
+
     # Reject duplicate code
     dup = client.post(
         "/api/v1/admin/vouchers",

@@ -37,23 +37,35 @@ def calculate_discount(voucher: Voucher, basis: int, shipping_fee: int = 0) -> i
     Rules from docs/us16-promotions.md:
     - FIXED_AMOUNT: min(basis, voucher.discount_value)
     - PERCENTAGE: (basis * voucher.discount_value) // 10000.
-      If max_discount is set and > 0, capped at max_discount.
+      Capped at basis, and capped at max_discount if set and > 0.
     - FREE_SHIPPING: min(shipping_fee, voucher.max_discount or shipping_fee).
     """
     if basis < 0 or shipping_fee < 0:
         return 0
 
     if voucher.discount_type == "FIXED_AMOUNT":
+        if voucher.discount_value <= 0:
+            return 0
         return max(0, min(basis, voucher.discount_value))
     elif voucher.discount_type == "PERCENTAGE":
+        if voucher.discount_value <= 0:
+            return 0
         raw_discount = (basis * voucher.discount_value) // 10000
-        if voucher.max_discount is not None and voucher.max_discount > 0:
-            return max(0, min(raw_discount, voucher.max_discount))
-        return max(0, raw_discount)
+        # Percentage discount cannot exceed basis
+        discount = min(raw_discount, basis)
+        if voucher.max_discount is not None:
+            if voucher.max_discount <= 0:
+                return 0
+            discount = min(discount, voucher.max_discount)
+        return max(0, discount)
     elif voucher.discount_type == "FREE_SHIPPING":
+        if voucher.discount_value != 0:
+            return 0
         target = shipping_fee
-        if voucher.max_discount is not None and voucher.max_discount > 0:
-            return max(0, min(target, voucher.max_discount))
+        if voucher.max_discount is not None:
+            if voucher.max_discount <= 0:
+                return 0
+            target = min(target, voucher.max_discount)
         return max(0, target)
     return 0
 
@@ -98,6 +110,26 @@ def validate_voucher(
             f"Voucher code '{normalized}' was not found.",
             status_code=404,
         )
+
+    # Check configuration validity (type, bounds, caps)
+    if (
+        (
+            voucher.discount_type == "FIXED_AMOUNT"
+            and (voucher.discount_value <= 0 or voucher.max_discount is not None)
+        )
+        or (
+            voucher.discount_type == "PERCENTAGE"
+            and not (1 <= voucher.discount_value <= 10000)
+        )
+        or (voucher.discount_type == "FREE_SHIPPING" and voucher.discount_value != 0)
+        or (voucher.max_discount is not None and voucher.max_discount <= 0)
+    ):
+        raise VoucherError(
+            "ERR_VOUCHER_NOT_APPLICABLE",
+            f"Voucher '{normalized}' has invalid configuration.",
+            status_code=409,
+        )
+
 
     # 2. Check scope and slot matching
     if slot == "SHOP":
