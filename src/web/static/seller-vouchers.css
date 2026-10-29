@@ -1,0 +1,52 @@
+.seller-badge {
+    background-color: #10b981;
+}
+
+.seller-voucher-content {
+    min-height: auto;
+}
+
+.voucher-alert {
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+}
+
+.voucher-alert-error {
+    color: #991b1b;
+    background: #fee2e2;
+}
+
+.voucher-alert-success {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.modal-overlay[hidden] {
+    display: none;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.form-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: var(--admin-text-main);
+    font-weight: 500;
+}
+
+.form-grid small {
+    color: var(--admin-text-muted);
+    font-weight: 400;
+}
+
+@media (max-width: 700px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
