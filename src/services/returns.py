@@ -17,6 +17,9 @@ from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
 from src.services.order_history import record_transition
 
+# Payment states a return decision can settle without reconciliation.
+RECONCILED_PAYMENTS = frozenset({"PAID", "UNPAID", "FAILED"})
+
 
 class ReturnError(Exception):
     def __init__(self, code: str, message: str, status: int = 400) -> None:
@@ -316,6 +319,30 @@ def list_order_return_requests(
     return [_to_return_data(r, sub_order_map[r.seller_order_id], order) for r in records]
 
 
+def _update_seller_order(
+    session: Session, seller_order: SellerOrder, values: dict[str, object]
+) -> None:
+    """Compare-and-set from the state the decision was based on."""
+    changed = session.exec(
+        update(SellerOrder)
+        .where(
+            SellerOrder.id == seller_order.id,
+            SellerOrder.status == "RETURN_REQUESTED",
+            SellerOrder.payment_status == seller_order.payment_status,
+            SellerOrder.escrow_status == seller_order.escrow_status,
+        )
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    if changed.rowcount != 1:
+        raise ReturnError(
+            "ERR_CONCURRENCY_CONFLICT",
+            "The seller order changed. Please refresh and retry.",
+            409,
+        )
+    session.refresh(seller_order)
+
+
 def decide_return_request(
     session: Session,
     current_user: User,
@@ -351,6 +378,20 @@ def decide_return_request(
             400,
         )
 
+    if seller_order.status != "RETURN_REQUESTED":
+        raise ReturnError(
+            "ERR_INVALID_TRANSITION",
+            "The seller order is no longer awaiting a return decision.",
+            400,
+        )
+    refunds_payment = seller_order.payment_status == "PAID"
+    if decision.action == "APPROVE" and seller_order.payment_status not in RECONCILED_PAYMENTS:
+        raise ReturnError(
+            "ERR_INVALID_PAYMENT_STATE",
+            "Payment needs reconciliation before the return can be approved.",
+            409,
+        )
+
     old_status = seller_order.status
     now = datetime.now(UTC)
     target_status = "APPROVED" if decision.action == "APPROVE" else "REJECTED"
@@ -379,10 +420,22 @@ def decide_return_request(
         )
 
     if decision.action == "APPROVE":
-        seller_order.status = "RETURNED_REFUNDED"
-        seller_order.payment_status = "REFUNDED"
-        seller_order.escrow_status = "REFUNDED"
-        session.add(seller_order)
+        # Refund only a collected payment; an uncollected one is voided, not refunded.
+        values = {"status": "RETURNED_REFUNDED"}
+        if refunds_payment:
+            values |= {"payment_status": "REFUNDED", "escrow_status": "REFUNDED"}
+        else:
+            values["escrow_status"] = "VOIDED"
+    else:
+        # Escrow leaves PAUSED; it is released only for a collected payment.
+        values = {
+            "status": "COMPLETED",
+            "escrow_status": "RELEASED" if refunds_payment else "HELD",
+            "completed_at": seller_order.completed_at or now,
+        }
+    _update_seller_order(session, seller_order, values)
+
+    if decision.action == "APPROVE":
 
         if decision.is_restockable:
             items = session.exec(
@@ -423,15 +476,16 @@ def decide_return_request(
             event_key=f"return_request:{ret_req.id}:approved",
             message=(
                 f"Your return request for order #{order.id} (sub-order #{seller_order.id}) "
-                "has been approved. The payment has been refunded."
+                "has been approved. "
+                + (
+                    "The payment has been refunded."
+                    if refunds_payment
+                    else "No payment was collected, so nothing is refunded."
+                )
             ),
             target_path=f"/orders/{order.id}",
         )
     else:  # REJECT
-        seller_order.status = "COMPLETED"
-        seller_order.escrow_status = "RELEASED"
-        session.add(seller_order)
-
         note = f"Return rejected: {decision.decision_notes or 'Not approved.'}"
         record_transition(
             session,
