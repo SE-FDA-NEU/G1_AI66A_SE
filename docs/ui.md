@@ -168,8 +168,8 @@ Calls: `GET /api/v1/cart`, `PATCH /api/v1/cart/items/{productCode}`,
 | [ Retry ]                           |  |       P-DEMO-CART · Available: 12  |
 |                                     |  |                           Remove   |
 |                                     |  | Total: 200.000 ₫                    |
-|                                     |  | No shipping fee is added at         |
-|                                     |  | checkout.                           |
+|                                     |  | Shipping and vouchers are           |
+|                                     |  | calculated at checkout.             |
 |                                     |  | Continue shopping     [ Checkout ]  |
 +-------------------------------------+  +-------------------------------------+
 ```

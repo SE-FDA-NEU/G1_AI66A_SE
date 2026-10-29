@@ -16,7 +16,16 @@ async function load() {
     document.getElementById("status").textContent = "Order placed successfully.";
     const receipt = document.getElementById("receipt"); receipt.replaceChildren();
     const rows = [`Order #${order.id} \u00b7 ${order.status}`, `Total: ${money(order.total_amount)}`, `${order.recipient_name} \u00b7 ${order.delivery_address} \u00b7 ${order.phone_number}`,
-      ...order.items.map(i => `${i.product_name} (${i.product_code}) \u00d7 ${i.quantity} \u00b7 ${money(i.unit_price)} each`)];
+      ...order.items.map(i => `${i.product_name} (${i.product_code}) \u00d7 ${i.quantity} \u00b7 ${money(i.unit_price)} each`),
+      // Stored amounts from checkout; the page never re-prices an order.
+      ...(order.sub_orders || []).filter(so => so.pricing_policy_version && so.pricing_policy_version !== "LEGACY").map(so =>
+        `Seller order #${so.id}: items ${money(so.subtotal)}` +
+        (so.shop_discount ? `, shop voucher \u2212${money(so.shop_discount)}` : "") +
+        (so.platform_discount ? `, platform voucher \u2212${money(so.platform_discount)}` : "") +
+        `, shipping ${money(so.shipping_fee)}` +
+        (so.shipping_discount ? `, shipping discount \u2212${money(so.shipping_discount)}` : "") +
+        ` \u00b7 ${money(so.total_amount)}`),
+      ...(order.vouchers || []).map(v => `Voucher ${v.code} (${v.slot.toLowerCase()}): \u2212${money(v.discount_amount)}`)];
     for (const text of rows) { const p = document.createElement("p"); p.textContent = text; receipt.append(p); }
     const trackerAction = document.getElementById("tracker-action");
     const trackOrderButton = document.getElementById("track-order-button");

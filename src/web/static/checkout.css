@@ -71,6 +71,55 @@ h1 {
   text-align: right;
 }
 
+/* Vouchers and quoted total (#136) */
+#vouchers {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+#vouchers-heading {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.voucher-slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.voucher-slot label {
+  flex: 1 1 14rem;
+}
+
+.voucher-slot button {
+  min-height: 44px;
+}
+
+.voucher-slot .field-error {
+  flex-basis: 100%;
+}
+
+#price-breakdown p {
+  margin: 0;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+#price-breakdown strong {
+  display: block;
+  margin-top: 0.75rem;
+  font-size: 1.25rem;
+  color: var(--color-accent);
+  text-align: right;
+}
+
 /* Address Book */
 #address-book {
   margin-bottom: 2rem;

@@ -61,7 +61,7 @@ def test_cart_summary_matches_the_checkout_total_without_shipping(client: TestCl
     html = client.get("/cart").text
 
     # Checkout charges the cart total only (docs/design.md, US04 #80); no fee is promised later.
-    assert "No shipping fee is added at checkout." in html
+    assert "Shipping and vouchers are calculated at checkout." in html
     assert "Shipping is calculated" not in html
 
 
