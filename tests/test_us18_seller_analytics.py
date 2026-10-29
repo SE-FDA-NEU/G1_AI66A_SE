@@ -410,6 +410,32 @@ class TestRevenueAnalytics:
         assert resp.status_code == 200
         assert resp.json()["meta"]["period"] == "monthly"
 
+    def test_group_by_returns_financial_metrics(self, client: TestClient, us18_data):
+        seller = us18_data["seller"]
+        today = datetime.now(UTC).date().isoformat()
+        response = client.get(
+            f"{BASE}?from={today}&to={today}&group_by=daily",
+            headers=_auth(seller),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        bucket = body["data"][0]
+        assert {
+            "gross_order_value",
+            "completed_revenue",
+            "pending_escrow_revenue",
+            "cancellation_rate",
+        } <= bucket.keys()
+        assert body["meta"]["group_by"] == "daily"
+
+    def test_invalid_group_by_returns_400(self, client: TestClient, us18_data):
+        seller = us18_data["seller"]
+        response = client.get(
+            f"{BASE}?group_by=weekly",
+            headers=_auth(seller),
+        )
+        assert response.status_code == 400
+
     def test_invalid_period_returns_400(self, client: TestClient, us18_data):
         seller = us18_data["seller"]
         resp = client.get(f"{BASE}?period=yearly", headers=_auth(seller))

@@ -24,6 +24,7 @@ from src.models.seller_order import SellerOrder
 # ---------------------------------------------------------------------------
 
 Period = Literal["daily", "weekly", "monthly"]
+FinancialGroup = Literal["daily", "monthly"]
 
 LOW_STOCK_DEFAULT_THRESHOLD = 5
 
@@ -149,6 +150,64 @@ def get_revenue_summary(
         result.append(b)
 
     return result
+
+
+def get_financial_summary(
+    session: Session,
+    seller_id: int,
+    start_date: date,
+    end_date: date,
+    group_by: FinancialGroup,
+) -> list[dict]:
+    """Return seller-scoped financial metrics grouped by order creation date."""
+    start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+    end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
+    rows = session.exec(
+        select(SellerOrder)
+        .where(
+            SellerOrder.seller_id == seller_id,
+            SellerOrder.created_at >= start_dt,
+            SellerOrder.created_at <= end_dt,
+        )
+    ).all()
+
+    buckets: dict[date, dict] = {}
+    for bucket_start, bucket_end_exc in _iter_buckets(start_date, end_date, group_by):
+        bucket_end = bucket_end_exc - timedelta(days=1)
+        buckets[bucket_start] = {
+            "period": _period_label(bucket_start, group_by),
+            "period_start": bucket_start.isoformat(),
+            "period_end": bucket_end.isoformat(),
+            "gross_order_value": 0,
+            "completed_revenue": 0,
+            "pending_escrow_revenue": 0,
+            "cancelled_orders": 0,
+            "total_orders": 0,
+        }
+
+    for seller_order in rows:
+        order_date = seller_order.created_at.date()
+        bucket = buckets.get(_period_start(order_date, group_by))
+        if bucket is None:
+            continue
+        amount = seller_order.total_amount
+        bucket["gross_order_value"] += amount
+        bucket["total_orders"] += 1
+        if seller_order.status == "COMPLETED":
+            bucket["completed_revenue"] += amount
+        if seller_order.escrow_status in {"HELD", "PAUSED"}:
+            bucket["pending_escrow_revenue"] += amount
+        if seller_order.status == "CANCELLED":
+            bucket["cancelled_orders"] += 1
+
+    for bucket in buckets.values():
+        total_orders = bucket["total_orders"]
+        bucket["cancellation_rate"] = (
+            round(bucket["cancelled_orders"] * 100 / total_orders, 2)
+            if total_orders
+            else 0
+        )
+    return [buckets[key] for key in sorted(buckets)]
 
 
 # ---------------------------------------------------------------------------
