@@ -30,3 +30,26 @@ Risk priority: persisted audit facts, tenant isolation and rollback are checked
 first because incorrect identity/history can mislead users about fulfilment and
 failed partial writes can leave inconsistent orders. Browser tests are not added:
 this task changes backend data, with no new screen or UI interaction.
+
+## Task #135: multi-vendor pricing and shipping
+
+All cases are fast pure-service tests in `tests/test_pricing.py`. Expected money
+comes from US16 sections 2 and 4; no database or production data is required.
+
+| Case | Expected result | Technique / test |
+|---|---|---|
+| Two-shop worked example | Shop totals 248.000 / 185.000 VND; grand total 433.000; separate shop/platform/shipping funding amounts | `test_contract_example_totals_433000_and_preserves_funding_breakdown` |
+| Fixed above/on/below basis; percentage 1/10000 bps, floors and caps | Discount bounded by basis and configured cap, integer floor | `test_item_discount_boundaries` |
+| Unequal/equal remainders, zero basis, full discount, amount above float precision | Exact allocation sum; ascending seller-ID ties; no discount for zero-basis shop | `test_largest_remainder_allocation_contract_cases` |
+| Random allocation inputs with fixed seed | Every allocation within its basis and less than one VND from its exact quota; sum equals discount | `test_allocation_conserves_money_for_deterministic_random_inputs` |
+| Eight shop/platform/shipping combinations | Expected grand totals, applying platform after shop discounts | `test_voucher_stacking_decision_table` |
+| Several lines per seller; no cap / cap below or above shipping fee | One 20.000 VND fee per shop; free-shipping cap per shop | `test_group_lines_and_charge_shipping_once_per_seller`, `test_free_shipping_cap_is_applied_per_seller_order` |
+| Zero item basis or rounded-zero requested discount | 409-compatible `ERR_VOUCHER_NOT_APPLICABLE`; empty selection gives 400-compatible `ERR_EMPTY_CART` | `test_zero_effect_requested_item_voucher_is_not_applicable`, `test_no_selected_lines_is_an_empty_cart` |
+| Malformed numbers/types, cap/rate bounds, voucher for an absent seller | Reject calculation without an output or side effects | `test_invalid_item_discount_rules_fail_before_calculation`, numeric/allocation guard tests |
+| Same snapshots in another line order | Equal, immutable result; caller inputs unchanged | `test_pricing_is_repeatable_without_changing_inputs_or_result_snapshots` |
+| Random full orders with fixed seed | Each seller formula holds; all aggregate components and grand total reconcile | `test_random_order_totals_reconcile_with_each_seller_breakdown` |
+
+Run `python -m pytest tests/test_pricing.py tests/test_checkout.py tests/test_ui_docs_contract.py -q`
+with `DEBUG=false` and the README Python 3.12 environment. Voucher permissions,
+consumption/rollback, persisted receipts and browser checkout tests remain with
+#133/#136 integration. No new UI or real-user test result is claimed here.

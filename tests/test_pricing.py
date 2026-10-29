@@ -1,5 +1,9 @@
 """US16 / #135: expected prices come from the promotion contract, not the service."""
 
+from dataclasses import FrozenInstanceError
+from fractions import Fraction
+from random import Random
+
 import pytest
 
 from src.services.pricing import (
@@ -93,6 +97,24 @@ def test_item_discount_boundaries(rule, basis, expected):
 )
 def test_largest_remainder_allocation_contract_cases(bases, discount, expected):
     assert allocate_platform_discount(discount, bases) == expected
+
+
+def test_allocation_conserves_money_for_deterministic_random_inputs():
+    random = Random(135)
+    for _ in range(300):
+        bases = {seller: random.randrange(0, 10**18) for seller in range(1, 9)}
+        bases[1] = 0
+        total = sum(bases.values())
+        discount = random.randrange(total + 1)
+
+        allocated = allocate_platform_discount(discount, bases)
+
+        assert sum(allocated.values()) == discount
+        assert allocated[1] == 0
+        for seller, basis in bases.items():
+            assert type(allocated[seller]) is int
+            assert 0 <= allocated[seller] <= basis
+            assert abs(allocated[seller] - Fraction(discount * basis, total)) < 1
 
 
 @pytest.mark.parametrize(
@@ -263,6 +285,20 @@ def test_invalid_allocation_inputs_are_rejected(discount, bases):
         allocate_platform_discount(discount, bases)
 
 
+def test_pricing_is_repeatable_without_changing_inputs_or_result_snapshots():
+    lines = [PricingLine(3, 1, 100), PricingLine(2, 1, 100)]
+    rules = {2: ItemDiscount("FIXED_AMOUNT", 10)}
+    original_lines, original_rules = list(lines), dict(rules)
+
+    first = price_order(lines, shop_discounts=rules)
+    second = price_order(reversed(lines), shop_discounts=rules)
+
+    assert first == second
+    assert lines == original_lines and rules == original_rules
+    with pytest.raises(FrozenInstanceError):
+        first.seller_orders[0].total_amount = 0
+
+
 @pytest.mark.parametrize("basis", [-1, 1.5, True, "100"])
 def test_item_discount_rejects_invalid_basis(basis):
     with pytest.raises(ValueError):
@@ -280,3 +316,53 @@ def test_free_shipping_can_cover_fees_after_shop_vouchers_cover_all_items():
     assert result.platform_discount == 0
     assert result.shipping_fee == result.shipping_discount == 40_000
     assert result.grand_total == 0
+
+
+def test_random_order_totals_reconcile_with_each_seller_breakdown():
+    random = Random(108)
+    for _ in range(100):
+        lines = [
+            PricingLine(seller, random.randint(1, 5), random.randint(10_000, 10**12))
+            for seller in range(1, 6)
+            for _ in range(2)
+        ]
+        result = price_order(
+            lines,
+            shop_discounts={
+                seller: ItemDiscount("PERCENTAGE", random.randint(1, 9000))
+                for seller in range(1, 6)
+            },
+            platform_discount=ItemDiscount("PERCENTAGE", random.randint(1, 10_000)),
+            shipping_discount=ShippingDiscount(random.randint(1, 30_000)),
+        )
+
+        assert result.subtotal == sum(line.quantity * line.unit_price for line in lines)
+        assert result.grand_total == (
+            result.subtotal
+            - result.shop_discount
+            - result.platform_discount
+            + result.shipping_fee
+            - result.shipping_discount
+        )
+        for field in (
+            "subtotal",
+            "shop_discount",
+            "platform_discount",
+            "shipping_fee",
+            "shipping_discount",
+        ):
+            assert getattr(result, field) == sum(
+                getattr(row, field) for row in result.seller_orders
+            )
+        assert result.grand_total == sum(row.total_amount for row in result.seller_orders)
+        for row in result.seller_orders:
+            assert 0 <= row.shop_discount <= row.subtotal
+            assert 0 <= row.platform_discount <= row.subtotal - row.shop_discount
+            assert 0 <= row.shipping_discount <= row.shipping_fee
+            assert row.total_amount == (
+                row.subtotal
+                - row.shop_discount
+                - row.platform_discount
+                + row.shipping_fee
+                - row.shipping_discount
+            )
