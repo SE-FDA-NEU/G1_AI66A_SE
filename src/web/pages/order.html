@@ -8,6 +8,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <link rel="stylesheet" href="/static/base.css">
   <link rel="stylesheet" href="/static/order.css">
+  <link rel="stylesheet" href="/static/buyer-returns.css">
+  <script src="/static/buyer-returns.js" defer></script>
   <script src="/static/order.js" defer></script>
 </head>
 <body class="ios-theme">
@@ -329,28 +331,38 @@
       </div>
     </section>
 
-    <!-- Buyer Return Request Form (when order is DELIVERED and no active return request) -->
-    <section id="buyer-return-form-card" class="ios-card" hidden style="margin-top: 16px;">
+    <!-- Buyer-only controller checks each shop's eligibility using the existing API. -->
+    <section id="buyer-return-form-card" class="ios-card buyer-returns" hidden aria-labelledby="buyer-returns-title">
       <div class="card-header-row">
-        <h3 class="section-subheading">REQUEST RETURN OR REFUND</h3>
+        <h3 id="buyer-returns-title" class="section-subheading">RETURNS AND REFUNDS</h3>
       </div>
-      <p style="color: var(--ios-text-secondary); font-size: 14px; margin-bottom: 16px;">
-        If you encountered issues with your delivered items, you may submit a request with supporting evidence.
-      </p>
-      <form id="buyer-return-form">
-        <div id="return-seller-order-group" class="form-group" style="margin-bottom: 12px;" hidden>
-          <label for="return-seller-order-select" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Select Sub-Order to Return *</label>
-          <select id="return-seller-order-select" class="ios-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px; background: white;"></select>
+      <p id="return-load-status" role="status" aria-live="polite"></p>
+      <p id="return-feedback" role="status" aria-live="polite" hidden></p>
+      <p id="return-load-error" role="alert" hidden></p>
+      <button id="return-retry" type="button" class="ios-btn ios-btn-secondary" hidden>Retry return status</button>
+      <button id="return-request-action" type="button" class="ios-btn ios-btn-primary" hidden>Request return or refund</button>
+      <form id="buyer-return-form" novalidate hidden aria-busy="false">
+        <p>Requests cover one delivered shop order. Confirming receipt first ends return eligibility.</p>
+        <div id="return-seller-order-group" class="form-group">
+          <label for="return-seller-order-select">Delivered shop order (required)</label>
+          <select id="return-seller-order-select" required aria-describedby="return-target-error"></select>
+          <p id="return-target-error" class="return-field-error" hidden></p>
         </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label for="return-reason-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Reason for Return/Refund *</label>
-          <textarea id="return-reason-input" rows="3" required minlength="3" maxlength="500" class="ios-textarea" placeholder="Describe the reason (e.g. damaged on delivery, defective item, incorrect specification)..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
+        <div class="form-group">
+          <label for="return-reason-input">Reason for return/refund (required)</label>
+          <p id="return-reason-hint">Describe the issue in 3–500 characters.</p>
+          <textarea id="return-reason-input" rows="3" required minlength="3" maxlength="500" class="ios-textarea" aria-describedby="return-reason-hint return-reason-error"></textarea>
+          <p id="return-reason-error" class="return-field-error" hidden></p>
         </div>
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label for="return-evidence-input" style="display: block; font-size: 13px; font-weight: 600; color: var(--ios-text-secondary); margin-bottom: 4px;">Supporting Evidence *</label>
-          <textarea id="return-evidence-input" rows="4" required minlength="3" maxlength="2000" class="ios-textarea" placeholder="Provide details, descriptions, photo links, or serial numbers as evidence..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--ios-border); font-family: inherit; margin-top: 6px;"></textarea>
+        <div class="form-group">
+          <label for="return-evidence-input">Supporting evidence (required)</label>
+          <p id="return-evidence-hint">Enter 3–2000 characters: describe the issue, include a photo link or serial number. Files are not uploaded here.</p>
+          <textarea id="return-evidence-input" rows="4" required minlength="3" maxlength="2000" class="ios-textarea" aria-describedby="return-evidence-hint return-evidence-error"></textarea>
+          <p id="return-evidence-error" class="return-field-error" hidden></p>
         </div>
+        <p id="return-form-error" role="alert" hidden></p>
         <button type="submit" id="btn-submit-return" class="ios-btn ios-btn-primary">Submit Return &amp; Refund Request</button>
+        <button type="button" id="return-cancel" class="ios-btn ios-btn-secondary">Cancel</button>
       </form>
     </section>
 
