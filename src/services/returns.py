@@ -1,6 +1,5 @@
 """Return and refund service logic."""
 
-import time
 from datetime import UTC, datetime
 
 from sqlalchemy import case, update
@@ -236,7 +235,7 @@ def submit_return_request(
         session,
         recipient_user_id=seller_order.seller_id,
         order_id=order.id,
-        event_key=f"return_request:{ret_req.id}:created:{int(time.time() * 1000)}",
+        event_key=f"return_request:{ret_req.id}:created",
         message=(
             f"Buyer requested return for order #{order.id} "
             f"(sub-order #{seller_order.id}). Reason: {payload.reason}"
