@@ -1,9 +1,8 @@
 from datetime import UTC, datetime
 
 from pydantic import field_validator
-from sqlalchemy import CheckConstraint, event
+from sqlalchemy import CheckConstraint, UniqueConstraint, event
 from sqlalchemy.orm import validates
-from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -106,23 +105,37 @@ class Voucher(SQLModel, table=True):
     @field_validator("starts_at", "ends_at", mode="after")
     @classmethod
     def _normalize_utc(cls, v: datetime) -> datetime:
-        if v is None:
-            return v
-        if v.tzinfo is None:
-            return v.replace(tzinfo=UTC)
-        return v.astimezone(UTC)
+        return _as_utc(v)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Restore UTC awareness after SQLite strips datetime timezone metadata."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _normalize_loaded_voucher_timestamps(target: Voucher) -> None:
+    for attr in ("starts_at", "ends_at"):
+        setattr(target, attr, _as_utc(getattr(target, attr, None)))
 
 
 @event.listens_for(Voucher, "before_insert")
 @event.listens_for(Voucher, "before_update")
 def _ensure_voucher_utc(mapper, connection, target):
-    for attr in ("starts_at", "ends_at"):
-        val = getattr(target, attr, None)
-        if isinstance(val, datetime):
-            if val.tzinfo is None:
-                setattr(target, attr, val.replace(tzinfo=UTC))
-            else:
-                setattr(target, attr, val.astimezone(UTC))
+    _normalize_loaded_voucher_timestamps(target)
+
+
+@event.listens_for(Voucher, "load")
+def _normalize_loaded_voucher_utc(target, context):
+    _normalize_loaded_voucher_timestamps(target)
+
+
+@event.listens_for(Voucher, "refresh")
+def _normalize_refreshed_voucher_utc(target, context, attrs):
+    _normalize_loaded_voucher_timestamps(target)
 
 
 
