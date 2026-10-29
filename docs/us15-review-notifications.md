@@ -113,6 +113,10 @@ submission, seller replies and retry. Actual persistence/validation/migration is
 verified separately by the Python tests. These checks do not claim five-user
 validation, external review, CI success or a clean-clone run.
 
+The subsequent [Request Changes verification for #131](evidence/issue131-verification.md)
+records the actual CI run for the reviewed commit, a new Python 3.12 clone/setup,
+and real-server persistence and Chrome checks separately from those fixtures.
+
 Screenshots: [mobile](images/us15/reviews-390.png),
 [tablet](images/us15/reviews-768.png), [desktop](images/us15/reviews-1280.png),
 [validation](images/us15/review-validation-390.png),
