@@ -273,11 +273,20 @@ def checkout(
                     )
                 if product.seller_id not in sellers:
                     suborder = SellerOrder(
-                        order_id=order.id, seller_id=product.seller_id, status="PENDING"
+                        order_id=order.id,
+                        seller_id=product.seller_id,
+                        status="PENDING",
+                        subtotal=0,
+                        shop_discount=0,
+                        platform_discount=0,
+                        shipping_fee=0,
+                        shipping_discount=0,
+                        total_amount=0,
+                        pricing_policy_version="LEGACY",
                     )
                     session.add(suborder)
                     session.flush()
-                    sellers[product.seller_id] = suborder.id
+                    sellers[product.seller_id] = suborder
                     create_notification(
                         session,
                         recipient_user_id=product.seller_id,
@@ -286,9 +295,13 @@ def checkout(
                         message=f"New order #{order.id} is waiting for processing.",
                         target_path="/seller/orders",
                     )
+                suborder = sellers[product.seller_id]
+                line_total = inventory.price * line.quantity
+                suborder.subtotal += line_total
+                suborder.total_amount += line_total
                 session.add(
                     OrderItem(
-                        seller_order_id=sellers[product.seller_id],
+                        seller_order_id=suborder.id,
                         product_id=product.id,
                         variant_id=variant.id if variant else None,
                         quantity=line.quantity,
@@ -342,6 +355,8 @@ def checkout(
                 )
                 if removed.rowcount != 1:
                     raise CheckoutError("ERR_CONCURRENCY_CONFLICT", "Cart changed. Please retry.")
+            for suborder in sellers.values():
+                session.add(suborder)
             session.add(order)
             session.flush()
             result = receipt(session, buyer_id, order.id)

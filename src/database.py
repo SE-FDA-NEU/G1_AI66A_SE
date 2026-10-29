@@ -312,11 +312,53 @@ def migrate_db(connection: Connection | None = None) -> None:
                     connection.execute(
                         text(f"ALTER TABLE seller_orders ADD COLUMN {name} VARCHAR(100)")
                     )
-            for name in ("shipped_at", "delivered_at"):
+            for name in ("shipped_at", "delivered_at", "completed_at"):
                 if name not in columns:
                     connection.execute(
                         text(f"ALTER TABLE seller_orders ADD COLUMN {name} DATETIME")
                     )
+
+            subtotal_missing = "subtotal" not in columns
+            for name in (
+                "subtotal",
+                "shop_discount",
+                "platform_discount",
+                "shipping_fee",
+                "shipping_discount",
+                "total_amount",
+            ):
+                if name not in columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE seller_orders "
+                            f"ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                        )
+                    )
+            if "pricing_policy_version" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE seller_orders "
+                        "ADD COLUMN pricing_policy_version VARCHAR(20) NOT NULL DEFAULT 'LEGACY'"
+                    )
+                )
+
+            if subtotal_missing and "order_items" in tables:
+                connection.execute(
+                    text(
+                        "UPDATE seller_orders SET "
+                        "subtotal = COALESCE(("
+                        "    SELECT SUM(quantity * unit_price) "
+                        "    FROM order_items "
+                        "    WHERE order_items.seller_order_id = seller_orders.id"
+                        "), 0), "
+                        "total_amount = COALESCE(("
+                        "    SELECT SUM(quantity * unit_price) "
+                        "    FROM order_items "
+                        "    WHERE order_items.seller_order_id = seller_orders.id"
+                        "), 0) "
+                        "WHERE subtotal = 0"
+                    )
+                )
         if "notifications" in tables:
             columns = {c["name"] for c in inspector.get_columns("notifications")}
             if "target_path" not in columns:
@@ -449,6 +491,90 @@ def migrate_db(connection: Connection | None = None) -> None:
                     "ON return_disputes(seller_order_id)"
                 )
             )
+
+        if "vouchers" in tables:
+            if connection.dialect.name == "sqlite":
+                create_sql = connection.execute(
+                    text("SELECT sql FROM sqlite_master WHERE type='table' AND name='vouchers'")
+                ).scalar() or ""
+                needs_rebuild = (
+                    "ck_vouchers_scope_seller" not in create_sql
+                    or "ck_vouchers_discount_value_bounds" not in create_sql
+                    or "ck_vouchers_max_discount" not in create_sql
+                )
+                if needs_rebuild:
+                    connection.execute(
+                        text(
+                            "CREATE TABLE vouchers__upgrade ("
+                            "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                            "code VARCHAR(32) NOT NULL, "
+                            "scope VARCHAR(20) NOT NULL DEFAULT 'PLATFORM', "
+                            "seller_id INTEGER, "
+                            "discount_type VARCHAR(20) NOT NULL, "
+                            "discount_value INTEGER NOT NULL DEFAULT 0, "
+                            "max_discount INTEGER, "
+                            "min_order_value INTEGER NOT NULL DEFAULT 0, "
+                            "usage_limit INTEGER, "
+                            "per_user_limit INTEGER, "
+                            "used_count INTEGER NOT NULL DEFAULT 0, "
+                            "starts_at DATETIME NOT NULL, "
+                            "ends_at DATETIME NOT NULL, "
+                            "is_active BOOLEAN NOT NULL DEFAULT 1, "
+                            "created_at DATETIME NOT NULL, "
+                            "updated_at DATETIME NOT NULL, "
+                            "FOREIGN KEY(seller_id) REFERENCES users(id), "
+                            "CONSTRAINT ck_vouchers_scope_seller CHECK ("
+                            "  (scope = 'SHOP' AND seller_id IS NOT NULL) "
+                            "  OR (scope = 'PLATFORM' AND seller_id IS NULL)"
+                            "), "
+                            "CONSTRAINT ck_vouchers_discount_type CHECK ("
+                            "  discount_type IN ('FIXED_AMOUNT', 'PERCENTAGE', 'FREE_SHIPPING')"
+                            "), "
+                            "CONSTRAINT ck_vouchers_free_shipping_platform CHECK ("
+                            "  (discount_type != 'FREE_SHIPPING') OR (scope = 'PLATFORM')"
+                            "), "
+                            "CONSTRAINT ck_vouchers_discount_value_bounds CHECK ("
+                            "  (discount_type = 'FIXED_AMOUNT' AND discount_value > 0) "
+                            "  OR (discount_type = 'PERCENTAGE' AND discount_value >= 1 "
+                            "AND discount_value <= 10000) "
+                            "  OR (discount_type = 'FREE_SHIPPING' AND discount_value = 0)"
+                            "), "
+                            "CONSTRAINT ck_vouchers_max_discount CHECK ("
+                            "  (max_discount IS NULL OR max_discount > 0) "
+                            "  AND ((discount_type IN ('PERCENTAGE', 'FREE_SHIPPING')) "
+                            "OR max_discount IS NULL)"
+                            "), "
+                            "CONSTRAINT ck_vouchers_limits CHECK ("
+                            "  (usage_limit IS NULL OR usage_limit > 0) "
+                            "  AND (per_user_limit IS NULL OR per_user_limit > 0)"
+                            "), "
+                            "CONSTRAINT ck_vouchers_dates CHECK ("
+                            "  starts_at < ends_at"
+                            "), "
+                            "CONSTRAINT ck_vouchers_used_count CHECK ("
+                            "  used_count >= 0 AND "
+                            "(usage_limit IS NULL OR used_count <= usage_limit)"
+                            "), "
+                            "CONSTRAINT ck_vouchers_min_order_value CHECK ("
+                            "  min_order_value >= 0"
+                            ")"
+                            ")"
+                        )
+                    )
+                    v_cols = [c["name"] for c in inspector.get_columns("vouchers")]
+                    cols_str = ", ".join(v_cols)
+                    connection.execute(
+                        text(
+                            f"INSERT INTO vouchers__upgrade ({cols_str}) "
+                            f"SELECT {cols_str} FROM vouchers"
+                        )
+                    )
+                    connection.execute(text("DROP TABLE vouchers"))
+                    connection.execute(text("ALTER TABLE vouchers__upgrade RENAME TO vouchers"))
+                    connection.execute(
+                        text("CREATE UNIQUE INDEX ix_vouchers_code ON vouchers (code)")
+                    )
+
 
 
 def init_db() -> None:

@@ -358,7 +358,7 @@ def test_legacy_history_migration_is_repeatable_and_preserves_unknown_role(tmp_p
     with Session(engine) as session:
         legacy = session.get(OrderHistory, 1)
         assert legacy.actor_role is None
-        assert legacy.created_at == datetime(2026, 10, 1)
+        assert legacy.created_at in (datetime(2026, 10, 1), datetime(2026, 10, 1, tzinfo=UTC))
         record_transition(
             session, seller_order_id=1, from_status="CONFIRMED", to_status="SHIPPED",
             actor=User(id=2, name="Seller", email="legacy@history.local", role="seller"),

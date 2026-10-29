@@ -18,6 +18,7 @@ from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.user_address import UserAddress
 from src.models.voucher import Voucher
+from src.models.voucher_usage import VoucherUsage
 
 __all__ = [
     "Base",
@@ -36,6 +37,7 @@ __all__ = [
     "Review",
     "Notification",
     "Voucher",
+    "VoucherUsage",
     "ReturnDispute",
     "ReturnRequest",
 ]

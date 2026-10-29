@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -13,6 +13,21 @@ class SellerOrder(SQLModel, table=True):
             "seller_id",
             name="uq_seller_orders_order_seller",
         ),
+        CheckConstraint("subtotal >= 0", name="ck_seller_orders_subtotal_non_negative"),
+        CheckConstraint("shop_discount >= 0", name="ck_seller_orders_shop_discount_non_negative"),
+        CheckConstraint(
+            "platform_discount >= 0",
+            name="ck_seller_orders_platform_discount_non_negative",
+        ),
+        CheckConstraint(
+            "shipping_fee >= 0",
+            name="ck_seller_orders_shipping_fee_non_negative",
+        ),
+        CheckConstraint(
+            "shipping_discount >= 0",
+            name="ck_seller_orders_shipping_discount_non_negative",
+        ),
+        CheckConstraint("total_amount >= 0", name="ck_seller_orders_total_amount_non_negative"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -44,3 +59,11 @@ class SellerOrder(SQLModel, table=True):
     delivered_at: datetime | None = None
 
     completed_at: datetime | None = None
+
+    subtotal: int = Field(default=0, ge=0)
+    shop_discount: int = Field(default=0, ge=0)
+    platform_discount: int = Field(default=0, ge=0)
+    shipping_fee: int = Field(default=0, ge=0)
+    shipping_discount: int = Field(default=0, ge=0)
+    total_amount: int = Field(default=0, ge=0)
+    pricing_policy_version: str = Field(default="LEGACY", max_length=20)
