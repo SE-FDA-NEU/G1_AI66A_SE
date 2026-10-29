@@ -30,3 +30,36 @@ Risk priority: persisted audit facts, tenant isolation and rollback are checked
 first because incorrect identity/history can mislead users about fulfilment and
 failed partial writes can leave inconsistent orders. Browser tests are not added:
 this task changes backend data, with no new screen or UI interaction.
+
+## Task #139: buyer return-request UI
+
+Expected results come from #139, parent #109 and the existing return API schema.
+The UI cases execute the production controller in `tests/buyer_returns_ui.mjs`;
+native layout/integration cases use `tests/buyer_returns_browser.mjs`.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Mixed-shop receipt with delivered/shipped shops and pending requests | Only delivered shops without a pending request appear; send the selected shop ID explicitly | DOM and native page checks |
+| Reason lengths 2/3/500/501; evidence 2/3/2000/2001; whitespace | Invalid input prevents POST and focuses its field; valid limits are accepted | DOM boundary partitions |
+| Switch eligible shop, cancel/reopen or refresh same order | Draft remains attached to its original shop; selection is retained when still eligible | DOM draft checks |
+| Repeated submit/cancel while POST is pending | One POST, locked controls, form stays visible until result | DOM pending-write checks |
+| Server 422 with field errors | End progress, retain input, unlock before moving focus to the invalid control | DOM regression and native browser |
+| Successful POST followed by receipt refresh | Persistent request-number confirmation; one status card; submitted shop no longer selectable | DOM and native browser |
+| Return read fails or write outcome is uncertain | Fail closed, retain draft, explicit Retry reads receipt/requests and never repeats POST | DOM timeout/conflict and native committed-503 fixture |
+| Multiple requests, rejected/approved results, hostile reason/evidence text | Show all current statuses/notes as text; no injected HTML or unsafe automatic links | DOM and native browser |
+| Guest/seller, expired token, another account/order selected during a request | No buyer action, appropriate login recovery, old response/draft cannot appear in the new context | DOM and native account-change cases |
+| Native page at 390/768/1280px | No horizontal page overflow; visible labels/focus and usable form controls | Chrome/Edge screenshots |
+| Existing return backend and page aliases | Ownership/eligibility/refund rules unchanged; both aliases serve the new assets | `tests/test_return_refund.py`, `tests/test_order_tracker.py` |
+
+```powershell
+$env:DEBUG = 'false'
+node tests/buyer_returns_ui.mjs
+node tests/buyer_returns_browser.mjs
+python -m pytest tests/test_return_refund.py tests/test_order_tracker.py tests/test_ui_docs_contract.py tests/test_ui_styling.py -q
+python -m ruff check src tests/test_return_refund.py
+git diff --check
+```
+
+The DOM suite runs in the existing CI page-script step. Native checks require an
+installed Chrome/Edge, or `BROWSER_PATH`; they need no npm dependency and use an
+isolated browser profile. Actual run results and AI disclosure belong in the PR.
