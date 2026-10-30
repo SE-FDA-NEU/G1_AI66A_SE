@@ -10,7 +10,7 @@ const body = {recipient_name:"Buyer", delivery_address:"123 Main", phone_number:
 export function setup(responses, saved = null, script = checkoutSource, addressResponses = []) {
   const nodes = new Map();
   const element = () => ({hidden:false, disabled:false, textContent:"", children:[],
-    handlers:{}, append(child) {this.children.push(child);}, replaceChildren() {this.children=[];},
+    handlers:{}, append(...children) {this.children.push(...children);}, replaceChildren(...children) {this.children=children;},
     querySelectorAll() {return [];}, setAttribute(name,value){this[name]=value;}, removeAttribute(name){delete this[name];},
     addEventListener(name, handler) {this.handlers[name]=handler;}, focus() {if (!this.disabled) this.focused=true;}});
   const fields = Object.keys(body).map(name => ({...element(),name,value:body[name],disabled:false}));
@@ -136,7 +136,7 @@ assert.match(selectedSummary,/Price changed:/);
 assert.match(selectedSummary,/100/);
 assert.match(selectedSummary,/120/);
 assert.equal(test.nodes.get("summary").children.at(-1).textContent,
-  `Total: ${new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND"}).format(120)}`);
+  `Items subtotal: ${new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND"}).format(120)}`);
 const noSelection={payload:{data:{cart_total:100,selected_total:0,
   items:[{name:"Mouse",quantity:1,line_total:100,is_selected:false,availability:"available"}]}}};
 test=setup([user,noSelection]); await tick();
@@ -152,3 +152,67 @@ for (const malformed of [
   assert.match(test.nodes.get("error").textContent,/Cart (response|selected total)/);
 }
 console.log("US12 checkout checks passed: selected-only summary, changed price, empty selection.");
+
+// #136: the confirm button waits for a server quote; the POST carries that exact quote.
+const shopCart={payload:{data:{cart_total:100,selected_total:100,items:[{name:"Mouse",quantity:1,
+  line_total:100,availability:"available",is_selected:true,seller_id:5,seller_name:"Shop A"}]}}};
+const quoted=(overrides={})=>({payload:{data:{currency:"VND",pricing_policy_version:"US16-V1",
+  quote_revision:"a".repeat(64),subtotal:100,shop_discount:0,platform_discount:0,shipping_fee:20000,
+  shipping_discount:0,grand_total:20100,platform_voucher:null,shipping_voucher:null,
+  seller_orders:[{seller_id:5,items:[],subtotal:100,shop_discount:0,platform_discount:0,
+    shipping_fee:20000,shipping_discount:0,total_amount:20100,shop_voucher:null}],...overrides}}});
+const text=id=>test.nodes.get(id).children.map(child=>child.textContent).join(" | ");
+test=setup([user,shopCart,quoted()]); await tick(); await tick();
+assert.equal(test.nodes.get("confirm").disabled,false);
+assert.match(text("price-breakdown"),/Shop A: items/);
+assert.match(text("price-breakdown"),/Total to pay: 20\.100/);
+assert.equal(test.nodes.get("shop-vouchers").children.length,1,"one voucher slot per selected shop");
+// Applying a platform voucher re-quotes with it; a rejected voucher blocks confirmation.
+test.nodes.get("voucher-platform").value=" OLD10 ";
+test.nodes.get("voucher-platform-apply").handlers.click();
+assert.equal(test.nodes.get("confirm").disabled,true,"no confirmation while the total is updating");
+await tick();
+assert.deepEqual(JSON.parse(test.calls.at(-1).options.body),{platform_voucher:"OLD10"});
+test=setup([user,shopCart,quoted(),quoted({platform_voucher:{code:"OLD10",status:"REJECTED",discount:0,
+  error:{code:"ERR_VOUCHER_EXPIRED",message:"Voucher 'OLD10' expired."}}})]); await tick(); await tick();
+test.nodes.get("voucher-platform").value="OLD10";
+await test.nodes.get("voucher-platform-apply").handlers.click();
+assert.equal(test.nodes.get("voucher-platform-error").textContent,"Voucher 'OLD10' expired.");
+assert.equal(test.nodes.get("voucher-platform")["aria-invalid"],"true");
+assert.equal(test.nodes.get("confirm").disabled,true);
+const before=test.calls.length;
+test.nodes.get("checkout-form").handlers.submit({preventDefault(){}}); await tick();
+assert.equal(test.calls.length,before,"a rejected voucher is never silently dropped at checkout");
+assert.match(test.nodes.get("error").textContent,/remove the rejected voucher/);
+// Removing it re-quotes without the code and re-enables confirmation; the POST carries the revision.
+test=setup([user,shopCart,quoted(),quoted(),{status:201,payload:{data:{id:9}}}]); await tick(); await tick();
+await test.nodes.get("voucher-platform-remove").handlers.click();
+assert.deepEqual(JSON.parse(test.calls.at(-1).options.body),{});
+assert.equal(test.nodes.get("confirm").disabled,false);
+test.nodes.get("checkout-form").handlers.submit({preventDefault(){}}); await tick(); await tick();
+const posted=JSON.parse(test.calls.at(-1).options.body);
+assert.equal(posted.quote_revision,"a".repeat(64));
+assert.equal(posted.recipient_name,"Buyer");
+assert.deepEqual(test.navigations,["/checkout/confirmation/9"]);
+// An older quote that answers last cannot overwrite the newer selection's total.
+let releaseOld;
+const slow=new Promise(resolve=>{releaseOld=()=>resolve(quoted({grand_total:1}));});
+test=setup([user,shopCart,quoted(),slow,quoted({grand_total:999})]); await tick(); await tick();
+test.nodes.get("voucher-shipping").value="SHIP1";
+const first=test.nodes.get("voucher-shipping-apply").handlers.click();
+test.nodes.get("voucher-shipping").value="SHIP2";
+const second=test.nodes.get("voucher-shipping-apply").handlers.click();
+await second; releaseOld(); await first;
+assert.match(text("price-breakdown"),/Total to pay: 999/);
+// A stale quote at checkout refreshes the total and asks the buyer to confirm again.
+test=setup([user,shopCart,quoted(),{status:409,payload:{error:{code:"ERR_QUOTE_STALE",
+  message:"Prices or vouchers changed."}}},quoted({grand_total:30000})]); await tick(); await tick();
+test.nodes.get("checkout-form").handlers.submit({preventDefault(){}}); await tick(); await tick(); await tick();
+assert.match(test.nodes.get("error").textContent,/Review the updated total and confirm again/);
+assert.match(text("price-breakdown"),/Total to pay: 30\.000/);
+assert.equal(test.storage.size,0,"a definite rejection clears the pending request");
+// A failed quote keeps confirmation disabled and offers a retry.
+test=setup([user,shopCart,new Error("timeout")]); await tick(); await tick();
+assert.equal(test.nodes.get("confirm").disabled,true);
+assert.equal(test.nodes.get("refresh-quote").hidden,false);
+console.log("#136 voucher checks passed: quote gate, apply/remove, rejection, stale response, stale quote.");

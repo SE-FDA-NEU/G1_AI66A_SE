@@ -7,7 +7,9 @@ Story #108, tasks #133 (voucher model and validation), #134 (seller voucher UI),
 service in sections 2 and 4, with the integration boundary in section 2.3. It does
 not activate voucher pricing in checkout. The persistence/eligibility, quote API,
 checkout UI and transaction wiring remain assigned to their respective tasks.
-Those portions below are contracts, not evidence of completed integration. Error
+Those portions below are contracts, not evidence of completed integration.
+Task #136 now implements the quote API (5.1), quoted checkout (5.2), the quote revision
+(5.3) and the checkout page; see section 5.6 for what it covers and what is left. Error
 codes join `docs/design.md` section 3.4 only when first raised in code;
 `tests/test_ui_docs_contract.py` requires that table to match `src/` exactly.
 
@@ -333,6 +335,40 @@ editing the JSON. Another seller's voucher returns 404. Field errors use `error.
 (price, dates, limits). `usage_limit` cannot drop below `used_count`, and a code cannot
 change once it has been used. Platform vouchers have no management API in this sprint:
 the demo seed creates them, and admin management belongs to #151.
+
+### 5.6 Implemented by #136
+
+- `src/services/checkout_pricing.py` reads the selected cart at current prices,
+  validates each requested code in slot order (shop, platform, shipping) with
+  `validate_voucher`, and prices what stays eligible with `price_order`. The quote and
+  checkout call the same function. It never writes; checkout consumes usages.
+- `POST /api/v1/orders/quote` returns the section 5.1 body. A rejected code keeps its
+  slot with `status: "REJECTED"` and the error; the rest is still priced.
+- `quote_revision` covers the selected lines and current prices, the requested codes,
+  and the rule fields of every requested voucher, including a rejected one. Usage
+  counters are not part of it, so a voucher that runs out after the quote returns
+  `ERR_VOUCHER_USAGE_LIMIT` with `error.fields.platform_voucher`, not `ERR_QUOTE_STALE`.
+- A checkout body with `quote_revision` is re-priced in the transaction. A different
+  revision returns `409 ERR_QUOTE_STALE`; any rejected voucher aborts with its own code
+  and `error.fields`. Otherwise each seller order stores the six amounts and `US16-V1`,
+  `orders.total_amount` is the grand total, and one usage per voucher is written.
+  Everything rolls back together on failure.
+- The idempotency hash leaves out unset voucher fields, so a legacy body hashes as
+  before and `test_legacy_hash_stays_compatible` is unchanged.
+- The receipt adds the stored breakdown to each `sub_orders` entry and a `vouchers`
+  list read from `voucher_usages`. A seller sees only their own shop voucher.
+- The checkout page has a voucher slot per selected shop plus platform and
+  free-shipping slots. Apply and Remove re-quote. Confirm stays disabled until a quote
+  without rejected vouchers arrives. An older quote response never replaces a newer one.
+  The POST sends the reviewed `quote_revision`. A stale quote or voucher rejection
+  re-quotes and asks the buyer to confirm again. The confirmation page shows the
+  stored amounts.
+
+**Not done in #136 (phase 2 of section 5.4):** the server still accepts a new order
+without `quote_revision` and prices it as `LEGACY`. The checkout page always sends a
+revision, but other callers and many existing tests post the legacy body. Rejecting it
+is a separate change that updates those callers. The seller receipt also still shows
+the parent `total_amount`, which section 5.2 asks to hide; that is unchanged here.
 
 ## 6. Persistence (#133)
 

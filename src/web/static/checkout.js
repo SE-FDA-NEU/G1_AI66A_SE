@@ -19,6 +19,7 @@ function authenticationChanged() {
     for (const field of document.getElementById("address-form").elements) if ("value" in field) field.value = "";
     for (const field of form.elements) if ("value" in field) field.value = "";
     document.getElementById("summary").replaceChildren();
+    resetVouchers();
     statusText.textContent = "Your account has changed. Reload checkout before confirming.";
     message("");
     retry.textContent = "Reload checkout";
@@ -54,7 +55,9 @@ function lock(value) {
   busy = value;
   for (const field of form.elements) field.disabled = value;
   for (const control of document.getElementById("address-book").querySelectorAll("input,select,button")) control.disabled = value;
+  for (const control of voucherSection.querySelectorAll("input,button")) control.disabled = value;
   syncDeliveryMode();
+  updateConfirm();
 }
 function renderCartSummary(cart) {
   if (!cart || !Array.isArray(cart.items) || !Number.isSafeInteger(cart.selected_total) ||
@@ -81,7 +84,8 @@ function renderCartSummary(cart) {
   if (calculatedTotal !== cart.selected_total) {
     throw new Error("Cart selected total does not match its selected items.");
   }
-  total.textContent = `Total: ${money(calculatedTotal)}`;
+  // Discounts and shipping come only from the server quote below.
+  total.textContent = `Items subtotal: ${money(calculatedTotal)}`;
   summary.append(total);
   if (!cart.items.length) return "Your cart is empty.";
   if (!selected.length) return "Select at least one item in your cart.";
@@ -111,9 +115,11 @@ async function init() {
       const blocked = renderCartSummary(cart);
       form.hidden = Boolean(blocked);
       statusText.textContent = blocked || "Enter delivery information.";
+      if (!blocked) renderShopVouchers(cart);
     } finally {
       if (!contextChanged) await loadAddresses();
     }
+    if (!form.hidden && !contextChanged) await refreshQuote();
   } catch (e) { if (e.accountChanged) return; message(e.message); retry.hidden = false; }
 }
 let sending = false;
@@ -131,6 +137,13 @@ async function submit() {
     if (e.status && e.status < 500 && e.status !== 401) {
       sessionStorage.removeItem(storageKey); pending = null; lock(false);
       showFields(form, "checkout", e.fields);
+      if (e.code === "ERR_QUOTE_STALE" || e.code?.startsWith("ERR_VOUCHER_")) {
+        await refreshQuote();
+        showVoucherErrors(e.fields);
+        message(e.code === "ERR_QUOTE_STALE" ?
+          "Prices or vouchers changed. Review the updated total and confirm again." :
+          `${e.message} Remove or replace that voucher, then confirm again.`);
+      }
       try {
         if (e.code === "ERR_ADDRESS_CHANGED" || e.code === "ERR_ADDRESS_NOT_FOUND") {
           reviewRequired = true;
@@ -151,6 +164,7 @@ form.addEventListener("submit", event => {
   event.preventDefault(); if (authenticationChanged() || busy || !form.reportValidity()) return;
   if (addressBusy) return;
   if (reviewRequired) { message("Review the address book and select a delivery option again."); return; }
+  if (!quoteReady()) { message("Wait for the updated total, or remove the rejected voucher, before confirming."); return; }
   clearFields(form, "checkout");
   let body;
   const chosen = addresses.find(row => String(row.id) === addressChoice.value);
@@ -163,6 +177,8 @@ form.addEventListener("submit", event => {
     if (!/^[+0-9 ()-]+$/.test(body.phone_number) || (body.phone_number.match(/\d/g) || []).length < 7 || (body.phone_number.match(/\d/g) || []).length > 15) errors.phone_number = ["Phone number must contain 7 to 15 digits."];
     if (Object.keys(errors).length) { showFields(form, "checkout", errors); message("Please correct the highlighted fields."); return; }
   }
+  // The exact quote the buyer reviewed; the server rejects it if anything changed since.
+  body = {...body, ...voucherBody(), quote_revision:quote.quote_revision};
   pending = {key:crypto.randomUUID(),body};
   sessionStorage.setItem(storageKey, JSON.stringify(pending)); submit();
 });
@@ -344,6 +360,159 @@ document.getElementById("confirm-delete").addEventListener("click", () => {
     await loadAddresses(false);
   }, "Address deleted.", "address-choice");
 });
+const voucherSection = document.getElementById("vouchers");
+const quoteStatus = document.getElementById("quote-status");
+const refreshQuoteButton = document.getElementById("refresh-quote");
+const breakdown = document.getElementById("price-breakdown");
+const shopNames = new Map();
+let selection = {shop:{}, platform:"", shipping:""};
+let quote = null, quoteSeq = 0;
+function voucherInputId(field) {
+  return field.startsWith("shop_vouchers.") ? `voucher-shop-${field.split(".")[1]}` :
+    `voucher-${field.replace("_voucher", "")}`;
+}
+function voucherBody() {
+  const body = {};
+  const shops = Object.entries(selection.shop).map(([id, code]) => ({seller_id:Number(id), code}));
+  if (shops.length) body.shop_vouchers = shops;
+  if (selection.platform) body.platform_voucher = selection.platform;
+  if (selection.shipping) body.shipping_voucher = selection.shipping;
+  return body;
+}
+function quoteVouchers(data) {
+  return [
+    ...data.seller_orders.map(row => [`shop_vouchers.${row.seller_id}`, row.shop_voucher]),
+    ["platform_voucher", data.platform_voucher], ["shipping_voucher", data.shipping_voucher],
+  ].filter(([, result]) => result);
+}
+function quoteReady() {
+  return Boolean(quote) && quoteVouchers(quote).every(([, result]) => result.status === "APPLIED");
+}
+function updateConfirm() {
+  const confirm = document.getElementById("confirm");
+  if (confirm) confirm.disabled = busy || !quoteReady();
+}
+function resetVouchers() {
+  quoteSeq++; quote = null;
+  selection = {shop:{}, platform:"", shipping:""};
+  voucherSection.hidden = true;
+  document.getElementById("shop-vouchers").replaceChildren();
+  breakdown.replaceChildren();
+  quoteStatus.textContent = "";
+}
+function voucherSlot(field, labelText) {
+  const id = voucherInputId(field);
+  const slot = document.createElement("div");
+  slot.className = "voucher-slot";
+  const label = document.createElement("label");
+  label.htmlFor = id; label.textContent = labelText;
+  const input = document.createElement("input");
+  input.id = id; input.type = "text"; input.maxLength = 32; input.autocomplete = "off";
+  input.setAttribute("aria-describedby", `${id}-error`);
+  label.append(input);
+  const error = document.createElement("span");
+  error.className = "field-error"; error.id = `${id}-error`;
+  slot.append(label);
+  for (const [text, action] of [["Apply", "apply"], ["Remove", "remove"]]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.id = `${id}-${action}`; button.textContent = text;
+    button.setAttribute("aria-label", `${text} ${labelText.toLowerCase()}`);
+    button.addEventListener("click", () => changeVoucher(field, action === "apply" ? input.value : ""));
+    slot.append(button);
+  }
+  slot.append(error);
+  return slot;
+}
+function renderShopVouchers(cart) {
+  shopNames.clear();
+  for (const item of cart.items) if (item.is_selected) shopNames.set(item.seller_id, item.seller_name);
+  const rows = [...shopNames].map(([id, name]) => voucherSlot(`shop_vouchers.${id}`, `Voucher for ${name}`));
+  document.getElementById("shop-vouchers").replaceChildren(...rows);
+  voucherSection.hidden = false;
+}
+function changeVoucher(field, rawCode) {
+  if (authenticationChanged() || busy || pending) return;
+  const code = rawCode.trim();
+  if (field.startsWith("shop_vouchers.")) {
+    const id = field.split(".")[1];
+    if (code) selection.shop[id] = code; else delete selection.shop[id];
+  } else selection[field.replace("_voucher", "")] = code;
+  if (!code) document.getElementById(voucherInputId(field)).value = "";
+  message("");
+  return refreshQuote();
+}
+function showVoucherErrors(fields = {}) {
+  for (const [field, messages] of Object.entries(fields || {})) {
+    if (!field.endsWith("_voucher") && !field.startsWith("shop_vouchers.")) continue;
+    const id = voucherInputId(field);
+    document.getElementById(`${id}-error`).textContent = [].concat(messages).join(" ");
+    document.getElementById(id).setAttribute("aria-invalid", "true");
+  }
+}
+function breakdownLine(text) {
+  const line = document.createElement("p");
+  line.textContent = text;
+  return line;
+}
+function renderQuote(data) {
+  for (const field of ["platform_voucher", "shipping_voucher", ...[...shopNames.keys()].map(id => `shop_vouchers.${id}`)]) {
+    const id = voucherInputId(field);
+    document.getElementById(`${id}-error`).textContent = "";
+    document.getElementById(id).removeAttribute("aria-invalid");
+  }
+  const rejected = {};
+  for (const [field, result] of quoteVouchers(data)) {
+    if (result.status === "REJECTED") rejected[field] = [result.error.message];
+  }
+  showVoucherErrors(rejected);
+  const lines = [];
+  for (const row of data.seller_orders) {
+    const shop = shopNames.get(row.seller_id) || `Shop ${row.seller_id}`;
+    lines.push(breakdownLine(`${shop}: items ${money(row.subtotal)}` +
+      (row.shop_discount ? `, shop voucher −${money(row.shop_discount)}` : "") +
+      (row.platform_discount ? `, platform voucher −${money(row.platform_discount)}` : "") +
+      `, shipping ${money(row.shipping_fee)}` +
+      (row.shipping_discount ? `, shipping discount −${money(row.shipping_discount)}` : "") +
+      `. Shop total ${money(row.total_amount)}.`));
+  }
+  lines.push(breakdownLine(`Items subtotal: ${money(data.subtotal)}`));
+  if (data.shop_discount) lines.push(breakdownLine(`Shop discounts: −${money(data.shop_discount)}`));
+  if (data.platform_discount) lines.push(breakdownLine(`Platform discount: −${money(data.platform_discount)}`));
+  lines.push(breakdownLine(`Shipping fee: ${money(data.shipping_fee)}`));
+  if (data.shipping_discount) lines.push(breakdownLine(`Shipping discount: −${money(data.shipping_discount)}`));
+  const total = document.createElement("strong");
+  total.textContent = `Total to pay: ${money(data.grand_total)}`;
+  lines.push(total);
+  breakdown.replaceChildren(...lines);
+  quoteStatus.textContent = Object.keys(rejected).length ?
+    "A voucher cannot be used. Remove or replace it to continue." : "Total updated.";
+}
+async function refreshQuote() {
+  const seq = ++quoteSeq;
+  quote = null; updateConfirm();
+  refreshQuoteButton.hidden = true;
+  quoteStatus.textContent = "Updating your total...";
+  try {
+    const {data} = await request("/api/v1/orders/quote", {method:"POST", body:JSON.stringify(voucherBody())});
+    // A slower, older response must not replace the total for a newer selection.
+    if (seq !== quoteSeq) return;
+    quote = data;
+    renderQuote(data);
+  } catch (e) {
+    if (e.accountChanged || seq !== quoteSeq) return;
+    breakdown.replaceChildren();
+    quoteStatus.textContent = `Could not calculate your total. ${e.message}`;
+    refreshQuoteButton.hidden = false;
+  } finally {
+    if (seq === quoteSeq) updateConfirm();
+  }
+}
+for (const slot of ["platform", "shipping"]) {
+  const input = document.getElementById(`voucher-${slot}`);
+  document.getElementById(`voucher-${slot}-apply`).addEventListener("click", () => changeVoucher(`${slot}_voucher`, input.value));
+  document.getElementById(`voucher-${slot}-remove`).addEventListener("click", () => changeVoucher(`${slot}_voucher`, ""));
+}
+refreshQuoteButton.addEventListener("click", () => { if (!authenticationChanged() && !busy) refreshQuote(); });
 globalThis.addEventListener?.("storage", event => {
   if (event.key === "access_token") authenticationChanged();
 });

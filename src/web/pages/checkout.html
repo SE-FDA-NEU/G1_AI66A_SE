@@ -71,6 +71,30 @@
     </section>
     <p id="status" role="status">Loading your cart...</p>
     <section id="summary" aria-label="Order summary"></section>
+    <section id="vouchers" hidden aria-labelledby="vouchers-heading">
+      <h2 id="vouchers-heading">Vouchers and total</h2>
+      <p>Each shop accepts one shop voucher. Platform and free-shipping vouchers apply to the whole order.</p>
+      <div id="shop-vouchers"></div>
+      <div class="voucher-slot">
+        <label for="voucher-platform">Platform voucher
+          <input id="voucher-platform" type="text" maxlength="32" autocomplete="off" aria-describedby="voucher-platform-error">
+        </label>
+        <button id="voucher-platform-apply" type="button">Apply</button>
+        <button id="voucher-platform-remove" type="button">Remove</button>
+        <span class="field-error" id="voucher-platform-error"></span>
+      </div>
+      <div class="voucher-slot">
+        <label for="voucher-shipping">Free-shipping voucher
+          <input id="voucher-shipping" type="text" maxlength="32" autocomplete="off" aria-describedby="voucher-shipping-error">
+        </label>
+        <button id="voucher-shipping-apply" type="button">Apply</button>
+        <button id="voucher-shipping-remove" type="button">Remove</button>
+        <span class="field-error" id="voucher-shipping-error"></span>
+      </div>
+      <p id="quote-status" role="status" tabindex="-1"></p>
+      <button id="refresh-quote" type="button" hidden>Recalculate total</button>
+      <section id="price-breakdown" aria-label="Price breakdown"></section>
+    </section>
     <form id="checkout-form" hidden>
       <fieldset id="manual-delivery">
         <legend>Enter delivery information manually</legend>
