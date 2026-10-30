@@ -24,11 +24,11 @@ globalThis.PaymentDisplay = Object.freeze({
     if (statusElement) {
       statusElement.hidden = false;
       statusElement.textContent = order.payment_method
-        ? `Payment status: ${PaymentDisplay.statusNames[order.payment_status] || "Not recorded"}`
-        : "Payment not recorded";
+       ? `Payment status: ${PaymentDisplay.statusNames[order.payment_status] || "Not recorded"}`
+       : "Payment not recorded";
       statusElement.className = "badge" + (
-        order.payment_method && order.payment_status === "REFUNDED" ? " badge-purple" :
-        order.payment_method && order.payment_status === "PAID" ? " badge-success" : ""
+       order.payment_method && order.payment_status === "REFUNDED" ? " badge-purple" :
+       order.payment_method && order.payment_status === "PAID" ? " badge-success" : ""
       );
     }
   },
