@@ -302,13 +302,15 @@ The selected analytics period is evaluated using `seller_orders.completed_at`, n
 The seller analytics endpoint accepts the canonical inclusive date filters
 `from` and `to`. `period` supports `daily`, `weekly`, and `monthly`; `group_by`
 accepts `day` or `month` as aliases for daily/monthly output. Each period
-reports `gross_order_value`, `completed_revenue`, `pending_escrow_revenue`, and
-`cancellation_rate` (a percentage from 0 to 100). All four metrics use the
-same effective timestamp: `completed_at` when present, otherwise
-`created_at`. Gross order value is the seller order `total_amount` across all
-statuses; completed revenue is that amount for completed orders only; pending
-escrow revenue excludes cancelled orders and includes only orders whose escrow
-is `HELD` or `PAUSED`.
+reports `revenue`, `orders`, `items_sold`, `gross_order_value`, `completed_revenue`,
+`pending_escrow_revenue`, and `cancellation_rate` (a percentage from 0 to 100, float).
+All metrics use the same effective timestamp: `completed_at` when present (per BR7),
+otherwise falling back to `created_at` for uncompleted orders. While `revenue`
+reflects the line-item total (sum of item quantity × unit_price for completed orders),
+`completed_revenue` reflects `SellerOrder.total_amount` for completed orders, which
+accounts for applied shop discounts and shipping fees. Gross order value is
+`SellerOrder.total_amount` across all statuses; pending escrow revenue excludes
+cancelled orders and includes only uncompleted orders whose escrow is `HELD` or `PAUSED`.
 
 ---
 

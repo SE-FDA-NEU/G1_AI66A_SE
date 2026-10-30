@@ -27,6 +27,7 @@ _DEFAULT_DAYS = 30
 _MAX_LIMIT = 100
 _MIN_THRESHOLD = 0
 _MAX_THRESHOLD = 10_000
+_MAX_RANGE_DAYS = 731
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +62,11 @@ def _resolve_date_range(
     end = _parse_date(to_date, "to") or today
     if start > end:
         raise _bad_request("ERR_INVALID_DATE_RANGE", "from must not be after to.")
+    if (end - start).days > _MAX_RANGE_DAYS:
+        raise _bad_request(
+            "ERR_INVALID_DATE_RANGE",
+            f"Date range must not exceed {_MAX_RANGE_DAYS} days.",
+        )
     return start, end
 
 
@@ -143,10 +149,18 @@ def get_analytics(
 ) -> RevenueAnalyticsResponse:
     """Return seller-scoped financial metrics grouped by the requested period.
 
-    - **from** / **to**: inclusive date range (default: last 30 days).
-    - **period**: grouping granularity — `daily`, `weekly`, or `monthly`.
-    - **group_by**: optional `day`/`month` alias for daily/monthly grouping.
-    - `cancellation_rate` is a percentage from 0 to 100.
+    - **from** / **to**: canonical inclusive date range (YYYY-MM-DD, default 30 days).
+    - **period**: grouping granularity — `daily`, `weekly`, or `monthly` (default `daily`).
+    - **group_by**: optional `day` or `month` alias for daily or monthly grouping.
+    - `revenue`: line-item total (`sum(quantity * unit_price)`) for completed orders.
+    - `completed_revenue`: `SellerOrder.total_amount` for completed orders
+      (accounting for shop discounts and shipping fees).
+    - `gross_order_value`: `SellerOrder.total_amount` across all order statuses.
+    - `pending_escrow_revenue`: `SellerOrder.total_amount` for uncompleted,
+      non-cancelled orders with escrow `HELD` or `PAUSED`.
+    - `cancellation_rate`: percentage of cancelled orders (float, 0.0 to 100.0).
+    - All metrics share the same effective timestamp: `completed_at` when completed
+      (BR7), otherwise `created_at`.
     """
     group_by = _resolve_group_by(group_by)
     if period not in ("daily", "weekly", "monthly"):
@@ -156,24 +170,15 @@ def get_analytics(
         )
     start, end = _resolve_date_range(from_date, to_date)
     effective_period = group_by or period
-    rows, financial_meta = get_analytics_summary(
+    rows, meta = get_analytics_summary(
         session, seller.id, start, end, effective_period  # type: ignore[arg-type]
     )
-    data = [RevenuePeriod(**row) for row in rows]
-    total_revenue = sum(r.revenue for r in data)
-    total_orders = sum(r.orders for r in data)
-    total_items = sum(r.items_sold for r in data)
+    meta["period"] = period
+    if group_by is not None:
+        meta["group_by"] = group_by
     return RevenueAnalyticsResponse(
-        data=data,
-        meta={
-            "from": start.isoformat(),
-            "to": end.isoformat(),
-            "period": period,
-            "total_revenue": total_revenue,
-            "total_orders": total_orders,
-            "total_items_sold": total_items,
-            **financial_meta,
-        },
+        data=[RevenuePeriod(**r) for r in rows],
+        meta=meta,
     )
 
 

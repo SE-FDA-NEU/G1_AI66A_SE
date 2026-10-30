@@ -72,7 +72,14 @@ def _make_order(session, buyer_id, total, status, created_at):
 
 
 def _make_seller_order(
-    session, order_id, seller_id, status, created_at, completed_at=None
+    session,
+    order_id,
+    seller_id,
+    status,
+    created_at,
+    completed_at=None,
+    total_amount=0,
+    escrow_status="HELD",
 ):
     if status == "COMPLETED" and completed_at is None:
         completed_at = created_at
@@ -82,6 +89,8 @@ def _make_seller_order(
         status=status,
         created_at=created_at,
         completed_at=completed_at,
+        total_amount=total_amount,
+        escrow_status=escrow_status,
     )
     session.add(so)
     session.flush()
@@ -268,7 +277,7 @@ def us18_data():
             "COMPLETED", today,
         )
         so1 = _make_seller_order(
-            session, o1.id, seller.id, "COMPLETED", today
+            session, o1.id, seller.id, "COMPLETED", today, total_amount=400_000
         )
         _make_item(session, so1.id, product_a.id, 2, product_a.price)
         _make_item(session, so1.id, product_b.id, 1, product_b.price)
@@ -282,7 +291,7 @@ def us18_data():
             "COMPLETED", yesterday,
         )
         so2 = _make_seller_order(
-            session, o2.id, seller.id, "COMPLETED", yesterday
+            session, o2.id, seller.id, "COMPLETED", yesterday, total_amount=500_000
         )
         _make_item(session, so2.id, product_a.id, 5, product_a.price)
         order_ids.append(o2.id)
@@ -295,7 +304,7 @@ def us18_data():
             "PENDING", today,
         )
         so3 = _make_seller_order(
-            session, o3.id, seller.id, "PENDING", today
+            session, o3.id, seller.id, "PENDING", today, total_amount=100_000
         )
         _make_item(session, so3.id, product_a.id, 1, product_a.price)
         order_ids.append(o3.id)
@@ -310,6 +319,7 @@ def us18_data():
             "product_a": product_a,
             "product_b": product_b,
             "product_c": product_c,
+            "product_other": product_other,
             "order_ids": order_ids,
             "seller_order_ids": seller_order_ids,
             "product_ids": product_ids,
@@ -436,11 +446,124 @@ class TestRevenueAnalytics:
             headers=_auth(seller),
         ).json()
         bucket = body["data"][0]
+        # Order 1: 400_000 (COMPLETED), Order 3: 100_000 (PENDING, HELD)
         assert bucket["gross_order_value"] == 500_000
         assert bucket["completed_revenue"] == 400_000
         assert bucket["pending_escrow_revenue"] == 100_000
         assert bucket["cancellation_rate"] == 0.0
+        assert isinstance(bucket["cancellation_rate"], float)
+        assert bucket["revenue"] == 400_000
+        assert bucket["orders"] == 1
+        assert bucket["items_sold"] == 3
+        # Meta totals
         assert body["meta"]["gross_order_value"] == 500_000
+        assert body["meta"]["completed_revenue"] == 400_000
+        assert body["meta"]["pending_escrow_revenue"] == 100_000
+        assert body["meta"]["cancellation_rate"] == 0.0
+        assert isinstance(body["meta"]["cancellation_rate"], float)
+
+    def test_zero_and_nonzero_cancellation_rate(self, client: TestClient, us18_data):
+        seller = us18_data["seller"]
+        today = datetime.now(UTC).date().isoformat()
+        # 1. Zero cancellation rate: 2 orders (1 completed, 1 pending) -> 0.0%
+        body = client.get(
+            f"{BASE}?from={today}&to={today}&period=daily",
+            headers=_auth(seller),
+        ).json()
+        assert body["data"][0]["cancellation_rate"] == 0.0
+        assert isinstance(body["data"][0]["cancellation_rate"], float)
+        assert body["meta"]["cancellation_rate"] == 0.0
+        assert isinstance(body["meta"]["cancellation_rate"], float)
+
+        # 2. Non-zero cancellation rate: cancel 1 order -> 1 cancelled out of 2 = 50.0%
+        seller_order_id = us18_data["seller_order_ids"][2]
+        with Session(engine) as session:
+            so = session.get(SellerOrder, seller_order_id)
+            so.status = "CANCELLED"
+            session.add(so)
+            session.commit()
+        try:
+            body = client.get(
+                f"{BASE}?from={today}&to={today}&period=daily",
+                headers=_auth(seller),
+            ).json()
+            assert body["data"][0]["cancellation_rate"] == 50.0
+            assert isinstance(body["data"][0]["cancellation_rate"], float)
+            assert body["meta"]["cancellation_rate"] == 50.0
+            assert isinstance(body["meta"]["cancellation_rate"], float)
+        finally:
+            with Session(engine) as session:
+                so = session.get(SellerOrder, seller_order_id)
+                so.status = "PENDING"
+                session.add(so)
+                session.commit()
+
+    def test_escrow_handling_statuses(self, client: TestClient, us18_data):
+        """Verify escrow revenue includes only uncompleted HELD/PAUSED orders."""
+        seller = us18_data["seller"]
+        buyer = us18_data["buyer"]
+        now = datetime.now(UTC)
+        today = now.date().isoformat()
+
+        tracked_orders = []
+        tracked_sos = []
+        with Session(engine) as session:
+            # 1. PROCESSING with PAUSED escrow -> included in pending escrow
+            o_paused = _make_order(session, buyer.id, 120_000, "PROCESSING", now)
+            so_paused = _make_seller_order(
+                session,
+                o_paused.id,
+                seller.id,
+                "PROCESSING",
+                now,
+                total_amount=120_000,
+                escrow_status="PAUSED",
+            )
+            # 2. SHIPPED with RELEASED escrow -> excluded from pending escrow
+            o_released = _make_order(session, buyer.id, 80_000, "SHIPPED", now)
+            so_released = _make_seller_order(
+                session,
+                o_released.id,
+                seller.id,
+                "SHIPPED",
+                now,
+                total_amount=80_000,
+                escrow_status="RELEASED",
+            )
+            # 3. CANCELLED with HELD escrow -> excluded from pending escrow
+            o_cancelled = _make_order(session, buyer.id, 60_000, "CANCELLED", now)
+            so_cancelled = _make_seller_order(
+                session,
+                o_cancelled.id,
+                seller.id,
+                "CANCELLED",
+                now,
+                total_amount=60_000,
+                escrow_status="HELD",
+            )
+            session.commit()
+            tracked_orders.extend([o_paused.id, o_released.id, o_cancelled.id])
+            tracked_sos.extend([so_paused.id, so_released.id, so_cancelled.id])
+
+        try:
+            body = client.get(
+                f"{BASE}?from={today}&to={today}&period=daily",
+                headers=_auth(seller),
+            ).json()
+            bucket = body["data"][0]
+            # Baseline pending was 100_000 (Order 3, HELD).
+            # o_paused (120_000, PAUSED) is added -> 220_000
+            # o_released (RELEASED) and o_cancelled (CANCELLED) are excluded.
+            assert bucket["pending_escrow_revenue"] == 220_000
+            # Gross order value includes all 5 orders: 500k + 120k + 80k + 60k = 760_000
+            assert bucket["gross_order_value"] == 760_000
+            # Cancellation rate: 1 cancelled out of 5 orders = 20.0%
+            assert bucket["cancellation_rate"] == 20.0
+        finally:
+            with Session(engine) as session:
+                session.exec(delete(SellerOrder).where(SellerOrder.id.in_(tracked_sos)))
+                session.exec(delete(Order).where(Order.id.in_(tracked_orders)))
+                session.commit()
 
     def test_weekly_metrics_use_the_weekly_bucket(self, client: TestClient, us18_data):
         seller = us18_data["seller"]
@@ -452,54 +575,108 @@ class TestRevenueAnalytics:
             headers=_auth(seller),
         ).json()
         assert body["meta"]["group_by"] == "weekly"
+        assert body["meta"]["period"] == "weekly"
         assert len(body["data"]) == 1
-        assert body["data"][0]["gross_order_value"] == 1_000_000
-        assert body["data"][0]["completed_revenue"] == 900_000
-        assert body["data"][0]["pending_escrow_revenue"] == 100_000
+        bucket = body["data"][0]
+        # Yesterday Order 2: 500k COMPLETED, Today Order 1: 400k COMPLETED, Order 3: 100k PENDING
+        assert bucket["gross_order_value"] == 1_000_000
+        assert bucket["completed_revenue"] == 900_000
+        assert bucket["pending_escrow_revenue"] == 100_000
+        assert bucket["revenue"] == 900_000
+        assert bucket["orders"] == 2
+        assert bucket["items_sold"] == 8
+        assert bucket["cancellation_rate"] == 0.0
+        assert body["meta"]["gross_order_value"] == 1_000_000
+        assert body["meta"]["completed_revenue"] == 900_000
+        assert body["meta"]["pending_escrow_revenue"] == 100_000
 
-    def test_cancelled_orders_do_not_count_as_pending_escrow(
-        self, client: TestClient, us18_data
-    ):
+    def test_monthly_metrics_use_monthly_bucket(self, client: TestClient, us18_data):
         seller = us18_data["seller"]
-        seller_order_id = us18_data["seller_order_ids"][2]
-        with Session(engine) as session:
-            seller_order = session.get(SellerOrder, seller_order_id)
-            seller_order.status = "CANCELLED"
-            session.add(seller_order)
-            session.commit()
-        try:
-            today = datetime.now(UTC).date().isoformat()
-            body = client.get(
-                f"{BASE}?from={today}&to={today}",
-                headers=_auth(seller),
-            ).json()
-            bucket = body["data"][0]
-            assert bucket["pending_escrow_revenue"] == 0
-            assert bucket["cancellation_rate"] == 50.0
-        finally:
-            with Session(engine) as session:
-                seller_order = session.get(SellerOrder, seller_order_id)
-                seller_order.status = "PENDING"
-                session.add(seller_order)
-                session.commit()
-
-    def test_financial_metrics_are_seller_scoped(self, client: TestClient, us18_data):
-        seller = us18_data["seller2"]
-        today = datetime.now(UTC).date().isoformat()
+        today = datetime.now(UTC).date()
+        first_day = today.replace(day=1)
+        # End of current month
+        if today.month == 12:
+            last_day = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            last_day = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
         body = client.get(
-            f"{BASE}?from={today}&to={today}",
+            f"{BASE}?period=monthly&from={first_day}&to={last_day}",
             headers=_auth(seller),
         ).json()
-        assert body["meta"]["gross_order_value"] == 0
-        assert body["meta"]["completed_revenue"] == 0
+        assert body["meta"]["period"] == "monthly"
+        assert body["meta"]["group_by"] == "monthly"
+        bucket = next(b for b in body["data"] if b["period_start"] == first_day.isoformat())
+        assert bucket["gross_order_value"] == 1_000_000
+        assert bucket["completed_revenue"] == 900_000
+        assert bucket["pending_escrow_revenue"] == 100_000
+        assert bucket["revenue"] == 900_000
+        assert bucket["orders"] == 2
+        assert bucket["items_sold"] == 8
+        assert bucket["cancellation_rate"] == 0.0
+
+    def test_seller_isolation_multiseller_data(self, client: TestClient, us18_data):
+        """Seller A must not see Seller B's orders and Seller B must not see Seller A's."""
+        seller1 = us18_data["seller"]
+        seller2 = us18_data["seller2"]
+        buyer = us18_data["buyer"]
+        prod_other = us18_data["product_other"]
+        today = datetime.now(UTC)
+        today_date = today.date().isoformat()
+
+        # Add an order for seller 2
+        with Session(engine) as session:
+            o2 = _make_order(session, buyer.id, 250_000, "COMPLETED", today)
+            so2 = _make_seller_order(
+                session, o2.id, seller2.id, "COMPLETED", today, total_amount=250_000
+            )
+            _make_item(session, so2.id, prod_other.id, 1, prod_other.price)
+            session.commit()
+            o2_id = o2.id
+            so2_id = so2.id
+
+        try:
+            # Seller 1 views analytics: sees only own orders (Order 1: 400k, Order 3: 100k)
+            r1 = client.get(
+                f"{BASE}?from={today_date}&to={today_date}",
+                headers=_auth(seller1),
+            )
+            b1 = r1.json()
+            assert b1["meta"]["gross_order_value"] == 500_000
+            assert b1["meta"]["completed_revenue"] == 400_000
+            assert b1["meta"]["pending_escrow_revenue"] == 100_000
+            assert b1["meta"]["total_revenue"] == 400_000
+
+            # Seller 2 views analytics: sees only own order (250k)
+            r2 = client.get(
+                f"{BASE}?from={today_date}&to={today_date}",
+                headers=_auth(seller2),
+            )
+            b2 = r2.json()
+            assert b2["meta"]["gross_order_value"] == 250_000
+            assert b2["meta"]["completed_revenue"] == 250_000
+            assert b2["meta"]["pending_escrow_revenue"] == 0
+            assert b2["meta"]["total_revenue"] == prod_other.price
+        finally:
+            with Session(engine) as session:
+                session.exec(delete(OrderItem).where(OrderItem.seller_order_id == so2_id))
+                session.exec(delete(SellerOrder).where(SellerOrder.id == so2_id))
+                session.exec(delete(Order).where(Order.id == o2_id))
+                session.commit()
 
     def test_invalid_group_by_returns_400(self, client: TestClient, us18_data):
         seller = us18_data["seller"]
         response = client.get(
-            f"{BASE}?group_by=weekly",
+            f"{BASE}?group_by=yearly",
             headers=_auth(seller),
         )
         assert response.status_code == 400
+        assert response.json()["error"]["code"] == "ERR_INVALID_GROUPING"
+
+    def test_date_range_exceeding_731_days_returns_400(self, client: TestClient, us18_data):
+        seller = us18_data["seller"]
+        resp = client.get(f"{BASE}?from=2020-01-01&to=2025-01-01", headers=_auth(seller))
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "ERR_INVALID_DATE_RANGE"
 
     def test_invalid_period_returns_400(self, client: TestClient, us18_data):
         seller = us18_data["seller"]

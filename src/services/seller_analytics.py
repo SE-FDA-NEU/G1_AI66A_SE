@@ -11,7 +11,7 @@ All queries are read-only and scoped strictly to the authenticated seller's prod
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlmodel import Session, select
 
 from src.models.order import Order
@@ -74,49 +74,65 @@ def _iter_buckets(start: date, end: date, period: Period):
 # ---------------------------------------------------------------------------
 
 
-def get_revenue_summary(
+def get_analytics_summary(
     session: Session,
     seller_id: int,
     start_date: date,
     end_date: date,
     period: Period,
-) -> list[dict]:
-    """Return a list of time-bucketed revenue/order statistics.
-
-    Each element is::
-
-        {
-            "period":        "2024-01-15",           # label (ISO date / range / YYYY-MM)
-            "period_start":  "2024-01-15",
-            "period_end":    "2024-01-15",
-            "revenue":       1_500_000,              # integer VND
-            "orders":        3,                      # distinct seller_orders
-            "items_sold":    7,                      # sum of quantities
-        }
-
-    Only seller_orders with status COMPLETED count toward revenue.
-    """
+) -> tuple[list[dict], dict]:
+    """Return seller-scoped time-bucketed metrics and metadata in a single query."""
     start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
     end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
 
-    # Fetch all completed seller_orders in range for this seller.
-    # Per docs/design.md line 300 & BR7:
-    # "The selected analytics period is evaluated using seller_orders.completed_at,
-    # not the original marketplace order creation timestamp."
+    effective_ts = func.coalesce(SellerOrder.completed_at, SellerOrder.created_at)
+
+    # Single database query aggregating item metrics via SQL GROUP BY
     rows = session.exec(
-        select(SellerOrder, Order, OrderItem, Product)
-        .join(Order, Order.id == SellerOrder.order_id)
-        .join(OrderItem, OrderItem.seller_order_id == SellerOrder.id)
-        .join(Product, Product.id == OrderItem.product_id)
+        select(
+            SellerOrder.id,
+            SellerOrder.status,
+            SellerOrder.escrow_status,
+            SellerOrder.total_amount,
+            effective_ts.label("effective_dt"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            SellerOrder.status == "COMPLETED",
+                            OrderItem.quantity * OrderItem.unit_price,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("items_revenue"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (SellerOrder.status == "COMPLETED", OrderItem.quantity),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("items_sold"),
+        )
+        .outerjoin(OrderItem, OrderItem.seller_order_id == SellerOrder.id)
         .where(
             SellerOrder.seller_id == seller_id,
-            SellerOrder.status == "COMPLETED",
-            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) >= start_dt,
-            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) <= end_dt,
+            effective_ts >= start_dt,
+            effective_ts <= end_dt,
+        )
+        .group_by(
+            SellerOrder.id,
+            SellerOrder.status,
+            SellerOrder.escrow_status,
+            SellerOrder.total_amount,
+            SellerOrder.completed_at,
+            SellerOrder.created_at,
         )
     ).all()
 
-    # Group into buckets
     buckets: dict[date, dict] = {}
     for bucket_start, bucket_end_exc in _iter_buckets(start_date, end_date, period):
         label = _period_label(bucket_start, period)
@@ -128,27 +144,99 @@ def get_revenue_summary(
             "revenue": 0,
             "orders": 0,
             "items_sold": 0,
-            "_order_ids": set(),
+            "gross_order_value": 0,
+            "completed_revenue": 0,
+            "pending_escrow_revenue": 0,
+            "cancellation_rate": 0.0,
+            "_cancelled_orders": 0,
+            "_total_orders": 0,
         }
 
-    for seller_order, _order, item, _product in rows:
-        order_dt = seller_order.completed_at or seller_order.created_at
-        order_date = order_dt.date()
+    for row in rows:
+        order_date = row.effective_dt.date()
         bucket_start = _period_start(order_date, period)
         if bucket_start not in buckets:
             continue
         bucket = buckets[bucket_start]
-        bucket["revenue"] += item.quantity * item.unit_price
-        bucket["items_sold"] += item.quantity
-        bucket["_order_ids"].add(seller_order.id)
+        amount = int(row.total_amount)
+        bucket["gross_order_value"] += amount
+        bucket["_total_orders"] += 1
 
-    result = []
+        if row.status == "COMPLETED":
+            bucket["revenue"] += int(row.items_revenue)
+            bucket["orders"] += 1
+            bucket["items_sold"] += int(row.items_sold)
+            bucket["completed_revenue"] += amount
+        elif row.status == "CANCELLED":
+            bucket["_cancelled_orders"] += 1
+
+        if (
+            row.status not in {"COMPLETED", "CANCELLED"}
+            and row.escrow_status in {"HELD", "PAUSED"}
+        ):
+            bucket["pending_escrow_revenue"] += amount
+
+    for bucket in buckets.values():
+        tot = bucket["_total_orders"]
+        can = bucket["_cancelled_orders"]
+        bucket["cancellation_rate"] = (
+            round(can * 100.0 / tot, 2) if tot > 0 else 0.0
+        )
+
+    data = []
+    total_revenue = 0
+    total_orders = 0
+    total_items = 0
+    gross_order_value = 0
+    completed_revenue = 0
+    pending_escrow_revenue = 0
+    all_total_orders = 0
+    all_cancelled_orders = 0
+
     for bucket_start in sorted(buckets):
         b = buckets[bucket_start]
-        b["orders"] = len(b.pop("_order_ids"))
-        result.append(b)
+        tot = b.pop("_total_orders")
+        can = b.pop("_cancelled_orders")
+        total_revenue += b["revenue"]
+        total_orders += b["orders"]
+        total_items += b["items_sold"]
+        gross_order_value += b["gross_order_value"]
+        completed_revenue += b["completed_revenue"]
+        pending_escrow_revenue += b["pending_escrow_revenue"]
+        all_total_orders += tot
+        all_cancelled_orders += can
+        data.append(b)
 
-    return result
+    meta = {
+        "from": start_date.isoformat(),
+        "to": end_date.isoformat(),
+        "period": period,
+        "group_by": period,
+        "total_revenue": total_revenue,
+        "total_orders": total_orders,
+        "total_items_sold": total_items,
+        "gross_order_value": gross_order_value,
+        "completed_revenue": completed_revenue,
+        "pending_escrow_revenue": pending_escrow_revenue,
+        "cancellation_rate": (
+            round(all_cancelled_orders * 100.0 / all_total_orders, 2)
+            if all_total_orders > 0
+            else 0.0
+        ),
+    }
+    return data, meta
+
+
+def get_revenue_summary(
+    session: Session,
+    seller_id: int,
+    start_date: date,
+    end_date: date,
+    period: Period,
+) -> list[dict]:
+    """Return a list of time-bucketed revenue/order statistics."""
+    data, _ = get_analytics_summary(session, seller_id, start_date, end_date, period)
+    return data
 
 
 def get_financial_summary(
@@ -159,106 +247,8 @@ def get_financial_summary(
     group_by: Period,
 ) -> list[dict]:
     """Return seller-scoped financial metrics on the same timeline as revenue."""
-    start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
-    end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
-    rows = session.exec(
-        select(SellerOrder, Order)
-        .join(Order, Order.id == SellerOrder.order_id)
-        .where(
-            SellerOrder.seller_id == seller_id,
-            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) >= start_dt,
-            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) <= end_dt,
-        )
-    ).all()
-
-    buckets: dict[date, dict] = {}
-    for bucket_start, bucket_end_exc in _iter_buckets(start_date, end_date, group_by):
-        bucket_end = bucket_end_exc - timedelta(days=1)
-        buckets[bucket_start] = {
-            "period": _period_label(bucket_start, group_by),
-            "period_start": bucket_start.isoformat(),
-            "period_end": bucket_end.isoformat(),
-            "gross_order_value": 0,
-            "completed_revenue": 0,
-            "pending_escrow_revenue": 0,
-            "cancelled_orders": 0,
-            "total_orders": 0,
-        }
-
-    for seller_order, order in rows:
-        order_date = (
-            seller_order.completed_at or seller_order.created_at
-        ).date()
-        bucket = buckets.get(_period_start(order_date, group_by))
-        if bucket is None:
-            continue
-        amount = order.total_amount
-        bucket["gross_order_value"] += amount
-        bucket["total_orders"] += 1
-        if seller_order.status == "COMPLETED":
-            bucket["completed_revenue"] += amount
-        if (
-            seller_order.status not in {"COMPLETED", "CANCELLED"}
-            and seller_order.escrow_status in {"HELD", "PAUSED"}
-        ):
-            bucket["pending_escrow_revenue"] += amount
-        if seller_order.status == "CANCELLED":
-            bucket["cancelled_orders"] += 1
-
-    for bucket in buckets.values():
-        total_orders = bucket["total_orders"]
-        bucket["cancellation_rate"] = (
-            round(bucket["cancelled_orders"] * 100 / total_orders, 2)
-            if total_orders else 0.0
-        )
-    return [buckets[key] for key in sorted(buckets)]
-
-
-def get_analytics_summary(
-    session: Session,
-    seller_id: int,
-    start_date: date,
-    end_date: date,
-    period: Period,
-) -> tuple[list[dict], dict]:
-    """Merge the time series and aggregate financial metrics for one seller."""
-    revenue_rows = get_revenue_summary(
-        session, seller_id, start_date, end_date, period
-    )
-    financial_rows = get_financial_summary(
-        session, seller_id, start_date, end_date, period
-    )
-    financial_by_start = {row["period_start"]: row for row in financial_rows}
-    data = []
-    for row in revenue_rows:
-        financial = financial_by_start.get(row["period_start"], {})
-        data.append(
-            {
-                **row,
-                "gross_order_value": financial.get("gross_order_value", 0),
-                "completed_revenue": financial.get("completed_revenue", 0),
-                "pending_escrow_revenue": financial.get("pending_escrow_revenue", 0),
-                "cancellation_rate": financial.get("cancellation_rate", 0.0),
-            }
-        )
-    total_orders = sum(row["total_orders"] for row in financial_rows)
-    meta = {
-        "group_by": period,
-        "gross_order_value": sum(row["gross_order_value"] for row in financial_rows),
-        "completed_revenue": sum(row["completed_revenue"] for row in financial_rows),
-        "pending_escrow_revenue": sum(
-            row["pending_escrow_revenue"] for row in financial_rows
-        ),
-        "cancellation_rate": (
-            round(
-                sum(row["cancelled_orders"] for row in financial_rows) * 100 / total_orders,
-                2,
-            )
-            if total_orders
-            else 0.0
-        ),
-    }
-    return data, meta
+    data, _ = get_analytics_summary(session, seller_id, start_date, end_date, group_by)
+    return data
 
 
 # ---------------------------------------------------------------------------
