@@ -117,7 +117,10 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
         order.escrow_status = "VOIDED"
     elif "HELD" in escrow_statuses:
         order.escrow_status = "HELD"
-    elif escrow_statuses == {"REFUNDED", "RELEASED"}:
+    elif escrow_statuses <= {"REFUNDED", "VOIDED"}:
+        # Every share is terminal and nothing will be settled (US20 section 2.3).
+        order.escrow_status = "VOIDED"
+    elif escrow_statuses <= {"REFUNDED", "VOIDED", "RELEASED"}:
         order.escrow_status = "PARTIALLY_SETTLED"
     else:
         order.escrow_status = "HELD"
@@ -343,6 +346,44 @@ def _update_seller_order(
     session.refresh(seller_order)
 
 
+def check_return_settlement(seller_order: SellerOrder, action: str) -> None:
+    """Reject a decision before any write; shared by seller and admin dispute paths."""
+    if seller_order.status != "RETURN_REQUESTED":
+        raise ReturnError(
+            "ERR_INVALID_TRANSITION",
+            "The seller order is no longer awaiting a return decision.",
+            400,
+        )
+    if action == "APPROVE" and seller_order.payment_status not in RECONCILED_PAYMENTS:
+        raise ReturnError(
+            "ERR_INVALID_PAYMENT_STATE",
+            "Payment needs reconciliation before the return can be approved.",
+            409,
+        )
+
+
+def settle_return(session: Session, seller_order: SellerOrder, action: str, now: datetime) -> bool:
+    """Apply the US20 section 6 return rows; returns whether a payment was refunded."""
+    check_return_settlement(seller_order, action)
+    refunds_payment = seller_order.payment_status == "PAID"
+    if action == "APPROVE":
+        # Refund only a collected payment; an uncollected one is voided, not refunded.
+        values: dict[str, object] = {"status": "RETURNED_REFUNDED"}
+        if refunds_payment:
+            values |= {"payment_status": "REFUNDED", "escrow_status": "REFUNDED"}
+        else:
+            values["escrow_status"] = "VOIDED"
+    else:
+        # Escrow leaves PAUSED; it is released only for a collected payment.
+        values = {
+            "status": "COMPLETED",
+            "escrow_status": "RELEASED" if refunds_payment else "HELD",
+            "completed_at": seller_order.completed_at or now,
+        }
+    _update_seller_order(session, seller_order, values)
+    return refunds_payment
+
+
 def decide_return_request(
     session: Session,
     current_user: User,
@@ -378,19 +419,7 @@ def decide_return_request(
             400,
         )
 
-    if seller_order.status != "RETURN_REQUESTED":
-        raise ReturnError(
-            "ERR_INVALID_TRANSITION",
-            "The seller order is no longer awaiting a return decision.",
-            400,
-        )
-    refunds_payment = seller_order.payment_status == "PAID"
-    if decision.action == "APPROVE" and seller_order.payment_status not in RECONCILED_PAYMENTS:
-        raise ReturnError(
-            "ERR_INVALID_PAYMENT_STATE",
-            "Payment needs reconciliation before the return can be approved.",
-            409,
-        )
+    check_return_settlement(seller_order, decision.action)
 
     old_status = seller_order.status
     now = datetime.now(UTC)
@@ -419,24 +448,9 @@ def decide_return_request(
             400,
         )
 
-    if decision.action == "APPROVE":
-        # Refund only a collected payment; an uncollected one is voided, not refunded.
-        values = {"status": "RETURNED_REFUNDED"}
-        if refunds_payment:
-            values |= {"payment_status": "REFUNDED", "escrow_status": "REFUNDED"}
-        else:
-            values["escrow_status"] = "VOIDED"
-    else:
-        # Escrow leaves PAUSED; it is released only for a collected payment.
-        values = {
-            "status": "COMPLETED",
-            "escrow_status": "RELEASED" if refunds_payment else "HELD",
-            "completed_at": seller_order.completed_at or now,
-        }
-    _update_seller_order(session, seller_order, values)
+    refunds_payment = settle_return(session, seller_order, decision.action, now)
 
     if decision.action == "APPROVE":
-
         if decision.is_restockable:
             items = session.exec(
                 select(OrderItem, Product)
