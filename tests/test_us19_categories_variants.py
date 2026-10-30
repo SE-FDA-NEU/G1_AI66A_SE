@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, create_engine, select
 from starlette.testclient import TestClient
 
@@ -11,8 +12,10 @@ from src.auth import create_access_token
 from src.database import get_session, migrate_db
 from src.main import create_app
 from src.models.cart_item import CartItem
+from src.models.category import Category
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.models.user import User
@@ -55,6 +58,75 @@ def auth(engine, user_id: int) -> dict[str, str]:
     with Session(engine) as session:
         token = create_access_token(session.get(User, user_id))
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_category_variant_and_product_metadata_schema_constraints(engine):
+    """Fresh schema exposes hierarchy, ownership FKs, uniqueness and counter checks."""
+    inspector = inspect(engine)
+    assert {"categories", "products", "product_variants", "product_metadata"} <= set(
+        inspector.get_table_names()
+    )
+    category_fks = inspector.get_foreign_keys("categories")
+    variant_fks = inspector.get_foreign_keys("product_variants")
+    assert any(
+        fk["referred_table"] == "categories" and fk["constrained_columns"] == ["parent_id"]
+        for fk in category_fks
+    )
+    assert {(fk["constrained_columns"][0], fk["referred_table"]) for fk in variant_fks} >= {
+        ("product_id", "products"),
+        ("seller_id", "users"),
+    }
+
+    product_id = add_product(engine, "P-SCHEMA")
+    with Session(engine) as session:
+        root = Category(name="Root", slug="root")
+        session.add(root)
+        session.flush()
+        session.add(Category(name="Child", slug="child", parent_id=root.id))
+        session.add(ProductMetadata(product_id=product_id, category_id=root.id, rating=4.5))
+        session.add(
+            ProductVariant(
+                product_id=product_id,
+                seller_id=SELLER_ID,
+                sku="SCHEMA-1",
+                name="Option",
+                price=100,
+                stock_quantity=2,
+            )
+        )
+        session.commit()
+
+    def assert_rejected(statement: str, params: dict[str, object]):
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                connection.execute(text(statement), params)
+
+    assert_rejected(
+        "UPDATE products SET stock_quantity = -1 WHERE id = :product_id",
+        {"product_id": product_id},
+    )
+    assert_rejected(
+        "UPDATE product_metadata SET rating = 6 WHERE product_id = :product_id",
+        {"product_id": product_id},
+    )
+    assert_rejected(
+        "UPDATE product_metadata SET sales_count = -1 WHERE product_id = :product_id",
+        {"product_id": product_id},
+    )
+    assert_rejected(
+        "INSERT INTO product_variants "
+        "(product_id, seller_id, sku, name, price, stock_quantity, reserved_stock, "
+        "is_active, version) "
+        "VALUES (:product_id, :seller_id, :sku, :name, :price, :stock, 0, 1, 1)",
+        {
+            "product_id": product_id,
+            "seller_id": SELLER_ID,
+            "sku": "SCHEMA-1",
+            "name": "Duplicate",
+            "price": 100,
+            "stock": 1,
+        },
+    )
 
 
 def test_admin_categories_enforce_hierarchy_permissions_and_soft_deactivation(api, engine):
