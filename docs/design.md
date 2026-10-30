@@ -1399,8 +1399,8 @@ records one of the four documented payment methods, and confirmation/order
 details display the method and recorded status. No provider is invoked and the
 UI does not claim payment success for an unrecorded result. `payment_status`
 and `escrow_status` already exist on `orders` and
-`seller_orders` (PR #170), but there is no payment method, recorded result or settlement
-yet. The proposed contract for #148–#150 is in
+`seller_orders` (PR #170). Payment-method capture/display is implemented;
+Payment-result transitions and settlement remain deferred to #148–#150. The shared contract is in
 [US20 payments and settlement](us20-payments.md). It covers four tracked methods with no
 provider; the five #112 payment statuses (no `PARTIALLY_REFUNDED`); seller net
 `B_s − floor(B_s × rate_bps / 10000)` with no deduction for platform-funded discounts; a
