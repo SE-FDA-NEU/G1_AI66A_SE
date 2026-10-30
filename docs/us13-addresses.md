@@ -22,7 +22,8 @@ The six required fields are `recipient_name`, `phone_number`, `province`, `distr
 `ward`, `detailed_address`. Text is trimmed, must contain visible characters, and has
 limits 100 for names/administrative fields, 500 for detailed_address and 20 for phone.
 Phone permits only ASCII digits and `+ ()-`, and must contain 7â€“15 digits. Separators
-are preserved. `is_default` is a strict boolean; body IDs and versions are strict
+are preserved, while outer and repeated ASCII spaces are normalized before storage;
+the digit sequence is never changed. `is_default` is a strict boolean; body IDs and versions are strict
 positive integers. Requests forbid extra fields, including server-owned fields.
 Responses also contain `id`, `version`, `created_at`, `updated_at`; they exclude user_id.
 PUT replaces editable fields; omitting is_default means false, as on create.
@@ -53,7 +54,7 @@ returned in the public response.
 | `id` | integer | response only | Positive primary key; SQLite autoincrement prevents ID reuse |
 | `user_id` | integer | server-managed | Foreign key to `users.id`; every read/write is owner-scoped |
 | `recipient_name` | string | create/update | Trimmed visible text; 1â€“100 characters |
-| `phone_number` | string | create/update | 7â€“20 characters, 7â€“15 ASCII digits, separators limited to `+`, spaces, `(`, `)` and `-` |
+| `phone_number` | string | create/update | 7â€“20 characters, 7â€“15 ASCII digits, separators limited to `+`, spaces, `(`, `)` and `-`; outer/repeated spaces normalized |
 | `province` | string | create/update | Trimmed visible text; 1â€“100 characters |
 | `district` | string | create/update | Trimmed visible text; 1â€“100 characters |
 | `ward` | string | create/update | Trimmed visible text; 1â€“100 characters |

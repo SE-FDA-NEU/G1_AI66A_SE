@@ -80,6 +80,21 @@ def test_multi_seller_checkout_and_price_snapshots(engine):
         assert sorted(i.unit_price for i in receipt(session, 2, result.id).items) == [100, 300]
 
 
+def test_checkout_normalizes_phone_before_persisting(engine):
+    add_product(engine, "P-100")
+    fill(engine)
+
+    result, created = place(
+        engine,
+        body={**BODY, "phone_number": "  +84  912  345  678  "},
+    )
+
+    assert created
+    assert result.phone_number == "+84 912 345 678"
+    with Session(engine) as session:
+        assert session.get(Order, result.id).phone_number == "+84 912 345 678"
+
+
 @pytest.mark.parametrize(
     "changes", [{"is_active": False}, {"stock_quantity": 0}, {"reserved_stock": 10}]
 )
