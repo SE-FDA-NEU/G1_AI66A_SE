@@ -184,7 +184,13 @@ def test_checkout_persists_selected_payment_method_and_receipt(engine):
         stored = session.get(Order, result.id)
         assert stored is not None and stored.payment_method == "VIETQR"
         assert receipt(session, 2, result.id).payment_method == "VIETQR"
-
+def test_checkout_omitted_payment_method_uses_legacy_cod_compatibility(engine):
+    add_product(engine, "P-100")
+    fill(engine)
+    result, created = place(engine)
+    assert created
+    with Session(engine) as session:
+        assert session.get(Order, result.id).payment_method == "COD"
 
 
 @pytest.mark.parametrize(
@@ -366,8 +372,6 @@ def test_api_fresh_prepaid_order_returns_unpaid_payment_status(api, engine):
     assert payload["payment_method"] == "VIETQR"
     assert payload["payment_status"] == "UNPAID"
     assert payload["escrow_status"] == "HELD"
-
-
 def test_auth_empty_cart_key_and_pages(api, engine):
     assert api.post("/api/v1/orders", json=BODY).status_code == 401
     assert (
