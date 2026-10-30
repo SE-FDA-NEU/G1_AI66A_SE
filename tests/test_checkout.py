@@ -91,6 +91,15 @@ def test_checkout_persists_selected_payment_method_and_receipt(engine):
         assert receipt(session, 2, result.id).payment_method == "VIETQR"
 
 
+def test_checkout_omitted_payment_method_uses_legacy_cod_compatibility(engine):
+    add_product(engine, "P-100")
+    fill(engine)
+    result, created = place(engine)
+    assert created
+    with Session(engine) as session:
+        assert session.get(Order, result.id).payment_method == "COD"
+
+
 @pytest.mark.parametrize(
     "changes", [{"is_active": False}, {"stock_quantity": 0}, {"reserved_stock": 10}]
 )
@@ -243,6 +252,17 @@ def test_api_create_replay_and_ownership(api, engine):
 def test_api_validation_does_not_write(api, engine, patch):
     response = api.post("/api/v1/orders", json={**BODY, **patch}, headers=headers(engine))
     assert response.status_code == 422
+    assert counts(engine) == [0, 0, 0]
+
+
+def test_api_rejects_unknown_payment_method_without_writing(api, engine):
+    response = api.post(
+        "/api/v1/orders",
+        json={**BODY, "payment_method": "BITCOIN"},
+        headers=headers(engine),
+    )
+    assert response.status_code == 422
+    assert "payment_method" in response.json()["error"]["fields"]
     assert counts(engine) == [0, 0, 0]
 
 

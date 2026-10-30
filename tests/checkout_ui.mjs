@@ -5,6 +5,7 @@ import {readFile} from "node:fs/promises";
 import vm from "node:vm";
 
 const checkoutSource = await readFile(new URL("../src/web/static/checkout.js", import.meta.url), "utf8");
+const paymentSource = await readFile(new URL("../src/web/static/payment-display.js", import.meta.url), "utf8");
 const confirmationSource = await readFile(new URL("../src/web/static/confirmation.js", import.meta.url), "utf8");
 const body = {recipient_name:"Buyer", delivery_address:"123 Main", phone_number:"0912345678", payment_method:"VIETQR"};
 export function setup(responses, saved = null, script = checkoutSource, addressResponses = []) {
@@ -86,20 +87,30 @@ for (const items of [[],[{name:"Mouse",quantity:1,line_total:100,is_selected:tru
 }
 // Receipt retries are GET-only and do not create another order.
 const line={product_id:46,product_code:"P-100",product_name:"Mouse",seller_order_id:1,quantity:2,unit_price:100000,line_total:200000};
-test=setup([new Error("timeout"),{payload:{data:{id:1,status:"PENDING",payment_status:"UNPAID",total_amount:200000,...body,items:[line]}}}],null,confirmationSource);
+test=setup([new Error("timeout"),{payload:{data:{id:1,status:"PENDING",payment_status:"UNPAID",total_amount:200000,...body,items:[line]}}}],null,`${paymentSource}\n${confirmationSource}`);
 await tick(); assert.equal(test.nodes.get("retry").hidden,false);
 await vm.runInContext("load()",test.context);
 assert.equal(test.calls.length,2);
 assert.ok(test.calls.every(call=>call.url==="/api/v1/orders/1" && !call.options.method));
-assert.match(test.nodes.get("status").textContent,/Payment has not been marked successful/);
+assert.equal(test.nodes.get("status").textContent,"Order placed.");
 assert.equal(test.nodes.get("payment-method").textContent,"Payment method: VietQR");
 assert.equal(test.nodes.get("payment-status").textContent,"Awaiting payment (demo result not recorded)");
 // Receipt lines name the product and format the purchase price, never "Product #46".
 const receiptText=test.nodes.get("receipt").children.map(child=>child.textContent);
 assert.ok(receiptText.some(text=>/^Mouse \(P-100\) \u00d7 2 \u00b7 100\.000\s\u20ab each$/.test(text)),receiptText.join(" | "));
 assert.ok(receiptText.every(text=>!text.includes("Product #")));
+// Legacy receipts do not invent a method or payment result.
+test=setup([{payload:{data:{id:2,status:"PENDING",payment_status:"PAID",total_amount:0,...body,payment_method:null,items:[]}}}],null,`${paymentSource}\n${confirmationSource}`);
+await tick();
+assert.equal(test.nodes.get("payment-method").textContent,"Payment method: Not recorded");
+assert.match(test.nodes.get("payment-status").textContent,/Payment not recorded/);
+// Shared order/confirmation labels keep unpaid prepaid methods from being shown as paid.
+test.context.paymentBadges=[{hidden:true,textContent:"",className:""},{hidden:true,textContent:"",className:""}];
+vm.runInContext("PaymentDisplay.renderBadges({payment_method:'WALLET',payment_status:'UNPAID'}, paymentBadges[0], paymentBadges[1])",test.context);
+assert.match(test.context.paymentBadges[1].textContent,/Awaiting payment/);
+assert.ok(!test.context.paymentBadges[1].textContent.includes("Paid"));
 // Another buyer's order, or one that does not exist, explains what to do next.
-test=setup([{status:404,payload:{error:{code:"ERR_ORDER_NOT_FOUND",message:"Order not found."}}}],null,confirmationSource);
+test=setup([{status:404,payload:{error:{code:"ERR_ORDER_NOT_FOUND",message:"Order not found."}}}],null,`${paymentSource}\n${confirmationSource}`);
 await tick();
 assert.equal(test.nodes.get("status").textContent,"Confirmation unavailable.");
 assert.equal(test.nodes.get("error").textContent,"We could not find this order in your account. Check the order link, or continue shopping.");
