@@ -227,7 +227,7 @@ Invalid phone values, missing fields, wrong strict types, and extra fields retur
     "message": "Please correct the highlighted fields.",
     "fields": {
       "phone_number": [
-        "Phone number must contain 7 to 15 digits; use only +, spaces, (), or - as separators."
+        "Phone number must contain 7 to 15 digits. Use only +, spaces, (), or - as separators."
       ]
     }
   }

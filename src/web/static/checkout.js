@@ -1,6 +1,6 @@
 "use strict";
 const form = document.getElementById("checkout-form");
-const PHONE_ERROR = "Phone number must contain 7 to 15 digits; use only +, spaces, (), or - as separators.";
+const PHONE_ERROR = "Phone number must contain 7 to 15 digits. Use only +, spaces, (), or - as separators.";
 function normalizePhoneNumber(value) { return value.trim().replace(/ {2,}/g, " "); }
 function phoneValidationError(value) {
   const normalized = normalizePhoneNumber(value);
