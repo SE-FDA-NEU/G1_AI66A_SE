@@ -129,8 +129,9 @@ class OrderData(BaseModel):
     recipient_name: str
     delivery_address: str
     phone_number: str
-    payment_method: PaymentMethod | None = None
     payment_status: str | None = None
+    payment_method: PaymentMethod | None = None
+
     escrow_status: str = "HELD"
     paid_amount: int | None = None
     refunded_amount: int | None = None
