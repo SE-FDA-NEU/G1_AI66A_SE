@@ -304,11 +304,15 @@ def checkout(
                 buyer_id=buyer_id,
                 total_amount=0,
                 status="PENDING",
+                payment_status="UNPAID",
                 request_key=key,
                 request_hash=fingerprint,
                 recipient_name=snapshot.recipient_name,
                 phone_number=snapshot.phone_number,
                 delivery_address=snapshot.delivery_address,
+                # Older API clients did not send a method; retain their behavior
+                # as COD while new checkout UI requests an explicit choice.
+                payment_method=body.payment_method or "COD",
             )
             session.add(order)
             session.flush()
@@ -386,6 +390,7 @@ def checkout(
                         order_id=order.id,
                         seller_id=product.seller_id,
                         status="PENDING",
+                        payment_status="UNPAID",
                         subtotal=0,
                         shop_discount=0,
                         platform_discount=0,

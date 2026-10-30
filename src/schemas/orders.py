@@ -1,7 +1,7 @@
 """Checkout contracts; money is integer VND and items come from the buyer cart."""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -10,6 +10,7 @@ from src.schemas.delivery import valid_phone, visible_text
 from src.schemas.order_history import OrderHistoryEntry
 
 VoucherCode = Annotated[str, Field(min_length=1, max_length=32)]
+PaymentMethod = Literal["COD", "VIETQR", "WALLET", "CARD"]
 
 
 class ShopVoucherCode(BaseModel):
@@ -47,6 +48,7 @@ class CheckoutRequest(QuotedCheckout):
     recipient_name: str = Field(min_length=1, max_length=100)
     delivery_address: str = Field(min_length=1, max_length=1000)
     phone_number: str = Field(min_length=7, max_length=20)
+    payment_method: PaymentMethod | None = None
 
     _phone = field_validator("phone_number")(valid_phone)
     _visible = field_validator("recipient_name", "delivery_address")(visible_text)
@@ -56,6 +58,7 @@ class SavedAddressCheckoutRequest(QuotedCheckout):
     model_config = ConfigDict(extra="forbid")
     address_id: PositiveID
     address_version: PositiveID
+    payment_method: PaymentMethod | None = None
 
 
 CheckoutInput = CheckoutRequest | SavedAddressCheckoutRequest
@@ -118,6 +121,7 @@ class OrderData(BaseModel):
     recipient_name: str
     delivery_address: str
     phone_number: str
+    payment_method: PaymentMethod | None = None
     payment_status: str = "PAID"
     escrow_status: str = "HELD"
     created_at: datetime

@@ -273,6 +273,10 @@ def migrate_db(connection: Connection | None = None) -> None:
                 connection.execute(
                     text("ALTER TABLE orders ADD COLUMN payment_status VARCHAR(30) DEFAULT 'PAID'")
                 )
+            if "payment_method" not in columns:
+                connection.execute(
+                    text("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(10)")
+                )
             if "escrow_status" not in columns:
                 connection.execute(
                     text("ALTER TABLE orders ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'")

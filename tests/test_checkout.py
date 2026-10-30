@@ -80,6 +80,17 @@ def test_multi_seller_checkout_and_price_snapshots(engine):
         assert sorted(i.unit_price for i in receipt(session, 2, result.id).items) == [100, 300]
 
 
+def test_checkout_persists_selected_payment_method_and_receipt(engine):
+    add_product(engine, "P-100")
+    fill(engine)
+    result, created = place(engine, body={**BODY, "payment_method": "VIETQR"})
+    assert created
+    with Session(engine) as session:
+        stored = session.get(Order, result.id)
+        assert stored is not None and stored.payment_method == "VIETQR"
+        assert receipt(session, 2, result.id).payment_method == "VIETQR"
+
+
 @pytest.mark.parametrize(
     "changes", [{"is_active": False}, {"stock_quantity": 0}, {"reserved_stock": 10}]
 )
