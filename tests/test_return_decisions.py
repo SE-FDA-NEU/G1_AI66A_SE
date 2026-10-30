@@ -11,6 +11,7 @@ from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_variant import ProductVariant
+from src.models.return_dispute import ReturnDispute
 from src.models.return_request import ReturnRequest
 from src.models.seller_order import SellerOrder
 from src.schemas.returns import ReturnDecisionRequest
@@ -201,3 +202,140 @@ def test_restockable_return_restores_the_ordered_variant(client, test_setup):
             session.delete(item)
         session.delete(session.get(ProductVariant, variant_id))
         session.commit()
+
+
+# --- Review follow-up: multi-shop summary and the admin dispute path ------------------
+
+
+def _add_second_shop(setup, payment_status):
+    with Session(engine) as session:
+        product = Product(
+            code="RET-P9",
+            seller_id=setup["seller_b"].id,
+            name="Second shop item",
+            price=200_000,
+            stock_quantity=10,
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        seller_order = SellerOrder(
+            order_id=setup["order_id"],
+            seller_id=setup["seller_b"].id,
+            status="DELIVERED",
+            payment_status=payment_status,
+            escrow_status="HELD",
+        )
+        session.add(seller_order)
+        session.flush()
+        session.add(
+            OrderItem(
+                seller_order_id=seller_order.id,
+                product_id=product.id,
+                quantity=1,
+                unit_price=200_000,
+            )
+        )
+        session.commit()
+        return seller_order.id
+
+
+def test_paid_and_unpaid_approved_returns_leave_parent_escrow_voided(client, test_setup):
+    second = _add_second_shop(test_setup, "UNPAID")
+    buyer = _auth(test_setup["buyer_a"])
+    for seller_order_id, seller in (
+        (test_setup["seller_order_id"], "seller_a"),
+        (second, "seller_b"),
+    ):
+        created = client.post(
+            f"/api/v1/orders/{test_setup['order_id']}/returns",
+            headers=buyer,
+            json={"seller_order_id": seller_order_id, "reason": "Broken", "evidence": "Photo"},
+        )
+        assert created.status_code == 201, created.text
+        decided = _decide(client, test_setup, created.json()["data"]["id"], APPROVE_RESTOCK, seller)
+        assert decided.status_code == 200, decided.text
+
+    with Session(engine) as session:
+        escrows = {
+            so.id: so.escrow_status
+            for so in session.exec(
+                select(SellerOrder).where(SellerOrder.order_id == test_setup["order_id"])
+            )
+        }
+        parent = session.get(Order, test_setup["order_id"])
+    assert escrows == {test_setup["seller_order_id"]: "REFUNDED", second: "VOIDED"}
+    assert (parent.status, parent.escrow_status) == ("RETURNED_REFUNDED", "VOIDED")
+
+
+@pytest.fixture
+def dispute(client, test_setup):
+    """Escalate the seeded order; disputes are removed before the shared teardown."""
+
+    def open_dispute():
+        response = client.post(
+            f"/api/v1/admin/disputes?order_id={test_setup['order_id']}"
+            f"&seller_order_id={test_setup['seller_order_id']}&reason=Damaged&evidence=Photos",
+            headers=_auth(test_setup["admin"]),
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    yield open_dispute
+    with Session(engine) as session:
+        for row in session.exec(select(ReturnDispute)):
+            session.delete(row)
+        session.commit()
+
+
+def _decide_dispute(client, setup, dispute_id, body):
+    return client.post(
+        f"/api/v1/admin/disputes/{dispute_id}/decision",
+        headers=_auth(setup["admin"]),
+        json=body,
+    )
+
+
+def _seller_order(setup):
+    with Session(engine) as session:
+        return session.get(SellerOrder, setup["seller_order_id"])
+
+
+@pytest.mark.parametrize(
+    ("action", "expected"),
+    [
+        ("APPROVE", ("RETURNED_REFUNDED", "UNPAID", "VOIDED")),
+        ("REJECT", ("COMPLETED", "UNPAID", "HELD")),
+    ],
+)
+def test_admin_dispute_on_unpaid_order_never_claims_a_refund(
+    client, test_setup, dispute, action, expected
+):
+    _set_payment(test_setup["seller_order_id"], "UNPAID")
+    _submit(client, test_setup)
+    dispute_id = dispute()
+
+    response = _decide_dispute(client, test_setup, dispute_id, {"action": action})
+
+    assert response.status_code == 200, response.text
+    seller_order = _seller_order(test_setup)
+    assert (
+        seller_order.status,
+        seller_order.payment_status,
+        seller_order.escrow_status,
+    ) == expected
+
+
+def test_admin_dispute_with_unreconciled_payment_writes_nothing(client, test_setup, dispute):
+    _submit(client, test_setup)
+    dispute_id = dispute()
+    _set_payment(test_setup["seller_order_id"], "REFUND_PENDING")
+    before = _state(test_setup)
+
+    response = _decide_dispute(client, test_setup, dispute_id, APPROVE_RESTOCK)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ERR_INVALID_PAYMENT_STATE"
+    assert _state(test_setup) == before
+    with Session(engine) as session:
+        assert session.get(ReturnDispute, dispute_id).status == "PENDING"
