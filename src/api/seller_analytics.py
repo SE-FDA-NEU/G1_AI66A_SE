@@ -16,9 +16,9 @@ from src.database import SessionDep
 from src.errors import error_detail
 from src.services.seller_analytics import (
     LOW_STOCK_DEFAULT_THRESHOLD,
+    get_analytics_summary,
     get_best_sellers,
     get_low_stock_products,
-    get_revenue_summary,
 )
 
 router = APIRouter(prefix="/seller/analytics", tags=["Seller analytics"])
@@ -27,6 +27,7 @@ _DEFAULT_DAYS = 30
 _MAX_LIMIT = 100
 _MIN_THRESHOLD = 0
 _MAX_THRESHOLD = 10_000
+_MAX_RANGE_DAYS = 731
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +62,25 @@ def _resolve_date_range(
     end = _parse_date(to_date, "to") or today
     if start > end:
         raise _bad_request("ERR_INVALID_DATE_RANGE", "from must not be after to.")
+    if (end - start).days > _MAX_RANGE_DAYS:
+        raise _bad_request(
+            "ERR_INVALID_DATE_RANGE",
+            f"Date range must not exceed {_MAX_RANGE_DAYS} days.",
+        )
     return start, end
+
+
+def _resolve_group_by(value: str | None) -> str | None:
+    if value is None:
+        return None
+    aliases = {"day": "daily", "month": "monthly"}
+    normalized = aliases.get(value, value)
+    if normalized not in ("daily", "monthly"):
+        raise _bad_request(
+            "ERR_INVALID_GROUPING",
+            "group_by must be one of: day, month, daily, monthly.",
+        )
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +95,10 @@ class RevenuePeriod(BaseModel):
     revenue: int
     orders: int
     items_sold: int
+    gross_order_value: int
+    completed_revenue: int
+    pending_escrow_revenue: int
+    cancellation_rate: float
 
 
 class RevenueAnalyticsResponse(BaseModel):
@@ -122,34 +145,40 @@ def get_analytics(
     from_date: str | None = Query(default=None, alias="from", description="YYYY-MM-DD"),
     to_date: str | None = Query(default=None, alias="to", description="YYYY-MM-DD"),
     period: str = Query(default="daily", description="daily | weekly | monthly"),
+    group_by: str | None = Query(default=None, description="day | month"),
 ) -> RevenueAnalyticsResponse:
-    """Return time-bucketed revenue and order counts for the authenticated seller.
+    """Return seller-scoped financial metrics grouped by the requested period.
 
-    - **from** / **to**: inclusive date range (default: last 30 days).
-    - **period**: grouping granularity — `daily`, `weekly`, or `monthly`.
-    - Only **COMPLETED** seller orders are included in revenue figures.
+    - **from** / **to**: canonical inclusive date range (YYYY-MM-DD, default 30 days).
+    - **period**: grouping granularity — `daily`, `weekly`, or `monthly` (default `daily`).
+    - **group_by**: optional `day` or `month` alias for daily or monthly grouping.
+    - `revenue`: line-item total (`sum(quantity * unit_price)`) for completed orders.
+    - `completed_revenue`: `SellerOrder.total_amount` for completed orders
+      (accounting for shop discounts and shipping fees).
+    - `gross_order_value`: `SellerOrder.total_amount` across all order statuses.
+    - `pending_escrow_revenue`: `SellerOrder.total_amount` for uncompleted,
+      non-cancelled orders with escrow `HELD` or `PAUSED`.
+    - `cancellation_rate`: percentage of cancelled orders (float, 0.0 to 100.0).
+    - All metrics share the same effective timestamp: `completed_at` when completed
+      (BR7), otherwise `created_at`.
     """
+    group_by = _resolve_group_by(group_by)
     if period not in ("daily", "weekly", "monthly"):
         raise _bad_request(
             "ERR_INVALID_PERIOD",
             "period must be one of: daily, weekly, monthly.",
         )
     start, end = _resolve_date_range(from_date, to_date)
-    rows = get_revenue_summary(session, seller.id, start, end, period)  # type: ignore[arg-type]
-    data = [RevenuePeriod(**r) for r in rows]
-    total_revenue = sum(r.revenue for r in data)
-    total_orders = sum(r.orders for r in data)
-    total_items = sum(r.items_sold for r in data)
+    effective_period = group_by or period
+    rows, meta = get_analytics_summary(
+        session, seller.id, start, end, effective_period  # type: ignore[arg-type]
+    )
+    meta["period"] = period
+    if group_by is not None:
+        meta["group_by"] = group_by
     return RevenueAnalyticsResponse(
-        data=data,
-        meta={
-            "from": start.isoformat(),
-            "to": end.isoformat(),
-            "period": period,
-            "total_revenue": total_revenue,
-            "total_orders": total_orders,
-            "total_items_sold": total_items,
-        },
+        data=[RevenuePeriod(**r) for r in rows],
+        meta=meta,
     )
 
 
