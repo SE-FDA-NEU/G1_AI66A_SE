@@ -303,6 +303,19 @@ also the reporting timeline used by the current #142 API candidate. The #143 UI
 distinguishes legacy item revenue from financial order totals as described in
 [US18 UI](us18-seller-analytics-ui.md).
 
+The seller analytics endpoint accepts the canonical inclusive date filters
+`from` and `to`. `period` supports `daily`, `weekly`, and `monthly`; `group_by`
+accepts `day` or `month` as aliases for daily/monthly output. Each period
+reports `revenue`, `orders`, `items_sold`, `gross_order_value`, `completed_revenue`,
+`pending_escrow_revenue`, and `cancellation_rate` (a percentage from 0 to 100, float).
+All metrics use the same effective timestamp: `completed_at` when present (per BR7),
+otherwise falling back to `created_at` for uncompleted orders. While `revenue`
+reflects the line-item total (sum of item quantity × unit_price for completed orders),
+`completed_revenue` reflects `SellerOrder.total_amount` for completed orders, which
+accounts for applied shop discounts and shipping fees. Gross order value is
+`SellerOrder.total_amount` across all statuses; pending escrow revenue excludes
+cancelled orders and includes only uncompleted orders whose escrow is `HELD` or `PAUSED`.
+
 ---
 
 #### order_items
@@ -336,14 +349,8 @@ Stored order_items.unit_price: 180,000
 
 Historical orders and seller revenue therefore remain correct even when current product prices change.
 
-Task #147 verifies these existing purchase facts through buyer detail/list and
-seller detail/list APIs, including quote checkout and idempotent replay. Seller
-DELETE is a soft deactivation; foreign keys prevent physical removal of inventory
-referenced by orders. An initialized NULL image stays NULL after later image edits.
-Seller product **responses** permit `image_url: null` for such existing listings,
-so deactivation and DELETE return their committed result successfully. The product
-creation request still requires its validated image URL. Scope and historical-data
-limits are in [US19 snapshot verification](us19-categories-variants-snapshots.md#immutable-order-item-verification-147).
+For snapshot behavior and historical-data limits, see the [US19 contract](us19-categories-variants-snapshots.md#immutable-order-item-verification-147).
+Verification is maintained in the [#147 test matrix](testing.md#task-147-immutable-order-item-snapshots).
 
 ---
 
@@ -832,6 +839,7 @@ implementation"). This table lists every code the code raises, checked by
 | `400 Bad Request` | `ERR_INVALID_DATE` | A `from` or `to` filter is not an ISO date | Seller orders, seller analytics |
 | `400 Bad Request` | `ERR_INVALID_DATE_RANGE` | `from` is after `to` | Seller orders, seller analytics |
 | `400 Bad Request` | `ERR_INVALID_PERIOD` | An unsupported period grouping is requested | Seller analytics |
+| `400 Bad Request` | `ERR_INVALID_GROUPING` | An unsupported `group_by` value is requested; accepted values are `day` and `month` (with daily/monthly aliases) | Seller analytics |
 | `400 Bad Request` | `ERR_INVALID_SORT` | An unsupported best-sellers sort field is requested | Seller analytics |
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED` | No bearer token | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_TOKEN` | A malformed, expired or no longer valid token (there is no separate expired-token code) | All protected routes |

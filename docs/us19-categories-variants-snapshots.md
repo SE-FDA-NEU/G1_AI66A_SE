@@ -48,8 +48,10 @@ history. A snapshot-initialized marker distinguishes legitimate null image snaps
 legacy rows that need a one-time backfill. Seller order lines include the purchased option
 name.
 
-Database initialization adds the category active flag and snapshot fields, creates the
-variant table, and rebuilds legacy SQLite cart lines to replace the old
+Database initialization adds the category active flag and snapshot fields, upgrades a
+legacy SQLite category table to enforce its self-referencing `parent_id` foreign key
+without rewriting valid relationships, creates the variant table, and rebuilds legacy
+SQLite cart lines to replace the old
 `(buyer_id, product_id)` uniqueness rule with uniqueness that includes the optional
 variant. Existing cart rows are copied as base-product lines. Only legacy order rows with
 no product-name snapshot are backfilled from their current product data; initialized
@@ -105,3 +107,11 @@ node tests/product_detail_variants.mjs
 node tests/seller_orders_ui.mjs
 node tests/cart_ui.mjs
 ```
+
+## Authorship and AI assistance
+
+Repository author: Team 01 (G1_AI66A_SE). OpenAI Codex assisted with issue and
+source inspection, the category migration implementation, regression tests and
+local verification for this change. The project author remains responsible for
+reviewing and explaining the submitted work. Human review, CI and merge are not
+claimed by this record.

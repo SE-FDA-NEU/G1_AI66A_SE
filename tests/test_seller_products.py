@@ -97,6 +97,33 @@ def with_patch(patch: dict) -> dict:
     return {name: value for name, value in body.items() if value is not MISSING}
 
 
+def test_seller_can_list_get_and_patch_an_existing_product_without_an_image(api, engine):
+    add_product(engine, "P-NO-IMAGE")
+    with Session(engine) as session:
+        product = session.exec(select(Product).where(Product.code == "P-NO-IMAGE")).one()
+        product.image_url = None
+        session.add(product)
+        session.commit()
+        product_id = product.id
+    owner = headers(engine)
+
+    listed = api.get("/api/v1/seller/inventory", headers=owner)
+    assert listed.status_code == 200, listed.text
+    [row] = listed.json()["data"]
+    assert row["id"] == product_id
+    assert row["image_url"] is None
+    detail = api.get("/api/v1/products/P-NO-IMAGE", headers=owner)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["image_url"] is None
+    patched = api.patch(f"{URL}/{product_id}", headers=owner, json={"is_active": False})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["data"]["image_url"] is None
+    assert patched.json()["data"]["is_active"] is False
+    [saved] = stored(engine)
+    assert saved.image_url is None
+    assert saved.is_active is False
+
+
 # Task 1: create a listing owned by the authenticated seller
 
 

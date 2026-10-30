@@ -20,6 +20,7 @@ from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.models.user import User
+from src.services.pricing import SHIPPING_FEE_VND
 from tests.cart_db import BUYER_ID, OTHER_BUYER_ID, SELLER_ID, create_cart_engine
 
 BODY = {
@@ -126,10 +127,10 @@ def checkout_body(api, engine, quoted):
     return BODY | {"quote_revision": response.json()["data"]["quote_revision"]}
 
 
-def assert_purchase_line(line, expected):
+def assert_purchase_line(line, expected, *, total_field="line_total"):
     assert tuple(line[field] for field in SNAPSHOT_FIELDS) == expected
     assert line["quantity"] == 2
-    assert line.get("line_total", line.get("total_price")) == expected[-1] * 2
+    assert line[total_field] == expected[-1] * 2
 
 
 def stored_items(engine):
@@ -156,7 +157,7 @@ def assert_historical_views(api, engine, order_id, expected):
     [line] = next(row for row in seller_orders.json()["data"] if row["order_id"] == order_id)[
         "items"
     ]
-    assert_purchase_line(line, expected)
+    assert_purchase_line(line, expected, total_field="total_price")
 
 
 def change_listing(api, engine, listing, mutation):
@@ -210,7 +211,9 @@ def test_purchase_snapshots_survive_catalog_changes_and_replay(
     assert response.status_code == 201, response.text
     order = response.json()["data"]
     assert_purchase_line(order["items"][0], listing["expected"])
-    assert order["total_amount"] == listing["expected"][-1] * 2 + (20000 if quoted else 0)
+    assert order["total_amount"] == listing["expected"][-1] * 2 + (
+        SHIPPING_FEE_VND if quoted else 0
+    )
     [stored] = before = stored_items(engine)
     assert (
         stored["product_name_snapshot"],
@@ -315,26 +318,14 @@ def test_checkout_rejects_client_supplied_purchase_snapshots(api, engine, field)
 def test_failed_snapshot_insert_rolls_back_the_entire_checkout(api, engine, quoted):
     listing = seed_listing(engine)
     add_to_cart(api, engine, listing)
+    blocked = seed_listing(engine, code="SNAP-BLOCKED")
+    # Checkout orders by product ID: persist the valid line before triggering failure.
+    assert listing["product_id"] < blocked["product_id"]
+    add_to_cart(api, engine, blocked)
     with Session(engine) as session:
-        second = ProductVariant(
-            product_id=listing["product_id"],
-            seller_id=SELLER_ID,
-            sku="SNAP-BLOCKED",
-            name="Blocked option",
-            price=90000,
-            stock_quantity=10,
-            image_url=EDITED_IMAGE,
-        )
+        second = session.get(ProductVariant, blocked["variant_id"])
+        second.name = "Blocked option"
         session.add(second)
-        session.flush()
-        session.add(
-            CartItem(
-                buyer_id=BUYER_ID,
-                product_id=listing["product_id"],
-                variant_id=second.id,
-                quantity=1,
-            )
-        )
         session.commit()
     models = (
         Order,
