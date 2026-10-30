@@ -38,7 +38,11 @@ from src.services.checkout_pricing import (
 from src.services.notifications import create_notification
 from src.services.order_errors import OrderError
 from src.services.order_history import history_by_seller_order
+from src.services.payments import DEFAULT_PAYMENT_METHOD, is_legacy, start_payment
 from src.services.vouchers import VoucherError, consume_voucher
+
+# A seller order whose share was collected, including one refunded later.
+COLLECTED = frozenset({"PAID", "REFUND_PENDING", "REFUNDED"})
 
 
 class CheckoutError(OrderError):
@@ -100,6 +104,15 @@ def receipt(
             timestamp = getattr(sub_order, milestone)
             values[milestone] = order_timestamp_utc(timestamp) if timestamp else None
     history = history_by_seller_order(session, [so.id for so in visible_sub_orders])
+    legacy = is_legacy(order)
+    seller_view = seller_id is not None
+    if legacy:
+        values["payment_status"] = None
+    else:
+        values["paid_amount"] = sum(
+            so.total_amount for so in visible_sub_orders if so.payment_status in COLLECTED
+        )
+        values["refunded_amount"] = sum(so.refunded_amount for so in visible_sub_orders)
 
     return OrderData(
         **values,
@@ -130,8 +143,16 @@ def receipt(
                 id=so.id,  # type: ignore
                 seller_id=so.seller_id,
                 status=so.status,
-                payment_status=so.payment_status,
+                payment_status=None if legacy else so.payment_status,
                 escrow_status=so.escrow_status,
+                refunded_amount=None if legacy else so.refunded_amount,
+                commission_amount=so.commission_amount if seller_view and not legacy else None,
+                seller_net_amount=so.seller_net_amount if seller_view and not legacy else None,
+                settled_at=(
+                    order_timestamp_utc(so.settled_at)
+                    if seller_view and so.settled_at
+                    else None
+                ),
                 tracking_number=so.tracking_number,
                 shipped_at=order_timestamp_utc(so.shipped_at) if so.shipped_at else None,
                 delivered_at=order_timestamp_utc(so.delivered_at) if so.delivered_at else None,
@@ -467,6 +488,12 @@ def checkout(
                     raise CheckoutError("ERR_CONCURRENCY_CONFLICT", "Cart changed. Please retry.")
             if priced is not None:
                 apply_quoted_price(session, buyer_id, order, sellers, priced)
+            start_payment(
+                session,
+                order,
+                list(sellers.values()),
+                body.payment_method or DEFAULT_PAYMENT_METHOD,
+            )
             for suborder in sellers.values():
                 session.add(suborder)
             session.add(order)
