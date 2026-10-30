@@ -112,6 +112,15 @@
           <span class="field-error" id="checkout-phone_number-error"></span>
         </label>
       </fieldset>
+      <fieldset id="payment-methods" aria-describedby="payment-method-help payment-method-error">
+        <legend>Payment method *</legend>
+        <p id="payment-method-help">Choose how this order will be recorded. Online methods are demo tracking only; no payment is processed here.</p>
+        <label><input type="radio" name="payment_method" value="COD" required checked> Cash on delivery (pay on delivery)</label>
+        <label><input type="radio" name="payment_method" value="VIETQR"> VietQR (demo)</label>
+        <label><input type="radio" name="payment_method" value="WALLET"> Wallet (demo)</label>
+        <label><input type="radio" name="payment_method" value="CARD"> Card (demo)</label>
+        <span class="field-error" id="checkout-payment_method-error"></span>
+      </fieldset>
       <button id="confirm">Confirm order</button>
     </form>
     <p id="error" role="alert" tabindex="-1"></p>
