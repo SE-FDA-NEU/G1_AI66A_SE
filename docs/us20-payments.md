@@ -3,7 +3,9 @@
 Story #112, tasks #148 (payment fields, state validation, escrow and settlement), #149
 (payment selector and status display) and #150 (payment and settlement tests).
 
-**Status: contract only.** It is written against `main` at
+**Status: core implemented by #148 (section 13), using the D1–D5 proposals; those rows
+are still pending owner confirmation, which blocks merging per section 12.** Originally
+**contract only.** It is written against `main` at
 `17638838a5eb1369a42df694c0d3b59a17c06d49` (after PR #171). Part of the state already
 exists there (section 1). Everything else is a proposal that the owners of #148–#150
 confirm or amend in their own pull requests.
@@ -462,3 +464,23 @@ work is not merged. Everything marked binding in this document is outside this t
 `UNPAID`. It was proposed in the first revision of this PR. It is a workflow rule for
 #106, and the section 6.1 matrix gives the correct result whether or not it exists.
 Raise it in #106 if the team wants it.
+
+## 13. Implemented by #148
+
+| Area | Where | Notes |
+|---|---|---|
+| Fields and migration | `src/models/order.py`, `src/models/seller_order.py`, `src/models/payment_event.py`, `src/database.py` | `orders.payment_method`; seller-order `refunded_amount`, `commission_rate_bps`, `commission_amount`, `seller_net_amount`, `settled_at`; `payment_events` (cascades with its order). The migration maps escrow `REFUNDED` to `VOIDED`, voids cancelled and returned seller orders, maps `PARTIALLY_REFUNDED` to `PAID` and recomputes the parent escrow summary; a rerun changes nothing. Model defaults are now `UNPAID`/`HELD` |
+| State machine and settlement | `src/services/payments.py` | Section 2.2 transitions, `calculate_seller_net` (500 bps constant, D1), `start_payment`, `collect_cod` (D2), `record_payment_result`, `refund_seller_order` (full `total_amount`, D3), `void_settlement` (D5), `pause_settlement`/`resume_settlement`, `try_release` (section 5 SQL guard) and the parent summaries |
+| Checkout | `src/services/orders.py`, `src/schemas/orders.py` | Optional `payment_method` (four values, else 422); absent means `COD`; unset fields stay out of the idempotency hash. Zero-total seller orders are recorded `PAID` (`ZERO_TOTAL`) |
+| Workflow wiring | `src/services/order_workflow.py`, `src/api/orders.py`, `src/services/returns.py`, `src/api/admin.py` | Cancellation refunds once and voids; `DELIVERED`, or `COMPLETED` from `SHIPPED`, collects COD; every completion path runs the release guard; return submission and admin escalation pause escrow; approval refunds a collected payment and voids; rejection resumes and runs the guard |
+| Receipt | `src/services/orders.py` | `payment_method`, `paid_amount`, `refunded_amount`; per sub-order `refunded_amount`; seller view adds `commission_amount`, `seller_net_amount`, `settled_at`. Legacy orders return `null` payment fields; the order page shows "Payment not recorded" |
+| Operator command | `src/payments.py` | `python -m src.payments record-result --order ID --result PAID\|FAILED\|RETRY --event-key KEY` (D4); no HTTP surface |
+| Tests | `tests/test_payments.py` | Seller net example and boundaries, each method, COD on delivery and release once, buyer confirmation from `SHIPPED`, complete-before-paid, `FAILED` after `PAID` ignored, duplicate keys, refund once across two routes, late payment after cancellation, return review holds escrow, receipts, legacy rules, summaries, migration rerun, operator command |
+
+Not in #148: the analytics figures `settled_income` and `escrow_pending` (D6, with the
+US18 owner in #142), the seed rows with recorded payments that depend on them, the
+payment selector and labels (#149), the exhaustive event-order and concurrency matrix
+(#150), and the meta-test that only `payments.py` writes payment fields. Return
+submission still sets `RETURN_REQUESTED` in `returns.py`, then calls
+`pause_settlement`.
+
