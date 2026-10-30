@@ -537,3 +537,10 @@ Product options, hierarchy validation, and optimistic concurrency controls are e
 | Soft deactivation | Deactivating category or variant sets `is_active=False` rather than deleting rows, preserving historical integrity | `tests/test_us19_categories_variants.py` |
 
 Exclusions for #146: Product detail option selector and seller variant manager UI (#111 UI slice), cart variant selection and purchase-time snapshots (#111 checkout/order history slice).
+
+## US19 immutable purchase snapshot verification (#111, #147)
+
+Requirement: preserve server-owned purchase facts after catalog changes. Implementation:
+existing checkout snapshot writes, historical readers, and nullable seller image responses.
+See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
+and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).

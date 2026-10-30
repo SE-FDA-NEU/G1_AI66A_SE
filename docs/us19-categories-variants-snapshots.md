@@ -57,12 +57,46 @@ variant. Existing cart rows are copied as base-product lines. Only legacy order 
 no product-name snapshot are backfilled from their current product data; initialized
 snapshots, including null images, are preserved.
 
+### Immutable order-item verification (#147)
+
+The purchase snapshot implementation already exists. #147 adds focused regression
+coverage for the snapshot and historical-reference criteria of #111, and fixes a
+response-contract mismatch uncovered by those tests: `SellerProduct.image_url`
+accepts NULL, matching the database, so existing products without images can be
+deactivated or soft-deleted without a response-validation failure. The create-product
+request keeps its existing required-image validation.
+
+Checkout derives product name, selected variant name, image and integer unit price
+from authenticated server-side cart/catalog data at checkout time. A variant uses
+its own price and image; its missing image falls back to the product image. A
+base product has no variant name. If neither image exists, the persisted image is
+NULL and remains NULL even if images are added later. Quote discounts and shipping
+are stored in the order breakdown; unit price remains the item purchase price.
+
+Buyer detail/list and seller detail/list responses must preserve those facts after
+listing edits, deactivation and DELETE, and replay must return the same order lines
+and totals. Seller reads remain shop-scoped; another buyer cannot read the order.
+Supported DELETE keeps product/variant rows inactive, while foreign keys reject
+physical deletion of referenced inventory. A failed snapshot insert rolls back
+the entire checkout, including earlier lines, inventory, cart, counters and notifications.
+
+Migration reruns preserve existing known snapshot values, IDs, quantity and unit
+price. For rows predating snapshot capture, values copied from the current catalog
+by the existing compatibility backfill cannot prove the original purchase-time
+name or image. #147 does not invent missing historical facts or change that legacy
+backfill policy. Its migration cases use known saved facts and verify preservation.
+
+Category/variant management, stock-concurrency rules, voucher calculations and UI
+redesign are outside this task. The single expected-results matrix and commands
+are in [testing.md](testing.md#task-147-immutable-order-item-snapshots). Local test
+completion is separate from CI, teammate review and user validation.
+
 ## Verification
 
 Run the focused Python regression suite with:
 
 ```powershell
-python -m pytest tests/test_us19_categories_variants.py tests/test_cart_api.py tests/test_cart_service.py tests/test_checkout.py tests/test_catalog_discovery.py tests/test_seller_products.py tests/test_return_refund.py tests/test_database.py -q
+python -m pytest tests/test_order_item_snapshots.py tests/test_us19_categories_variants.py tests/test_cart_api.py tests/test_cart_service.py tests/test_checkout.py tests/test_catalog_discovery.py tests/test_seller_products.py tests/test_return_refund.py tests/test_database.py -q
 ```
 
 Exercise the browser scripts' variant selection, changed-field seller updates, purchased

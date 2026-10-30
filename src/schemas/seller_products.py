@@ -126,7 +126,7 @@ class SellerProduct(BaseModel):
     price: int
     stock_quantity: int
     reserved_stock: int
-    image_url: str
+    image_url: str | None
     is_active: bool
     version: int
 

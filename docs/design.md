@@ -327,6 +327,11 @@ cancelled orders and includes only uncompleted orders whose escrow is `HELD` or 
 | `id` | INTEGER | Primary Key |
 | `seller_order_id` | INTEGER | NOT NULL, Foreign Key → `seller_orders.id` |
 | `product_id` | INTEGER | NOT NULL, Foreign Key → `products.id` |
+| `variant_id` | INTEGER | Nullable, Foreign Key → `product_variants.id`; no variant for a base-product purchase |
+| `product_name_snapshot` | VARCHAR(200) | Product name captured by checkout |
+| `variant_name_snapshot` | VARCHAR(100) | Selected option name, or NULL for a base-product purchase |
+| `product_image_snapshot` | VARCHAR(2048) | Selected option image, else product image; NULL means no image at purchase |
+| `snapshot_initialized` | BOOLEAN | Checkout sets TRUE; initialized snapshot values must not fall back to current listing data |
 | `quantity` | INTEGER | NOT NULL, CHECK `quantity > 0` |
 | `unit_price` | INTEGER | NOT NULL, CHECK `unit_price > 0` |
 
@@ -343,6 +348,9 @@ Stored order_items.unit_price: 180,000
 ```
 
 Historical orders and seller revenue therefore remain correct even when current product prices change.
+
+For snapshot behavior and historical-data limits, see the [US19 contract](us19-categories-variants-snapshots.md#immutable-order-item-verification-147).
+Verification is maintained in the [#147 test matrix](testing.md#task-147-immutable-order-item-snapshots).
 
 ---
 
