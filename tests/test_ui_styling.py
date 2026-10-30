@@ -4,7 +4,6 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,8 +50,8 @@ def test_link_button_labels_preserve_contrasting_text_on_hover() -> None:
     assert hover_match, "button:hover, .button:hover rule must exist in base.css"
     hover_block = hover_match.group(1)
 
-    assert "color: #ffffff;" in hover_block, (
-        "button:hover, .button:hover must explicitly set color: #ffffff to preserve contrast on <a> elements"
+    assert "color: var(--color-on-accent);" in hover_block, (
+        "button:hover, .button:hover must explicitly set the accent contrast color"
     )
     assert "background-color: var(--color-accent-hover);" in hover_block, (
         "button:hover, .button:hover must set background-color: var(--color-accent-hover)"
@@ -70,8 +69,8 @@ def test_button_active_preserves_contrasting_text() -> None:
     assert active_match, "button:active, .button:active rule must exist in base.css"
     active_block = active_match.group(1)
 
-    assert "color: #ffffff;" in active_block, (
-        "button:active, .button:active must explicitly set color: #ffffff"
+    assert "color: var(--color-on-accent);" in active_block, (
+        "button:active, .button:active must explicitly set the accent contrast color"
     )
 
 
@@ -94,21 +93,58 @@ def test_button_variant_hover_colors_retained() -> None:
         css,
     )
     assert danger_hover, "Danger button hover rule must exist"
-    assert "color: #ffffff;" in danger_hover.group(1)
-    assert "background-color: #b91c1c;" in danger_hover.group(1)
+    assert "color: var(--color-on-accent);" in danger_hover.group(1)
+    assert "background-color: var(--color-danger-text);" in danger_hover.group(1)
+
+
+def test_shared_design_tokens_cover_required_categories() -> None:
+    """The shared stylesheet exposes stable tokens for #154 components."""
+    css = BASE_CSS.read_text(encoding="utf-8")
+
+    required_tokens = {
+        "--color-accent",
+        "--color-success-bg",
+        "--color-warning-bg",
+        "--color-danger-bg",
+        "--color-info-bg",
+        "--font-sans",
+        "--font-size-sm",
+        "--space-4",
+        "--border-width",
+        "--shadow-sm",
+        "--radius-md",
+        "--focus-width",
+    }
+    assert all(f"{token}:" in css for token in required_tokens)
+
+
+def test_shared_components_have_semantic_variants() -> None:
+    """Buttons, fields, cards, tables, badges, and alerts share base rules."""
+    css = BASE_CSS.read_text(encoding="utf-8")
+
+    for selector in (".card", ".input", ".table-wrap", "table.table", ".badge", ".alert"):
+        assert selector in css, f"Shared component {selector} must be defined"
+    for variant in ("success", "warning", "danger", "info"):
+        assert f".badge--{variant}" in css
+        assert f".alert--{variant}" in css
 
 
 def test_untyped_inputs_included_in_desktop_form_styles() -> None:
     """input:not([type]) must be included in desktop form styles so untyped inputs are 42px tall."""
     css = BASE_CSS.read_text(encoding="utf-8")
 
-    # Locate the desktop form controls rule that includes min-height: 42px
-    match = re.search(r"(input:not\(\[type\]\)[\s\S]*?\{[\s\S]*?min-height:\s*42px;[\s\S]*?\})", css)
-    assert match, "Desktop form input rule must include input:not([type]) and min-height: 42px in base.css"
+    # Locate the desktop form controls rule that uses the shared control token.
+    match = re.search(
+        r"(input:not\(\[type\]\)[\s\S]*?\{[\s\S]*?min-height:\s*var\(--control-height\);[\s\S]*?\})",
+        css,
+    )
+    assert match, (
+        "Desktop form input rule must include input:not([type]) and the shared control token"
+    )
     block = match.group(1)
 
     assert 'input[type="text"]' in block
-    assert "min-height: 42px;" in block
+    assert "min-height: var(--control-height);" in block
 
 
 def test_untyped_inputs_included_in_mobile_sizing_styles() -> None:
@@ -150,7 +186,8 @@ def test_checkout_form_inputs_have_explicit_text_type() -> None:
             found_ids[inp_id] = inp.get("type")
 
     assert set(found_ids.keys()) == expected_text_input_ids, (
-        f"Missing expected inputs in checkout.html: {expected_text_input_ids - set(found_ids.keys())}"
+        "Missing expected inputs in checkout.html: "
+        f"{expected_text_input_ids - set(found_ids.keys())}"
     )
     for inp_id, inp_type in found_ids.items():
         assert inp_type == "text", f"Input #{inp_id} must have type='text', found: {inp_type}"

@@ -213,3 +213,23 @@ git diff --check
 The suite is discovered by the existing CI pytest step. No new browser dependency
 is needed: this task tests persistence and API contracts and adds no new screen.
 Only report CI/review/clean-clone results after they have actually been verified.
+
+## Task #154: shared CSS design tokens and components
+
+Expected results come from US22/#114 and the shared styling contract in
+`docs/design.md`.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Required token categories | Palette and semantic feedback, typography, spacing, borders, shadows, radii and focus tokens are declared in `base.css` | `test_shared_design_tokens_cover_required_categories` |
+| Shared component primitives | Buttons/inputs retain existing behavior and cards, tables, badges and alerts expose reusable selectors | `test_shared_components_have_semantic_variants` and existing UI styling tests |
+| Accessibility regressions | Link buttons retain contrast on hover/active; controls retain desktop/mobile sizing and visible focus | Existing tests in `tests/test_ui_styling.py` |
+
+```powershell
+python -m pytest tests/test_ui_styling.py -q
+python -m ruff check tests/test_ui_styling.py
+git diff --check
+```
+
+This slice adds no new browser behavior or dependency. Visual review at the
+existing responsive breakpoints is still separate from these automated checks.
