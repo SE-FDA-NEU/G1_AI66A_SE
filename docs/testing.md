@@ -155,3 +155,27 @@ git diff --check
 The DOM suite runs in the existing CI page-script step. Native checks require an
 installed Chrome/Edge, or `BROWSER_PATH`; they need no npm dependency and use an
 isolated browser profile. Actual run results and AI disclosure belong in the PR.
+
+
+## Task #146: category and variant APIs
+
+Expected results come from task #146, parent story #111 (US19), and `docs/us19-categories-variants-snapshots.md`.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Non-admin category mutation | 403 Forbidden for buyer or seller; allowed only for admin | `tests/test_us19_categories_variants.py:test_admin_categories_enforce_hierarchy_permissions_and_soft_deactivation` |
+| Category hierarchy cycle / inactive parent | 422 Unprocessable Entity when parent is inactive or self/ancestor cycle is detected | Same test case |
+| Category deactivation with active children | 409 Conflict with `ERR_CATEGORY_HAS_CHILDREN` | Same test case |
+| Shop-scoped SKU conflict | 409 Conflict with `ERR_VARIANT_SKU_CONFLICT` on duplicate SKU within same seller shop | `tests/test_us19_categories_variants.py:test_variants_are_shop_owned_and_checkout_keeps_purchase_snapshots` |
+| Variant update version conflict | 409 Conflict with `ERR_CONCURRENCY_CONFLICT` when `expected_version` does not match database version | `tests/test_us19_categories_variants.py:test_variant_updates_require_displayed_version_and_keep_physical_stock` |
+| Variant stock lower than reserved stock | 422 Unprocessable Entity rejecting physical stock reduction below reserved commitments | Same test case |
+| Cross-shop variant access | 403 Forbidden with `ERR_RESOURCE_OWNER` when accessing or modifying variants belonging to another seller's product | `tests/test_us19_categories_variants.py:test_other_shop_cannot_manage_variant` |
+| Soft-delete variant / category | Sets `is_active=False` and increments version; historical references preserved | US19 regression suite |
+
+Run focused API regression suite:
+
+```powershell
+python -m pytest tests/test_us19_categories_variants.py -q
+python -m ruff check src tests/test_us19_categories_variants.py
+git diff --check
+```
