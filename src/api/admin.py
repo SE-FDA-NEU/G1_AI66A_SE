@@ -39,7 +39,12 @@ from src.schemas.admin import (
 )
 from src.services.inventory import restore_order_item_stock
 from src.services.order_history import record_transition
-from src.services.returns import sync_parent_order_state
+from src.services.returns import (
+    ReturnError,
+    check_return_settlement,
+    settle_return,
+    sync_parent_order_state,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -861,6 +866,14 @@ def admin_decide_dispute(
 
     now = datetime.now(UTC)
     target_status = "APPROVED" if payload.action == "APPROVE" else "REJECTED"
+    so = session.get(SellerOrder, dispute.seller_order_id)
+    order = session.get(Order, dispute.order_id)
+    # The same settlement rules as a seller decision, checked before anything is written.
+    if so and order and dispute.status == "PENDING":
+        try:
+            check_return_settlement(so, payload.action)
+        except ReturnError as exc:
+            raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
 
     # Atomic conditional update on ReturnDispute to prevent duplicate adjudication
     changed = session.exec(
@@ -898,17 +911,13 @@ def admin_decide_dispute(
             .execution_options(synchronize_session=False)
         )
 
-    so = session.get(SellerOrder, dispute.seller_order_id)
-    order = session.get(Order, dispute.order_id)
-
     if so and order:
         old_status = so.status
+        try:
+            settle_return(session, so, payload.action, now)
+        except ReturnError as exc:
+            raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
         if payload.action == "APPROVE":
-            so.status = "RETURNED_REFUNDED"
-            so.payment_status = "REFUNDED"
-            so.escrow_status = "REFUNDED"
-            session.add(so)
-
             if payload.is_restockable:
                 items = session.exec(
                     select(OrderItem).where(OrderItem.seller_order_id == so.id)
@@ -936,10 +945,6 @@ def admin_decide_dispute(
                 note=f"Dispute approved by Admin {admin.name}: {payload.decision_notes}",
             )
         else:
-            so.status = "COMPLETED"
-            so.escrow_status = "RELEASED"
-            session.add(so)
-
             record_transition(
                 session,
                 seller_order_id=so.id,
