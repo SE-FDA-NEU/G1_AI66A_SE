@@ -205,6 +205,48 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "ALTER TABLE categories ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
                     )
                 )
+                columns.add("is_active")
+
+            category_fks = inspector.get_foreign_keys("categories")
+            has_parent_fk = any(
+                fk.get("referred_table") == "categories"
+                and fk.get("constrained_columns") == ["parent_id"]
+                for fk in category_fks
+            )
+            if not has_parent_fk and connection.dialect.name == "sqlite":
+                # SQLite cannot add a self-referencing FK with ALTER TABLE. Rebuild the
+                # table, copying rows unchanged; invalid legacy parents fail the upgrade.
+                connection.execute(
+                    text(
+                        "CREATE TABLE categories__migration ("
+                        "id INTEGER NOT NULL PRIMARY KEY, "
+                        "name VARCHAR(100) NOT NULL, "
+                        "slug VARCHAR(100) NOT NULL UNIQUE, "
+                        "parent_id INTEGER, "
+                        "is_active BOOLEAN NOT NULL DEFAULT TRUE, "
+                        "FOREIGN KEY(parent_id) REFERENCES categories__migration(id) "
+                        "DEFERRABLE INITIALLY DEFERRED"
+                        ")"
+                    )
+                )
+                category_columns = "id, name, slug, parent_id, is_active"
+                connection.execute(
+                    text(
+                        "INSERT INTO categories__migration (" + category_columns + ") "
+                        "SELECT " + category_columns + " FROM categories"
+                    )
+                )
+                connection.execute(text("PRAGMA defer_foreign_keys = ON"))
+                connection.execute(text("DROP TABLE categories"))
+                connection.execute(
+                    text("ALTER TABLE categories__migration RENAME TO categories")
+                )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_categories_parent_id "
+                        "ON categories (parent_id)"
+                    )
+                )
 
         if "order_items" in tables:
             columns = {c["name"] for c in inspector.get_columns("order_items")}
