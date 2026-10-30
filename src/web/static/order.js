@@ -83,6 +83,7 @@ const elements = {
   orderSwitcherWrap: document.getElementById("order-switcher-wrap"),
   orderSelect: document.getElementById("order-select"),
   // Badges & Escrow
+  badgePaymentMethod: document.getElementById("badge-payment-method"),
   badgePaymentStatus: document.getElementById("badge-payment-status"),
   badgeEscrowStatus: document.getElementById("badge-escrow-status"),
   escrowNotice: document.getElementById("escrow-paused-notice"),
@@ -336,7 +337,9 @@ function startPolling(orderId) {
           !currentOrder ||
           currentOrder.status !== updated.status ||
           JSON.stringify(currentOrder.sub_orders) !== JSON.stringify(updated.sub_orders) ||
-          currentOrder.tracking_number !== updated.tracking_number
+          currentOrder.tracking_number !== updated.tracking_number ||
+          currentOrder.payment_method !== updated.payment_method ||
+          currentOrder.payment_status !== updated.payment_status
         ) {
           renderOrder(updated);
         }
@@ -486,10 +489,17 @@ function renderOrder(order) {
   elements.itemsList.replaceChildren(table);
 
   // Payment and Escrow badges
+  const methodNames = {COD: "Cash on delivery", VIETQR: "VietQR", WALLET: "Wallet", CARD: "Card"};
+  const statusNames = {UNPAID: "Awaiting payment", PAID: "Paid", REFUND_PENDING: "Refund in progress", REFUNDED: "Refunded", FAILED: "Payment failed"};
+  if (elements.badgePaymentMethod) {
+    elements.badgePaymentMethod.hidden = false;
+    elements.badgePaymentMethod.textContent = order.payment_method ? "Payment: " + (methodNames[order.payment_method] || order.payment_method) : "Payment method: Not recorded";
+    elements.badgePaymentMethod.className = "badge";
+  }
   if (elements.badgePaymentStatus) {
     elements.badgePaymentStatus.hidden = false;
-    elements.badgePaymentStatus.textContent = "Payment: " + (order.payment_status || "PAID");
-    elements.badgePaymentStatus.className = "badge " + (order.payment_status === "REFUNDED" ? "badge-purple" : "badge-success");
+    elements.badgePaymentStatus.textContent = order.payment_method ? "Payment status: " + (statusNames[order.payment_status] || "Not recorded") : "Payment not recorded";
+    elements.badgePaymentStatus.className = "badge " + (order.payment_status === "REFUNDED" ? "badge-purple" : order.payment_status === "PAID" ? "badge-success" : "");
   }
   if (elements.badgeEscrowStatus) {
     elements.badgeEscrowStatus.hidden = false;

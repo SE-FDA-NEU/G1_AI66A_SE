@@ -6,7 +6,7 @@ import vm from "node:vm";
 
 const checkoutSource = await readFile(new URL("../src/web/static/checkout.js", import.meta.url), "utf8");
 const confirmationSource = await readFile(new URL("../src/web/static/confirmation.js", import.meta.url), "utf8");
-const body = {recipient_name:"Buyer", delivery_address:"123 Main", phone_number:"0912345678"};
+const body = {recipient_name:"Buyer", delivery_address:"123 Main", phone_number:"0912345678", payment_method:"VIETQR"};
 export function setup(responses, saved = null, script = checkoutSource, addressResponses = []) {
   const nodes = new Map();
   const element = () => ({hidden:false, disabled:false, textContent:"", children:[],
@@ -86,12 +86,14 @@ for (const items of [[],[{name:"Mouse",quantity:1,line_total:100,is_selected:tru
 }
 // Receipt retries are GET-only and do not create another order.
 const line={product_id:46,product_code:"P-100",product_name:"Mouse",seller_order_id:1,quantity:2,unit_price:100000,line_total:200000};
-test=setup([new Error("timeout"),{payload:{data:{id:1,status:"PENDING",total_amount:200000,...body,items:[line]}}}],null,confirmationSource);
+test=setup([new Error("timeout"),{payload:{data:{id:1,status:"PENDING",payment_status:"UNPAID",total_amount:200000,...body,items:[line]}}}],null,confirmationSource);
 await tick(); assert.equal(test.nodes.get("retry").hidden,false);
 await vm.runInContext("load()",test.context);
 assert.equal(test.calls.length,2);
 assert.ok(test.calls.every(call=>call.url==="/api/v1/orders/1" && !call.options.method));
-assert.equal(test.nodes.get("status").textContent,"Order placed successfully.");
+assert.match(test.nodes.get("status").textContent,/Payment has not been marked successful/);
+assert.equal(test.nodes.get("payment-method").textContent,"Payment method: VietQR");
+assert.equal(test.nodes.get("payment-status").textContent,"Awaiting payment (demo result not recorded)");
 // Receipt lines name the product and format the purchase price, never "Product #46".
 const receiptText=test.nodes.get("receipt").children.map(child=>child.textContent);
 assert.ok(receiptText.some(text=>/^Mouse \(P-100\) \u00d7 2 \u00b7 100\.000\s\u20ab each$/.test(text)),receiptText.join(" | "));
