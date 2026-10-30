@@ -280,6 +280,9 @@ def migrate_db(connection: Connection | None = None) -> None:
             for name in ("tracking_number",):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(100)"))
+            if "payment_method" not in columns:
+                # NULL marks a legacy order placed before payment tracking (US20 section 10).
+                connection.execute(text("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(10)"))
             for name in ("shipped_at", "delivered_at", "completed_at"):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} DATETIME"))
@@ -342,6 +345,22 @@ def migrate_db(connection: Connection | None = None) -> None:
                     )
                 )
 
+            for name in (
+                "refunded_amount",
+                "commission_rate_bps",
+                "commission_amount",
+                "seller_net_amount",
+            ):
+                if name not in columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE seller_orders ADD COLUMN {name} "
+                            "INTEGER NOT NULL DEFAULT 0"
+                        )
+                    )
+            if "settled_at" not in columns:
+                connection.execute(text("ALTER TABLE seller_orders ADD COLUMN settled_at DATETIME"))
+
             if subtotal_missing and "order_items" in tables:
                 connection.execute(
                     text(
@@ -359,6 +378,8 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "WHERE subtotal = 0"
                     )
                 )
+        if {"orders", "seller_orders"} <= tables:
+            _migrate_payment_states(connection)
         if "notifications" in tables:
             columns = {c["name"] for c in inspector.get_columns("notifications")}
             if "target_path" not in columns:
@@ -575,6 +596,43 @@ def migrate_db(connection: Connection | None = None) -> None:
                         text("CREATE UNIQUE INDEX ix_vouchers_code ON vouchers (code)")
                     )
 
+
+
+def _migrate_payment_states(connection: Connection) -> None:
+    """US20 section 10 value mapping; every statement is a no-op on a second run."""
+    for table in ("orders", "seller_orders"):
+        connection.execute(
+            text(f"UPDATE {table} SET escrow_status = 'VOIDED' WHERE escrow_status = 'REFUNDED'")
+        )
+    # Cancellations on main left escrow HELD; a cancelled or returned order is never settled.
+    connection.execute(
+        text(
+            "UPDATE seller_orders SET escrow_status = 'VOIDED' "
+            "WHERE status IN ('CANCELLED', 'RETURNED_REFUNDED') AND escrow_status != 'VOIDED'"
+        )
+    )
+    connection.execute(
+        text(
+            "UPDATE orders SET payment_status = 'PAID' "
+            "WHERE payment_status = 'PARTIALLY_REFUNDED'"
+        )
+    )
+    # Recompute the display summary of section 2.3 from the seller orders.
+    connection.execute(
+        text(
+            "UPDATE orders SET escrow_status = CASE "
+            "WHEN EXISTS (SELECT 1 FROM seller_orders s WHERE s.order_id = orders.id "
+            "  AND s.escrow_status = 'PAUSED') THEN 'PAUSED' "
+            "WHEN NOT EXISTS (SELECT 1 FROM seller_orders s WHERE s.order_id = orders.id "
+            "  AND s.escrow_status != 'RELEASED') THEN 'RELEASED' "
+            "WHEN NOT EXISTS (SELECT 1 FROM seller_orders s WHERE s.order_id = orders.id "
+            "  AND s.escrow_status != 'VOIDED') THEN 'VOIDED' "
+            "WHEN EXISTS (SELECT 1 FROM seller_orders s WHERE s.order_id = orders.id "
+            "  AND s.escrow_status = 'HELD') THEN 'HELD' "
+            "ELSE 'PARTIALLY_SETTLED' END "
+            "WHERE EXISTS (SELECT 1 FROM seller_orders s WHERE s.order_id = orders.id)"
+        )
+    )
 
 
 def init_db() -> None:
