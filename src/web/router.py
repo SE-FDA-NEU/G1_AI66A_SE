@@ -50,6 +50,13 @@ def seller_orders_page() -> FileResponse:
     return FileResponse(PAGES_DIR / "seller-orders.html")
 
 
+@router.get("/seller/analytics", response_class=FileResponse, include_in_schema=False)
+@router.get("/seller/analytics/products", response_class=FileResponse, include_in_schema=False)
+def seller_analytics_page() -> FileResponse:
+    """Serve seller analytics; the authenticated API determines access and ownership."""
+    return FileResponse(PAGES_DIR / "seller-analytics.html")
+
+
 @router.get("/seller/products", response_class=FileResponse, include_in_schema=False)
 def seller_products_page() -> FileResponse:
     """Serve the seller product management screen."""

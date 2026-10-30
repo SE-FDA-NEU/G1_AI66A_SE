@@ -506,3 +506,18 @@ the gaps found during an audit of that work.
 | Text a number input cannot parse (`-`, `1e`) reads as an empty price, so the search ran without that bound | `validity.badInput` counts as an invalid price | `tests/test_catalog_browser.py` (native number input) |
 | The maximum price field had no accessible name | Both price fields are labelled and point to the price error | Page markup |
 | At 360–390 px every filter took a full row | Short filters share a row: the filter panel is 507 px instead of 677 px, and the page has no horizontal scroll | [Phone](images/catalog/mobile-filters.png), [timeout](images/catalog/mobile-timeout.png), [desktop](images/catalog/desktop-filters.png) |
+
+## US18 seller analytics UI update (#110, #143)
+
+This update supersedes the historical US09/US10 "Not implemented" UI entries
+above. The existing completed-sales APIs remain unchanged; #143 supplies the
+dashboard and best-selling view. New financial aggregation is #142's dependency,
+and low-stock alerts/variant thresholds belong to #144. Story-wide acceptance,
+human review and CI are separate from local UI implementation.
+
+| Requirement | Contract and implementation | Verification |
+|---|---|---|
+| Inclusive seller-scoped date range, day/month filters | [US18 UI contract](us18-seller-analytics-ui.md); `seller-analytics.js` calls existing seller-only APIs with matching aliases | [A143-02–04, 09, 11](testing.md#task-143-seller-analytics-charts-and-ranking) |
+| Separate financial summary and time series | Four labelled cards; native SVG and exact-value table; honest unavailable/legacy states until #142 | A143-05–08 in the same matrix |
+| Actual API integration and reporting dates | Chrome uses production assets and FastAPI with persisted SQLite orders, without canned responses; strict candidate mode rejects legacy-only verification | A143-12 in the same matrix; post-merge #142 verification remains pending |
+| Best-selling quantity ranking | `/seller/analytics/products` shares the dashboard; `units_sold DESC` and purchase-price sales values from existing API | A143-01, 03, 06–08, 10–11 in the same matrix |

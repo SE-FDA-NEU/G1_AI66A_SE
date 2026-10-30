@@ -291,13 +291,17 @@ The `status` field allows each seller to manage their own fulfillment process in
 
 The `completed_at` field records when the seller-specific order reaches the `COMPLETED` state. It remains `NULL` while the seller order has not been completed.
 
-For seller analytics, `seller_orders.status` is the canonical fulfillment status. Revenue and best-selling calculations include only seller orders where:
+For legacy completed-sales analytics, `seller_orders.status` is the canonical fulfillment status. Completed-item revenue and best-selling calculations include only seller orders where:
 
 ```text
 seller_orders.status = COMPLETED
 ```
 
-The selected analytics period is evaluated using `seller_orders.completed_at`, not the original marketplace order creation timestamp.
+The selected completed-sales period is evaluated using `seller_orders.completed_at`,
+with the existing legacy fallback to creation time when it is absent. This is
+also the reporting timeline used by the current #142 API candidate. The #143 UI
+distinguishes legacy item revenue from financial order totals as described in
+[US18 UI](us18-seller-analytics-ui.md).
 
 ---
 

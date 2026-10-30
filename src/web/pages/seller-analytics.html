@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sales analytics | Mini Marketplace</title>
+  <link rel="stylesheet" href="/static/base.css">
+  <link rel="stylesheet" href="/static/seller-analytics.css">
+  <script src="/static/analytics-chart.js" defer></script>
+  <script src="/static/seller-analytics.js" defer></script>
+</head>
+<body>
+  <main class="analytics">
+    <nav class="site-nav" aria-label="Seller navigation">
+      <a href="/products">Products</a>
+      <a href="/seller/products">My products</a>
+      <a href="/seller/orders">Seller orders</a>
+      <a id="analytics-nav-summary" href="/seller/analytics" aria-current="page">Analytics</a>
+      <a id="analytics-nav-ranking" href="/seller/analytics/products">Best sellers</a>
+      <button id="analytics-logout" type="button">Log out</button>
+    </nav>
+    <header>
+      <p class="eyebrow">Seller workspace</p>
+      <h1>Sales analytics</h1>
+      <p>Review your shop's performance and completed-product sales. All amounts are in VND.</p>
+    </header>
+    <form id="analytics-filters" class="analytics-filters" novalidate>
+      <label>From (UTC, inclusive)
+        <input id="analytics-from" type="date" required aria-describedby="analytics-from-error">
+        <span id="analytics-from-error" class="field-error" hidden></span>
+      </label>
+      <label>To (UTC, inclusive)
+        <input id="analytics-to" type="date" required aria-describedby="analytics-to-error">
+        <span id="analytics-to-error" class="field-error" hidden></span>
+      </label>
+      <label>Group by
+        <select id="analytics-group" aria-describedby="analytics-group-error">
+          <option value="day">Day</option><option value="month">Month</option>
+        </select>
+        <span id="analytics-group-error" class="field-error" hidden></span>
+      </label>
+      <label>Best sellers shown
+        <select id="analytics-limit" aria-describedby="analytics-limit-error">
+          <option value="5">Top 5</option><option value="10" selected>Top 10</option><option value="20">Top 20</option>
+        </select>
+        <span id="analytics-limit-error" class="field-error" hidden></span>
+      </label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <p id="analytics-status" role="status" aria-live="polite">Checking seller access…</p>
+    <section id="analytics-error" role="alert" hidden>
+      <p id="analytics-error-message"></p>
+      <button id="analytics-retry" type="button">Retry analytics</button>
+      <a href="/login?return_to=%2Fseller%2Fanalytics">Log in with a seller account</a>
+    </section>
+    <section id="analytics-report" hidden aria-labelledby="report-title">
+      <h2 id="report-title">Financial summary</h2>
+      <p id="analytics-applied-range"></p>
+      <p id="analytics-date-basis">UTC reporting date: completion date when available, otherwise creation date.</p>
+      <p id="analytics-compatibility" class="notice" role="status" hidden></p>
+      <dl class="analytics-metrics">
+        <div><dt>Gross order value</dt>
+          <dd><span id="metric-gross_order_value">Not available</span><p>Shop-order value before separating completed sales.</p></dd></div>
+        <div><dt id="completed-revenue-label">Completed revenue</dt>
+          <dd><span id="metric-completed_revenue">Not available</span><p id="completed-revenue-description">Value of orders marked completed.</p></dd></div>
+        <div><dt>Pending escrow revenue</dt>
+          <dd><span id="metric-pending_escrow_revenue">Not available</span><p>Amounts still held or paused in escrow.</p></dd></div>
+        <div><dt>Cancellation rate</dt>
+          <dd><span id="metric-cancellation_rate">Not available</span><p>Cancelled orders ÷ total orders × 100%.</p></dd></div>
+      </dl>
+      <section class="analytics-panel" aria-labelledby="trend-title">
+        <h2 id="trend-title">Performance over time</h2>
+        <label for="analytics-chart-metric">Chart metric</label>
+        <select id="analytics-chart-metric">
+          <option value="completed_revenue">Completed revenue</option>
+          <option value="gross_order_value">Gross order value</option>
+          <option value="pending_escrow_revenue">Pending escrow revenue</option>
+          <option value="cancellation_rate">Cancellation rate</option>
+        </select>
+        <p id="analytics-chart-description"></p>
+        <p id="analytics-chart-empty" class="notice" hidden></p>
+        <p class="scroll-help">On narrow screens, scroll the chart horizontally or open the exact-values table.</p>
+        <div id="analytics-chart" class="chart-scroll" tabindex="0" aria-label="Scrollable time-series chart"></div>
+        <details id="analytics-values">
+          <summary>View exact values as a table</summary>
+          <div class="analytics-table-scroll" tabindex="0" aria-label="Time-series values">
+            <table><caption id="analytics-values-caption"></caption>
+              <thead><tr><th scope="col">Period (UTC)</th><th scope="col" id="analytics-value-heading">Value</th></tr></thead>
+              <tbody id="analytics-values-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+      <section id="best-sellers" class="analytics-panel" aria-labelledby="best-sellers-title">
+        <h2 id="best-sellers-title" tabindex="-1">Best-selling products</h2>
+        <p>Ranked by units sold in completed shop orders, using purchase-time item prices and completion dates.</p>
+        <p class="scroll-help">Scroll the table horizontally on narrow screens to see all columns.</p>
+        <p id="analytics-ranking-empty" class="notice" hidden>No completed product sales in this range. Try a wider date range.</p>
+        <div id="analytics-ranking-table" class="analytics-table-scroll" tabindex="0" aria-label="Best-selling product ranking">
+          <table><caption id="analytics-ranking-caption"></caption>
+            <thead><tr><th scope="col">Rank</th><th scope="col">Product</th><th scope="col">Units sold</th><th scope="col">Completed-sales value (VND)</th></tr></thead>
+            <tbody id="analytics-ranking-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
