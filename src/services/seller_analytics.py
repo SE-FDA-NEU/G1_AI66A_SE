@@ -3,7 +3,8 @@
 Provides three analytics views for a seller:
   1. Time-based summary — revenue and order counts grouped by day / week / month.
   2. Best sellers       — products ranked by units sold or by revenue in a period.
-  3. Low-stock alerts   — active products whose available stock is at or below a threshold.
+  3. Low-stock alerts   — active products/variants whose available stock is at or below a
+                         threshold.
 
 All queries are read-only and scoped strictly to the authenticated seller's products.
 """
@@ -17,6 +18,7 @@ from sqlmodel import Session, select
 from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 
 # ---------------------------------------------------------------------------
@@ -313,7 +315,8 @@ def get_best_sellers(
     ]
 
     sort_key = "revenue" if sort_by == "revenue" else "units_sold"
-    items.sort(key=lambda x: x[sort_key], reverse=True)
+    # Ties keep a stable order, so the rank does not change between requests.
+    items.sort(key=lambda x: (-x[sort_key], x["product_id"]))
     return items[:limit]
 
 
@@ -322,49 +325,51 @@ def get_best_sellers(
 # ---------------------------------------------------------------------------
 
 
+def _low_stock_row(product: Product, variant: ProductVariant | None) -> dict:
+    stock = variant or product
+    return {
+        "product_id": product.id,
+        "product_code": product.code,
+        "product_name": product.name,
+        "variant_id": variant.id if variant else None,
+        "variant_sku": variant.sku if variant else None,
+        "variant_name": variant.name if variant else None,
+        "stock_quantity": stock.stock_quantity,
+        "reserved_stock": stock.reserved_stock,
+        "available_stock": stock.stock_quantity - stock.reserved_stock,
+    }
+
+
 def get_low_stock_products(
     session: Session,
     seller_id: int,
     threshold: int = LOW_STOCK_DEFAULT_THRESHOLD,
 ) -> list[dict]:
-    """Return active products whose *available* stock (stock_quantity − reserved_stock)
-    is at or below *threshold*, ordered by available stock ascending.
+    """Return active stock units whose *available* stock (stock_quantity − reserved_stock)
+    is at or below *threshold*, most critical first.
 
-    Each element is::
-
-        {
-            "product_id":       42,
-            "product_code":     "P-...",
-            "product_name":     "Widget",
-            "stock_quantity":   3,
-            "reserved_stock":   1,
-            "available_stock":  2,
-        }
+    A product with active variants is stocked per variant, so only its variants are
+    reported; reporting the product row too would count the same units twice.
     """
     products = session.exec(
-        select(Product)
-        .where(
-            Product.seller_id == seller_id,
-            Product.is_active.is_(True),
-        )
-        .order_by(
-            (Product.stock_quantity - Product.reserved_stock).asc(),
-            Product.id.asc(),
+        select(Product).where(Product.seller_id == seller_id, Product.is_active.is_(True))
+    ).all()
+    variants = session.exec(
+        select(ProductVariant).where(
+            ProductVariant.seller_id == seller_id,
+            ProductVariant.is_active.is_(True),
+            ProductVariant.product_id.in_([p.id for p in products]),
         )
     ).all()
+    variants_by_product: dict[int, list[ProductVariant]] = {}
+    for variant in variants:
+        variants_by_product.setdefault(variant.product_id, []).append(variant)
 
-    result = []
-    for p in products:
-        available = p.stock_quantity - p.reserved_stock
-        if available <= threshold:
-            result.append(
-                {
-                    "product_id": p.id,
-                    "product_code": p.code,
-                    "product_name": p.name,
-                    "stock_quantity": p.stock_quantity,
-                    "reserved_stock": p.reserved_stock,
-                    "available_stock": available,
-                }
-            )
-    return result
+    rows = []
+    for product in products:
+        for variant in variants_by_product.get(product.id, [None]):
+            row = _low_stock_row(product, variant)
+            if row["available_stock"] <= threshold:
+                rows.append(row)
+    rows.sort(key=lambda r: (r["available_stock"], r["product_id"], r["variant_id"] or 0))
+    return rows
