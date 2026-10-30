@@ -915,6 +915,7 @@ def test_dispute_approval_settles_return_lifecycle_payment_escrow_and_atomic_cla
         order = Order(
             buyer_id=portal_setup["buyer_id"],
             status="RETURN_REQUESTED",
+            payment_method="VIETQR",
             payment_status="PAID",
             escrow_status="PAUSED",
             total_amount=300000,
@@ -932,6 +933,7 @@ def test_dispute_approval_settles_return_lifecycle_payment_escrow_and_atomic_cla
             payment_status="PAID",
             escrow_status="PAUSED",
             subtotal=300000,
+            total_amount=300000,
         )
         session.add(so)
         session.flush()
@@ -992,12 +994,13 @@ def test_dispute_approval_settles_return_lifecycle_payment_escrow_and_atomic_cla
         updated_so = session.get(SellerOrder, so_id)
         assert updated_so.status == "RETURNED_REFUNDED"
         assert updated_so.payment_status == "REFUNDED"
-        assert updated_so.escrow_status == "REFUNDED"
+        assert updated_so.escrow_status == "VOIDED"  # US20 D5
+        assert updated_so.refunded_amount == 300000
 
         updated_ord = session.get(Order, ord_id)
         assert updated_ord.status == "RETURNED_REFUNDED"
         assert updated_ord.payment_status == "REFUNDED"
-        assert updated_ord.escrow_status == "REFUNDED"
+        assert updated_ord.escrow_status == "VOIDED"
 
     # 3. Seller or anyone attempting to decide the ReturnRequest again fails with 400
     second_decision = client.post(

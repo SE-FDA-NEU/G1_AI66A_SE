@@ -264,7 +264,7 @@ def test_paid_and_unpaid_approved_returns_leave_parent_escrow_voided(client, tes
             )
         }
         parent = session.get(Order, test_setup["order_id"])
-    assert escrows == {test_setup["seller_order_id"]: "REFUNDED", second: "VOIDED"}
+    assert escrows == {test_setup["seller_order_id"]: "VOIDED", second: "VOIDED"}
     assert (parent.status, parent.escrow_status) == ("RETURNED_REFUNDED", "VOIDED")
 
 
