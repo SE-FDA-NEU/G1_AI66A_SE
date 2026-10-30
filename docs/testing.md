@@ -155,3 +155,36 @@ git diff --check
 The DOM suite runs in the existing CI page-script step. Native checks require an
 installed Chrome/Edge, or `BROWSER_PATH`; they need no npm dependency and use an
 isolated browser profile. Actual run results and AI disclosure belong in the PR.
+
+## Task #147: immutable order-item snapshots
+
+Assigned criteria: snapshot persistence and preserved history in #111/#147. The
+existing implementation is verified by `tests/test_order_item_snapshots.py`, using
+independent SQLite files, real authenticated APIs and fresh-session assertions.
+
+| Case | Input/action | Expected result | Verification |
+|---|---|---|---|
+| S147-01 | Base product or variant; legacy/quoted checkout; option image, product fallback or neither | Persist exact product/variant name, image and integer unit price with initialized marker; quantities/totals match purchase data | Checkout/image decision table |
+| S147-02 | Edit name/price/image, deactivate, or DELETE after purchase | Buyer detail/list and seller detail/list preserve purchase facts; DELETE retains inactive referenced rows | Catalog mutation matrix |
+| S147-03 | Purchase without an image, then add one later | Historical NULL remains NULL in storage and every read surface | NULL-image partitions in the same matrix |
+| S147-04 | Repeat checkout key after edit/deactivation/DELETE, then rerun migrations | Same stored lines and total, no duplicate snapshots; known values stay unchanged | Idempotency and repeatability checks |
+| S147-05 | Add to cart, edit catalog, then checkout | Snapshot uses checkout-time metadata and price rather than old cart-time values | Legacy/quote timing pair |
+| S147-06 | Two-shop order; each seller reads; unrelated buyer reads | Seller receives only own historical line; buyer receives both; unrelated buyer gets 404 | Ownership integration |
+| S147-07 | Physically DELETE purchased base product or variant in the database | FK rejects removal; rollback preserves order lines and readable history | Referential-integrity partitions |
+| S147-08 | Client supplies snapshot names/image or unit price | 422, no order/snapshot written, cart and inventory preserved | Server-owned field partitions |
+| S147-09 | Second snapshot INSERT fails after an earlier line reached persistence | 500 database error; orders, snapshots, inventory, cart, sales counters and notifications equal pre-request state | SQLite failure injection, legacy/quote pair |
+| S147-10 | Existing known snapshots lack marker column; migrate repeatedly after catalog changes | Preserve known values, explicit NULL image, row references, quantity and unit price; add marker once | Legacy schema with saved image/NULL partitions |
+
+Run with README dependencies and Python 3.12:
+
+```powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_order_item_snapshots.py -q
+python -m pytest tests/test_us19_categories_variants.py tests/test_checkout.py tests/test_checkout_vouchers.py tests/test_seller_products.py tests/test_database.py tests/test_ui_docs_contract.py -q
+python -m ruff check src tests/test_order_item_snapshots.py
+git diff --check
+```
+
+The suite is discovered by the existing CI pytest step. No new browser dependency
+is needed: this task tests persistence and API contracts and adds no new screen.
+Only report CI/review/clean-clone results after they have actually been verified.

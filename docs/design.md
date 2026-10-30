@@ -314,6 +314,11 @@ distinguishes legacy item revenue from financial order totals as described in
 | `id` | INTEGER | Primary Key |
 | `seller_order_id` | INTEGER | NOT NULL, Foreign Key → `seller_orders.id` |
 | `product_id` | INTEGER | NOT NULL, Foreign Key → `products.id` |
+| `variant_id` | INTEGER | Nullable, Foreign Key → `product_variants.id`; no variant for a base-product purchase |
+| `product_name_snapshot` | VARCHAR(200) | Product name captured by checkout |
+| `variant_name_snapshot` | VARCHAR(100) | Selected option name, or NULL for a base-product purchase |
+| `product_image_snapshot` | VARCHAR(2048) | Selected option image, else product image; NULL means no image at purchase |
+| `snapshot_initialized` | BOOLEAN | Checkout sets TRUE; initialized snapshot values must not fall back to current listing data |
 | `quantity` | INTEGER | NOT NULL, CHECK `quantity > 0` |
 | `unit_price` | INTEGER | NOT NULL, CHECK `unit_price > 0` |
 
@@ -330,6 +335,15 @@ Stored order_items.unit_price: 180,000
 ```
 
 Historical orders and seller revenue therefore remain correct even when current product prices change.
+
+Task #147 verifies these existing purchase facts through buyer detail/list and
+seller detail/list APIs, including quote checkout and idempotent replay. Seller
+DELETE is a soft deactivation; foreign keys prevent physical removal of inventory
+referenced by orders. An initialized NULL image stays NULL after later image edits.
+Seller product **responses** permit `image_url: null` for such existing listings,
+so deactivation and DELETE return their committed result successfully. The product
+creation request still requires its validated image URL. Scope and historical-data
+limits are in [US19 snapshot verification](us19-categories-variants-snapshots.md#immutable-order-item-verification-147).
 
 ---
 

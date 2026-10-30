@@ -521,3 +521,19 @@ human review and CI are separate from local UI implementation.
 | Separate financial summary and time series | Four labelled cards; native SVG and exact-value table; honest unavailable/legacy states until #142 | A143-05–08 in the same matrix |
 | Actual API integration and reporting dates | Chrome uses production assets and FastAPI with persisted SQLite orders, without canned responses; strict candidate mode rejects legacy-only verification | A143-12 in the same matrix; post-merge #142 verification remains pending |
 | Best-selling quantity ranking | `/seller/analytics/products` shares the dashboard; `units_sold DESC` and purchase-price sales values from existing API | A143-01, 03, 06–08, 10–11 in the same matrix |
+
+## US19 immutable purchase snapshot verification (#111, #147)
+
+Existing checkout already writes product name, variant name, image and unit price
+to `order_items`; #147 supplies focused regression coverage and fixes the nullable
+image response needed to deactivate/delete an existing image-less listing.
+
+| Assigned requirement | Implementation / contract | Verification |
+|---|---|---|
+| Capture server-owned purchase facts at checkout | Existing `services/orders.checkout`, `models/order_item`; [snapshot boundary](us19-categories-variants-snapshots.md#immutable-order-item-verification-147) | [S147-01, 05, 08](testing.md#task-147-immutable-order-item-snapshots) |
+| Preserve history after edits, deactivation or deletion | Existing receipt/seller readers and soft-delete routes; `SellerProduct.image_url` accepts NULL in responses | S147-02–04, 06–07 in the same matrix |
+| Failed operations and migration reruns preserve stored facts | Existing checkout transaction and marker migration; targeted failure/legacy fixtures | S147-09–10 in the same matrix |
+
+Excludes category/variant management (#145/#146), new inventory/concurrency rules,
+pricing changes and UI redesign. Existing legacy backfill is not proof of unknown
+purchase-time details. Local verification does not establish CI, review or merge.

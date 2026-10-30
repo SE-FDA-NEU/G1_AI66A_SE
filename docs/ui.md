@@ -434,3 +434,12 @@ and uncertain submissions require a status read before another attempt.
 See the [buyer UI contract and screenshots](us17-buyer-returns.md) and
 [test matrix](testing.md#task-139-buyer-return-request-ui). Existing seller/admin
 decisions and backend refund/restock rules are unchanged.
+
+### US19 historical order-item verification (#147)
+
+Order-detail/list responses retain the purchased names, image and unit price after
+catalog edits or soft deletion. Products without an image can be deactivated and
+deleted successfully; their historical NULL images remain NULL. This task verifies
+existing presentation contracts through APIs; its only runtime correction permits
+NULL in the seller product response. See [snapshot scope](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
+and [verification matrix](testing.md#task-147-immutable-order-item-snapshots).
