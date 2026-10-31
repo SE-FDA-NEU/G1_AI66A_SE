@@ -11,11 +11,13 @@ import re
 from pathlib import Path
 
 import pytest
+from fastapi import APIRouter
 from fastapi.routing import APIRoute
 from sqlmodel import Session, select
 
 import src.api
-from src.auth import create_access_token, require_admin
+from src.api import seller_products
+from src.auth import AdminUser, create_access_token, require_admin
 from src.main import create_app
 from src.models.account_audit_log import AccountAuditLog
 from src.models.category import Category
@@ -225,24 +227,38 @@ def _call(secured, actor, method, template, build):
     )
 
 
-def _discovered_admin_routes():
-    """(method, path under /api/v1, guarded) for every admin-looking or admin-guarded route.
+def _api_routers():
+    """Every APIRouter instance defined in `src.api`, not only the one named `router`.
 
-    Routers are read from the `src.api` modules because the application mounts them lazily;
-    the OpenAPI document then confirms each path is really served.
+    The application mounts them lazily, so they are read from the modules; secondary
+    routers such as `seller_products.inventory_router` are included. `api_router` is the
+    mount point that aggregates the others, so it is skipped to avoid double counting.
     """
-    served = create_app().openapi()["paths"]
-    routes = set()
+    seen = set()
     for module_info in pkgutil.iter_modules(src.api.__path__):
-        router = getattr(importlib.import_module(f"src.api.{module_info.name}"), "router", None)
-        for route in getattr(router, "routes", []):
+        module = importlib.import_module(f"src.api.{module_info.name}")
+        for name, value in vars(module).items():
+            if isinstance(value, APIRouter) and name != "api_router" and id(value) not in seen:
+                seen.add(id(value))
+                yield value
+
+
+def _discovered_admin_routes():
+    """(method, path under /api/v1, guarded) for every admin-looking or admin-guarded route."""
+    routes = set()
+    for router in _api_routers():
+        for route in router.routes:
             if not isinstance(route, APIRoute):
                 continue
             guarded = any(dep.call is require_admin for dep in _walk(route.dependant))
             if route.path.startswith("/admin") or guarded:
-                assert API + route.path in served, f"{route.path} is not served"
                 routes.update((m, route.path, guarded) for m in route.methods - {"HEAD"})
     return routes
+
+
+def _unregistered_routes():
+    discovered = {(method, path) for method, path, _ in _discovered_admin_routes()}
+    return discovered - {(method, template) for method, template, _, _ in ADMIN_ROUTES}
 
 
 def _walk(dependant):
@@ -263,8 +279,28 @@ def test_registry_lists_exactly_the_implemented_admin_routes():
     discovered = {(method, path) for method, path, _ in _discovered_admin_routes()}
     registered = {(method, template) for method, template, _, _ in ADMIN_ROUTES}
 
-    assert discovered - registered == set(), "new admin route has no security test"
+    assert _unregistered_routes() == set(), "new admin route has no security test"
     assert registered - discovered == set(), "registry lists a route that does not exist"
+
+
+def test_discovered_routes_are_served_by_the_application():
+    served = create_app().openapi()["paths"]
+
+    missing = sorted(path for _, path, _ in _discovered_admin_routes() if API + path not in served)
+
+    assert missing == []
+
+
+def test_unregistered_admin_route_on_a_secondary_router_fails_verification(monkeypatch):
+    probe = APIRouter(prefix="/seller/inventory")
+
+    @probe.get("/probe-admin")
+    def probe_admin(_admin: AdminUser):
+        return {}
+
+    monkeypatch.setattr(seller_products, "probe_router", probe, raising=False)
+
+    assert ("GET", "/seller/inventory/probe-admin") in _unregistered_routes()
 
 
 def test_traceability_documents_every_registered_admin_route():

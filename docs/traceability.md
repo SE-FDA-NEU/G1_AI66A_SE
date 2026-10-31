@@ -591,12 +591,12 @@ Status: Implemented.
 | `GET /api/v1/admin/products` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only | A153-01..03 |
 | `PATCH /api/v1/admin/products/{product_id}/status` | `/admin`, `/admin/portal` | #151 | admin | Owner seller cannot be changed | **No audit record (gap)**; moderation flag only | A153-01..03, 07 |
 | `GET /api/v1/admin/disputes` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only; shows creator and decision facts | A153-01..03 |
-| `POST /api/v1/admin/disputes` | `/admin`, `/admin/portal` | #151 | admin | Seller order must belong to the parent order | `created_by_user_id`; order history on a new transition | A153-01..03 |
+| `POST /api/v1/admin/disputes` | — (portal does not call escalation) | #151 | admin | Seller order must belong to the parent order | `created_by_user_id`; order history on a new transition | A153-01..03 |
 | `POST /api/v1/admin/disputes/{dispute_id}/decision` | `/admin`, `/admin/portal` | #151, #140 | admin | Dispute/order/buyer/seller relationships verified | Dispute decider/time, order history, `REFUND` payment event | A153-01..03, 08 |
 | `GET /api/v1/categories/admin` | — (no browser caller) | #151 | admin | Platform-wide | Read-only | A153-01..03 |
-| `POST /api/v1/categories` | — (no browser caller) | #151 | admin | Platform-wide | `category_audits` CREATE | A153-01..03 |
-| `PATCH /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide | `category_audits` UPDATE | A153-01..03 |
-| `DELETE /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide, soft deactivation | `category_audits` DEACTIVATE | A153-01..03 |
+| `POST /api/v1/categories` | — (no browser caller) | #151 | admin | Platform-wide | `category_audit_logs` CREATE | A153-01..03 |
+| `PATCH /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide | `category_audit_logs` UPDATE | A153-01..03 |
+| `DELETE /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide, soft deactivation | `category_audit_logs` DEACTIVATE | A153-01..03 |
 
 Known gaps recorded rather than hidden: platform voucher create/update and product
 moderation write no audit record, so "who changed this voucher/product" cannot be answered
