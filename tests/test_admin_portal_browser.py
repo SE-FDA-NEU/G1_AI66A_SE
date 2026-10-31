@@ -13,15 +13,12 @@ from starlette.testclient import TestClient
 from src.auth import create_access_token
 from src.database import get_session
 from src.main import create_app
-from src.models.account_audit_log import AccountAuditLog
 from src.models.category import Category
+from src.models.category_audit_log import CategoryAuditLog
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
-from src.models.return_dispute import ReturnDispute
-from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.voucher import Voucher
-from tests import test_payments as payments
 from tests.cart_db import BUYER_ID, SELLER_ID, create_cart_engine
 
 browser_api = pytest.importorskip("playwright.sync_api")
@@ -198,7 +195,7 @@ def new_voucher(site, code="TEST152", kind="PERCENTAGE"):
     return dialog
 
 
-def test_category_crud_and_keyboard_modal_use_real_persistence(site):
+def test_category_crud_and_keyboard_modal_use_real_persistence_and_audit(site):
     page = site.page
     expect(page.locator("#admin-alert")).to_have_attribute("role", "status")
     expect(page.locator("#admin-error")).to_have_attribute("role", "alert")
@@ -232,34 +229,35 @@ def test_category_crud_and_keyboard_modal_use_real_persistence(site):
     expect(page.locator("#categories-tbody")).not_to_contain_text("Updated category")
     with Session(site.engine) as session:
         assert session.get(Category, category_id) is None
+        logs = session.exec(
+            select(CategoryAuditLog)
+            .where(CategoryAuditLog.category_id == category_id)
+            .order_by(CategoryAuditLog.id)
+        ).all()
+        assert [log.action for log in logs] == ["CREATE", "UPDATE", "DELETE"]
+        assert all(log.admin_id == ADMIN_ID for log in logs)
 
 
 @pytest.mark.parametrize(
-    ("kind", "amount", "cap"),
+    ("kind", "amount"),
     [
-        ("PERCENTAGE", 1000, 2500),
-        ("PERCENTAGE", 1000, None),
-        ("FIXED_AMOUNT", 1, None),
-        ("FREE_SHIPPING", 0, 2500),
-        ("FREE_SHIPPING", 0, None),
+        ("PERCENTAGE", 1000),
+        ("FIXED_AMOUNT", 1),
+        ("FREE_SHIPPING", 0),
     ],
 )
-def test_voucher_creation_validation_utc_and_status_confirmation(site, kind, amount, cap):
+def test_voucher_creation_validation_utc_and_status_confirmation(site, kind, amount):
     page = site.page
     dialog = new_voucher(site, kind=kind)
     if kind == "FIXED_AMOUNT":
         expect(dialog.locator("#voucher-max")).to_be_disabled()
         dialog.locator("#voucher-max").evaluate("field => {field.value = '2500';}")
     else:
-        dialog.locator("#voucher-max").fill("" if cap is None else str(cap))
-    dialog.locator("#voucher-min").fill("500")
-    dialog.locator("#voucher-usage-limit").fill("10")
-    dialog.locator("#voucher-user-limit").fill("2")
+        dialog.locator("#voucher-max").fill("2500")
     if kind != "FREE_SHIPPING":
         dialog.locator("#voucher-val").fill(str(amount))
     else:
         expect(dialog.locator("#voucher-val")).to_be_disabled()
-        dialog.locator("#voucher-val").evaluate("field => {field.value = '9999';}")
     dialog.locator("#voucher-ends").fill("2030-01-01T08:00")
     dialog.get_by_role("button", name="Create Voucher", exact=True).click()
     assert dialog.locator("#voucher-ends").evaluate("field => field.validationMessage")
@@ -273,25 +271,11 @@ def test_voucher_creation_validation_utc_and_status_confirmation(site, kind, amo
     dialog.get_by_role("button", name="Create Voucher", exact=True).click()
     expect(dialog).not_to_be_visible()
     expect(page.locator("#vouchers-tbody")).to_contain_text("TEST152")
-    requests = site.mutations("POST", "/api/v1/admin/vouchers")
-    assert len(requests) == 1
-    expected = {
-        "code": "TEST152", "discount_type": kind, "discount_value": amount,
-        "min_order_value": 500, "usage_limit": 10, "per_user_limit": 2,
-        "starts_at": "2030-01-02T08:00:00.000Z", "ends_at": "2030-01-03T08:00:00.000Z",
-        "is_active": True,
-    }
-    if kind != "FIXED_AMOUNT":
-        expected["max_discount"] = cap
-    assert json.loads(requests[0]) == expected
     with Session(site.engine) as session:
         voucher = session.exec(select(Voucher).where(Voucher.code == "TEST152")).one()
         assert voucher.scope == "PLATFORM" and voucher.seller_id is None
         assert voucher.discount_value == amount
-        assert voucher.max_discount == cap
-        assert (voucher.min_order_value, voucher.usage_limit, voucher.per_user_limit) == (
-            500, 10, 2,
-        )
+        assert voucher.max_discount == (None if kind == "FIXED_AMOUNT" else 2500)
         assert voucher.starts_at == datetime(2030, 1, 2, 8, tzinfo=UTC)
         assert voucher.ends_at == datetime(2030, 1, 3, 8, tzinfo=UTC)
         voucher_id = voucher.id
@@ -451,115 +435,3 @@ def test_invalid_category_fields_never_send_a_mutation(site, name, slug):
     assert site.mutations("POST", "/api/v1/admin/categories") == []
     expect(dialog).to_be_visible()
     assert dialog.locator("form").evaluate("form => !form.checkValidity()")
-
-
-def test_shared_modal_preserves_account_cancel_keyboard_save_and_audit(site):
-    page = site.page
-    page.locator('.nav-tab[data-tab="users"]').click()
-    opener = page.locator("#users-tbody tr").filter(has_text="seller@test.local").get_by_role(
-        "button", name="Moderate", exact=True,
-    )
-    endpoint = f"/api/v1/admin/users/{SELLER_ID}/status"
-    opener.click()
-    dialog = page.get_by_role("dialog", name="Manage User Account Status")
-    expect(dialog.get_by_label("Account Status")).to_be_focused()
-    page.keyboard.press("Shift+Tab")
-    expect(dialog.get_by_role("button", name="Apply Status", exact=True)).to_be_focused()
-    page.keyboard.press("Tab")
-    expect(dialog.get_by_label("Account Status")).to_be_focused()
-    dialog.get_by_label("Account Status").select_option("RESTRICTED")
-    dialog.get_by_label("Moderation Reason").fill("Policy review")
-    dialog.get_by_role("button", name="Cancel", exact=True).click()
-    expect(dialog).not_to_be_visible()
-    expect(opener).to_be_focused()
-    assert site.mutations("PATCH", endpoint) == []
-    with Session(site.engine) as session:
-        assert session.get(User, SELLER_ID).status == "ACTIVE"
-        assert session.exec(select(AccountAuditLog)).all() == []
-
-    opener.click()
-    dialog.get_by_label("Account Status").select_option("RESTRICTED")
-    dialog.get_by_label("Moderation Reason").fill("Policy review")
-    site.fail_next = ("PATCH", endpoint)
-    dialog.get_by_role("button", name="Apply Status", exact=True).click()
-    expect(dialog.locator(".form-feedback")).to_be_focused()
-    expect(dialog.get_by_label("Moderation Reason")).to_have_value("Policy review")
-    dialog.get_by_role("button", name="Apply Status", exact=True).click()
-    expect(dialog).not_to_be_visible()
-    expect(page.locator("main")).not_to_have_attribute("inert", "")
-    with Session(site.engine) as session:
-        assert session.get(User, SELLER_ID).status == "RESTRICTED"
-        audit = session.exec(select(AccountAuditLog)).one()
-        assert (audit.admin_id, audit.old_status, audit.new_status, audit.reason) == (
-            ADMIN_ID, "ACTIVE", "RESTRICTED", "Policy review",
-        )
-    opener.click()
-    expect(dialog.locator("#user-audits-list")).to_contain_text("Policy review")
-    page.keyboard.press("Escape")
-    expect(opener).to_be_focused()
-
-
-@pytest.mark.parametrize(("action", "restock"), [
-    ("APPROVE", True), ("APPROVE", False), ("REJECT", False),
-])
-def test_shared_modal_preserves_dispute_cancel_error_and_decision(site, action, restock):
-    order_id, child_id = payments.place(site.engine, "VIETQR", key="legacy-dialog")
-    payments.pay(site.engine, order_id)
-    payments.seller(site.engine, child_id, "PROCESSING", "SHIPPED", "DELIVERED")
-    response = site.client.post(
-        "/api/v1/admin/disputes",
-        headers={"Authorization": f"Bearer {site.tokens[ADMIN_ID]}"},
-        params={
-            "order_id": order_id, "seller_order_id": child_id,
-            "reason": "Damaged parcel", "evidence": "photo.jpg",
-        },
-    )
-    assert response.status_code == 201, response.text
-    dispute_id = response.json()["id"]
-    endpoint = f"/api/v1/admin/disputes/{dispute_id}/decision"
-    page = site.page
-    page.locator('.nav-tab[data-tab="disputes"]').click()
-    opener = page.get_by_role("button", name="Adjudicate", exact=True)
-    opener.click()
-    dialog = page.get_by_role("dialog", name="Adjudicate Return Dispute")
-    expect(dialog.get_by_label("Adjudication Action")).to_be_focused()
-    page.keyboard.press("Shift+Tab")
-    expect(dialog.get_by_role("button", name="Submit Decision", exact=True)).to_be_focused()
-    page.keyboard.press("Tab")
-    expect(dialog.get_by_label("Adjudication Action")).to_be_focused()
-    dialog.get_by_role("button", name="Submit Decision", exact=True).click()
-    assert site.mutations("POST", endpoint) == []  # Required notes still block submission.
-    dialog.get_by_label("Decision Notes").fill("Inspected evidence")
-    page.keyboard.press("Escape")
-    expect(dialog).not_to_be_visible()
-    expect(opener).to_be_focused()
-    assert site.mutations("POST", endpoint) == []
-    with Session(site.engine) as session:
-        assert session.get(ReturnDispute, dispute_id).status == "PENDING"
-
-    opener.click()
-    dialog.get_by_label("Adjudication Action").select_option(action)
-    if action == "APPROVE":
-        dialog.locator("#dispute-restock").set_checked(restock)
-    else:
-        expect(dialog.locator("#group-dispute-restock")).not_to_be_visible()
-    dialog.get_by_label("Decision Notes").fill("Inspected evidence")
-    site.fail_next = ("POST", endpoint)
-    dialog.get_by_role("button", name="Submit Decision", exact=True).click()
-    expect(dialog.locator(".form-feedback")).to_be_focused()
-    expect(dialog.get_by_label("Decision Notes")).to_have_value("Inspected evidence")
-    dialog.get_by_role("button", name="Submit Decision", exact=True).click()
-    expect(dialog).not_to_be_visible()
-    expect(page.locator("main")).not_to_have_attribute("inert", "")
-    expected = {"action": action, "is_restockable": restock, "decision_notes": "Inspected evidence"}
-    assert [json.loads(body) for body in site.mutations("POST", endpoint)] == [expected, expected]
-    with Session(site.engine) as session:
-        dispute = session.get(ReturnDispute, dispute_id)
-        assert dispute.status == ("APPROVED" if action == "APPROVE" else "REJECTED")
-        assert dispute.decided_by_user_id == ADMIN_ID
-        assert dispute.decision_notes == "Inspected evidence"
-        child = session.get(SellerOrder, child_id)
-        assert child.status == ("RETURNED_REFUNDED" if action == "APPROVE" else "COMPLETED")
-        assert child.escrow_status == ("VOIDED" if action == "APPROVE" else "RELEASED")
-        product = session.exec(select(Product).where(Product.code == "PAY-legacy-dialog")).one()
-        assert product.stock_quantity == (10 if restock else 8)

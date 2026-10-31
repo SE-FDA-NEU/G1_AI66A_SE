@@ -17,6 +17,18 @@
   --admin-warning: var(--color-warning, #d97706);
   --admin-radius: var(--radius-md, 8px);
   --admin-shadow: var(--shadow-sm, 0 1px 3px 0 rgba(15, 23, 42, 0.08));
+    --admin-primary: #1d4ed8;
+    --admin-primary-hover: #1e40af;
+    --admin-bg: #f8fafc;
+    --admin-card-bg: #ffffff;
+    --admin-border: #e2e8f0;
+    --admin-text-main: #0f172a;
+    --admin-text-muted: #64748b;
+    --admin-success: #10b981;
+    --admin-danger: #b91c1c;
+    --admin-warning: #f59e0b;
+    --admin-radius: 8px;
+    --admin-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 body {
@@ -41,6 +53,13 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+
+    max-width: 1300px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .admin-brand {
@@ -65,6 +84,15 @@ body {
   border-radius: var(--radius-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+
+    background-color: var(--admin-primary);
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .admin-user-info {
@@ -314,6 +342,10 @@ body {
   color: #ffffff;
 }
 
+.btn-danger:active {
+    background-color: #991b1b;
+}
+
 .btn-sm {
   padding: 0.35rem 0.65rem;
   font-size: 0.8rem;
@@ -467,4 +499,59 @@ body {
   .form-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Keep live regions present so changes are announced without disappearing timers. */
+.portal-alert:empty {
+    padding: 0;
+    margin: 0;
+    border: 0;
+}
+
+.form-feedback {
+    color: #991b1b;
+    overflow-wrap: anywhere;
+}
+
+.form-feedback:empty, .form-progress:empty { margin: 0; }
+
+.portal-views, .tab-view, .table-container {
+    min-width: 0;
+}
+
+.table-container {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, .form-feedback:focus {
+    outline: 3px solid #1d4ed8;
+    outline-offset: 3px;
+}
+
+.admin-container button, .modal-dialog button {
+    min-height: 44px;
+}
+
+[aria-busy="true"] button, button:disabled {
+    cursor: wait;
+}
+
+@media (max-width: 900px) {
+    .portal-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+    .portal-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .admin-header-content, .admin-brand, .admin-user-info, .view-header { flex-wrap: wrap; }
+    .admin-header-content { gap: 1rem; }
+    .filter-controls { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+    .admin-header { padding: 1rem; }
+    .admin-container { padding: 0 0.75rem; margin: 1rem auto; }
+    .portal-views, .portal-nav, .modal-dialog { padding: 1rem; }
+    .portal-nav { grid-template-columns: minmax(0, 1fr); }
+    .form-row { grid-template-columns: minmax(0, 1fr); }
+    .filter-controls, .filter-controls .form-input, .filter-controls .form-select { width: 100%; min-width: 0; }
+    .modal-dialog { box-sizing: border-box; }
 }
