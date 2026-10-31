@@ -3,7 +3,8 @@
 Provides three analytics views for a seller:
   1. Time-based summary — revenue and order counts grouped by day / week / month.
   2. Best sellers       — products ranked by units sold or by revenue in a period.
-  3. Low-stock alerts   — active products whose available stock is at or below a threshold.
+  3. Low-stock alerts   — active products/variants whose available stock is at or below a
+                         threshold.
 
 All queries are read-only and scoped strictly to the authenticated seller's products.
 """
@@ -11,12 +12,13 @@ All queries are read-only and scoped strictly to the authenticated seller's prod
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlmodel import Session, select
 
 from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
+from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 
 # ---------------------------------------------------------------------------
@@ -74,49 +76,65 @@ def _iter_buckets(start: date, end: date, period: Period):
 # ---------------------------------------------------------------------------
 
 
-def get_revenue_summary(
+def get_analytics_summary(
     session: Session,
     seller_id: int,
     start_date: date,
     end_date: date,
     period: Period,
-) -> list[dict]:
-    """Return a list of time-bucketed revenue/order statistics.
-
-    Each element is::
-
-        {
-            "period":        "2024-01-15",           # label (ISO date / range / YYYY-MM)
-            "period_start":  "2024-01-15",
-            "period_end":    "2024-01-15",
-            "revenue":       1_500_000,              # integer VND
-            "orders":        3,                      # distinct seller_orders
-            "items_sold":    7,                      # sum of quantities
-        }
-
-    Only seller_orders with status COMPLETED count toward revenue.
-    """
+) -> tuple[list[dict], dict]:
+    """Return seller-scoped time-bucketed metrics and metadata in a single query."""
     start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
     end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
 
-    # Fetch all completed seller_orders in range for this seller.
-    # Per docs/design.md line 300 & BR7:
-    # "The selected analytics period is evaluated using seller_orders.completed_at,
-    # not the original marketplace order creation timestamp."
+    effective_ts = func.coalesce(SellerOrder.completed_at, SellerOrder.created_at)
+
+    # Single database query aggregating item metrics via SQL GROUP BY
     rows = session.exec(
-        select(SellerOrder, Order, OrderItem, Product)
-        .join(Order, Order.id == SellerOrder.order_id)
-        .join(OrderItem, OrderItem.seller_order_id == SellerOrder.id)
-        .join(Product, Product.id == OrderItem.product_id)
+        select(
+            SellerOrder.id,
+            SellerOrder.status,
+            SellerOrder.escrow_status,
+            SellerOrder.total_amount,
+            effective_ts.label("effective_dt"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            SellerOrder.status == "COMPLETED",
+                            OrderItem.quantity * OrderItem.unit_price,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("items_revenue"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (SellerOrder.status == "COMPLETED", OrderItem.quantity),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("items_sold"),
+        )
+        .outerjoin(OrderItem, OrderItem.seller_order_id == SellerOrder.id)
         .where(
             SellerOrder.seller_id == seller_id,
-            SellerOrder.status == "COMPLETED",
-            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) >= start_dt,
-            func.coalesce(SellerOrder.completed_at, SellerOrder.created_at) <= end_dt,
+            effective_ts >= start_dt,
+            effective_ts <= end_dt,
+        )
+        .group_by(
+            SellerOrder.id,
+            SellerOrder.status,
+            SellerOrder.escrow_status,
+            SellerOrder.total_amount,
+            SellerOrder.completed_at,
+            SellerOrder.created_at,
         )
     ).all()
 
-    # Group into buckets
     buckets: dict[date, dict] = {}
     for bucket_start, bucket_end_exc in _iter_buckets(start_date, end_date, period):
         label = _period_label(bucket_start, period)
@@ -128,27 +146,111 @@ def get_revenue_summary(
             "revenue": 0,
             "orders": 0,
             "items_sold": 0,
-            "_order_ids": set(),
+            "gross_order_value": 0,
+            "completed_revenue": 0,
+            "pending_escrow_revenue": 0,
+            "cancellation_rate": 0.0,
+            "_cancelled_orders": 0,
+            "_total_orders": 0,
         }
 
-    for seller_order, _order, item, _product in rows:
-        order_dt = seller_order.completed_at or seller_order.created_at
-        order_date = order_dt.date()
+    for row in rows:
+        order_date = row.effective_dt.date()
         bucket_start = _period_start(order_date, period)
         if bucket_start not in buckets:
             continue
         bucket = buckets[bucket_start]
-        bucket["revenue"] += item.quantity * item.unit_price
-        bucket["items_sold"] += item.quantity
-        bucket["_order_ids"].add(seller_order.id)
+        amount = int(row.total_amount)
+        bucket["gross_order_value"] += amount
+        bucket["_total_orders"] += 1
 
-    result = []
+        if row.status == "COMPLETED":
+            bucket["revenue"] += int(row.items_revenue)
+            bucket["orders"] += 1
+            bucket["items_sold"] += int(row.items_sold)
+            bucket["completed_revenue"] += amount
+        elif row.status == "CANCELLED":
+            bucket["_cancelled_orders"] += 1
+
+        if (
+            row.status not in {"COMPLETED", "CANCELLED"}
+            and row.escrow_status in {"HELD", "PAUSED"}
+        ):
+            bucket["pending_escrow_revenue"] += amount
+
+    for bucket in buckets.values():
+        tot = bucket["_total_orders"]
+        can = bucket["_cancelled_orders"]
+        bucket["cancellation_rate"] = (
+            round(can * 100.0 / tot, 2) if tot > 0 else 0.0
+        )
+
+    data = []
+    total_revenue = 0
+    total_orders = 0
+    total_items = 0
+    gross_order_value = 0
+    completed_revenue = 0
+    pending_escrow_revenue = 0
+    all_total_orders = 0
+    all_cancelled_orders = 0
+
     for bucket_start in sorted(buckets):
         b = buckets[bucket_start]
-        b["orders"] = len(b.pop("_order_ids"))
-        result.append(b)
+        tot = b.pop("_total_orders")
+        can = b.pop("_cancelled_orders")
+        total_revenue += b["revenue"]
+        total_orders += b["orders"]
+        total_items += b["items_sold"]
+        gross_order_value += b["gross_order_value"]
+        completed_revenue += b["completed_revenue"]
+        pending_escrow_revenue += b["pending_escrow_revenue"]
+        all_total_orders += tot
+        all_cancelled_orders += can
+        data.append(b)
 
-    return result
+    meta = {
+        "from": start_date.isoformat(),
+        "to": end_date.isoformat(),
+        "period": period,
+        "group_by": period,
+        "total_revenue": total_revenue,
+        "total_orders": total_orders,
+        "total_items_sold": total_items,
+        "gross_order_value": gross_order_value,
+        "completed_revenue": completed_revenue,
+        "pending_escrow_revenue": pending_escrow_revenue,
+        "cancellation_rate": (
+            round(all_cancelled_orders * 100.0 / all_total_orders, 2)
+            if all_total_orders > 0
+            else 0.0
+        ),
+    }
+    return data, meta
+
+
+def get_revenue_summary(
+    session: Session,
+    seller_id: int,
+    start_date: date,
+    end_date: date,
+    period: Period,
+) -> list[dict]:
+    """Return a list of time-bucketed revenue/order statistics."""
+    data, _ = get_analytics_summary(session, seller_id, start_date, end_date, period)
+    return data
+
+
+def get_financial_summary(
+    session: Session,
+    seller_id: int,
+    start_date: date,
+    end_date: date,
+    group_by: Period,
+) -> list[dict]:
+    """Return seller-scoped financial metrics on the same timeline as revenue."""
+    data, _ = get_analytics_summary(session, seller_id, start_date, end_date, group_by)
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +315,8 @@ def get_best_sellers(
     ]
 
     sort_key = "revenue" if sort_by == "revenue" else "units_sold"
-    items.sort(key=lambda x: x[sort_key], reverse=True)
+    # Ties keep a stable order, so the rank does not change between requests.
+    items.sort(key=lambda x: (-x[sort_key], x["product_id"]))
     return items[:limit]
 
 
@@ -222,49 +325,51 @@ def get_best_sellers(
 # ---------------------------------------------------------------------------
 
 
+def _low_stock_row(product: Product, variant: ProductVariant | None) -> dict:
+    stock = variant or product
+    return {
+        "product_id": product.id,
+        "product_code": product.code,
+        "product_name": product.name,
+        "variant_id": variant.id if variant else None,
+        "variant_sku": variant.sku if variant else None,
+        "variant_name": variant.name if variant else None,
+        "stock_quantity": stock.stock_quantity,
+        "reserved_stock": stock.reserved_stock,
+        "available_stock": stock.stock_quantity - stock.reserved_stock,
+    }
+
+
 def get_low_stock_products(
     session: Session,
     seller_id: int,
     threshold: int = LOW_STOCK_DEFAULT_THRESHOLD,
 ) -> list[dict]:
-    """Return active products whose *available* stock (stock_quantity − reserved_stock)
-    is at or below *threshold*, ordered by available stock ascending.
+    """Return active stock units whose *available* stock (stock_quantity − reserved_stock)
+    is at or below *threshold*, most critical first.
 
-    Each element is::
-
-        {
-            "product_id":       42,
-            "product_code":     "P-...",
-            "product_name":     "Widget",
-            "stock_quantity":   3,
-            "reserved_stock":   1,
-            "available_stock":  2,
-        }
+    A product with active variants is stocked per variant, so only its variants are
+    reported; reporting the product row too would count the same units twice.
     """
     products = session.exec(
-        select(Product)
-        .where(
-            Product.seller_id == seller_id,
-            Product.is_active.is_(True),
-        )
-        .order_by(
-            (Product.stock_quantity - Product.reserved_stock).asc(),
-            Product.id.asc(),
+        select(Product).where(Product.seller_id == seller_id, Product.is_active.is_(True))
+    ).all()
+    variants = session.exec(
+        select(ProductVariant).where(
+            ProductVariant.seller_id == seller_id,
+            ProductVariant.is_active.is_(True),
+            ProductVariant.product_id.in_([p.id for p in products]),
         )
     ).all()
+    variants_by_product: dict[int, list[ProductVariant]] = {}
+    for variant in variants:
+        variants_by_product.setdefault(variant.product_id, []).append(variant)
 
-    result = []
-    for p in products:
-        available = p.stock_quantity - p.reserved_stock
-        if available <= threshold:
-            result.append(
-                {
-                    "product_id": p.id,
-                    "product_code": p.code,
-                    "product_name": p.name,
-                    "stock_quantity": p.stock_quantity,
-                    "reserved_stock": p.reserved_stock,
-                    "available_stock": available,
-                }
-            )
-    return result
+    rows = []
+    for product in products:
+        for variant in variants_by_product.get(product.id, [None]):
+            row = _low_stock_row(product, variant)
+            if row["available_stock"] <= threshold:
+                rows.append(row)
+    rows.sort(key=lambda r: (r["available_stock"], r["product_id"], r["variant_id"] or 0))
+    return rows

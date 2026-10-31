@@ -183,6 +183,10 @@ def test_submit_return_request_success_delivered_order(client, test_setup):
         so = session.get(SellerOrder, test_setup["seller_order_id"])
         assert so.status == "RETURN_REQUESTED"
         assert so.escrow_status == "PAUSED"
+        assert so.payment_status == "PAID"
+
+        product = session.get(Product, test_setup["product_id"])
+        assert product.stock_quantity == 10
 
         parent = session.get(Order, test_setup["order_id"])
         assert parent.status == "RETURN_REQUESTED"
@@ -223,6 +227,80 @@ def test_submit_return_request_fails_if_not_delivered(client, test_setup):
     )
     assert res.status_code == 400
     assert res.json()["error"]["code"] == "ERR_INVALID_TRANSITION"
+
+
+@pytest.mark.parametrize(
+    ("seller_status", "expected_status", "expected_code"),
+    [
+        ("PENDING", 400, "ERR_INVALID_TRANSITION"),
+        ("CONFIRMED", 400, "ERR_INVALID_TRANSITION"),
+        ("PROCESSING", 400, "ERR_INVALID_TRANSITION"),
+        ("SHIPPED", 400, "ERR_INVALID_TRANSITION"),
+        ("COMPLETED", 400, "ERR_INVALID_TRANSITION"),
+        ("CANCELLED", 400, "ERR_INVALID_TRANSITION"),
+        ("RETURNED_REFUNDED", 400, "ERR_INVALID_TRANSITION"),
+        ("RETURN_REQUESTED", 409, "ERR_CONFLICT"),
+    ],
+)
+def test_submit_return_request_rejects_every_non_delivered_state(
+    client, test_setup, seller_status, expected_status, expected_code
+):
+    """Only DELIVERED seller orders may enter return review."""
+    buyer_headers = _auth(test_setup["buyer_a"])
+    with Session(engine) as session:
+        seller_order = session.get(SellerOrder, test_setup["seller_order_id"])
+        seller_order.status = seller_status
+        session.add(seller_order)
+        session.commit()
+
+    res = client.post(
+        f"/api/v1/orders/{test_setup['order_id']}/returns",
+        headers=buyer_headers,
+        json={"reason": "Invalid state test", "evidence": "Evidence attached"},
+    )
+
+    assert res.status_code == expected_status
+    assert res.json()["error"]["code"] == expected_code
+    with Session(engine) as session:
+        seller_order = session.get(SellerOrder, test_setup["seller_order_id"])
+        assert seller_order.status == seller_status
+        assert seller_order.payment_status == "PAID"
+        assert seller_order.escrow_status == "HELD"
+        assert session.exec(select(ReturnRequest)).all() == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("reason", ""),
+        ("reason", "ab"),
+        ("reason", "r" * 501),
+        ("evidence", ""),
+        ("evidence", "ab"),
+        ("evidence", "e" * 2001),
+    ],
+)
+def test_submit_return_request_validates_reason_and_evidence(client, test_setup, field, value):
+    """Reason and evidence boundaries reject invalid payloads without side effects."""
+    buyer_headers = _auth(test_setup["buyer_a"])
+    payload = {"reason": "Valid return reason", "evidence": "Valid evidence"}
+    payload[field] = value
+
+    res = client.post(
+        f"/api/v1/orders/{test_setup['order_id']}/returns",
+        headers=buyer_headers,
+        json=payload,
+    )
+
+    assert res.status_code == 422
+    with Session(engine) as session:
+        seller_order = session.get(SellerOrder, test_setup["seller_order_id"])
+        product = session.get(Product, test_setup["product_id"])
+        assert seller_order.status == "DELIVERED"
+        assert seller_order.payment_status == "PAID"
+        assert seller_order.escrow_status == "HELD"
+        assert product.stock_quantity == 10
+        assert session.exec(select(ReturnRequest)).all() == []
 
 
 def test_submit_return_request_conflict_if_already_pending(client, test_setup):
@@ -385,6 +463,7 @@ def test_reject_return_request_returns_to_completed(client, test_setup):
     with Session(engine) as session:
         so = session.get(SellerOrder, test_setup["seller_order_id"])
         assert so.status == "COMPLETED"
+        assert so.payment_status == "PAID"
         assert so.escrow_status == "RELEASED"
 
         buyer_notif = session.exec(
@@ -444,6 +523,52 @@ def test_unauthorized_seller_cannot_view_or_decide(client, test_setup):
     )
     assert dec_res.status_code == 403
     assert dec_res.json()["error"]["code"] == "ERR_FORBIDDEN"
+
+    buyer_decision = client.post(
+        f"/api/v1/return-requests/{return_req_id}/decision",
+        headers=buyer_headers,
+        json={"action": "APPROVE"},
+    )
+    assert buyer_decision.status_code == 403
+    assert buyer_decision.json()["error"]["code"] == "ERR_FORBIDDEN"
+
+
+@pytest.mark.parametrize("action", ["APPROVE", "REJECT"])
+def test_duplicate_return_decision_has_no_second_side_effect(client, test_setup, action):
+    """A resolved request cannot be decided twice or restore inventory twice."""
+    buyer_headers = _auth(test_setup["buyer_a"])
+    submit_res = client.post(
+        f"/api/v1/orders/{test_setup['order_id']}/returns",
+        headers=buyer_headers,
+        json={"reason": "Duplicate decision test", "evidence": "Photo evidence"},
+    )
+    return_req_id = submit_res.json()["data"]["id"]
+    seller_headers = _auth(test_setup["seller_a"])
+
+    first = client.post(
+        f"/api/v1/return-requests/{return_req_id}/decision",
+        headers=seller_headers,
+        json={"action": action, "decision_notes": "First decision", "is_restockable": True},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        f"/api/v1/return-requests/{return_req_id}/decision",
+        headers=seller_headers,
+        json={"action": "APPROVE", "decision_notes": "Duplicate decision"},
+    )
+    assert second.status_code == 400
+    assert second.json()["error"]["code"] == "ERR_INVALID_TRANSITION"
+
+    with Session(engine) as session:
+        product = session.get(Product, test_setup["product_id"])
+        seller_order = session.get(SellerOrder, test_setup["seller_order_id"])
+        request = session.get(ReturnRequest, return_req_id)
+        assert product.stock_quantity == (12 if action == "APPROVE" else 10)
+        assert seller_order.status == (
+            "RETURNED_REFUNDED" if action == "APPROVE" else "COMPLETED"
+        )
+        assert request.decision_notes == "First decision"
 
 
 def test_order_web_routes_and_xss_protection(client, test_setup):

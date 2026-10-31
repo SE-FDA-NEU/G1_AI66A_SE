@@ -205,6 +205,48 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "ALTER TABLE categories ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
                     )
                 )
+                columns.add("is_active")
+
+            category_fks = inspector.get_foreign_keys("categories")
+            has_parent_fk = any(
+                fk.get("referred_table") == "categories"
+                and fk.get("constrained_columns") == ["parent_id"]
+                for fk in category_fks
+            )
+            if not has_parent_fk and connection.dialect.name == "sqlite":
+                # SQLite cannot add a self-referencing FK with ALTER TABLE. Rebuild the
+                # table, copying rows unchanged; invalid legacy parents fail the upgrade.
+                connection.execute(
+                    text(
+                        "CREATE TABLE categories__migration ("
+                        "id INTEGER NOT NULL PRIMARY KEY, "
+                        "name VARCHAR(100) NOT NULL, "
+                        "slug VARCHAR(100) NOT NULL UNIQUE, "
+                        "parent_id INTEGER, "
+                        "is_active BOOLEAN NOT NULL DEFAULT TRUE, "
+                        "FOREIGN KEY(parent_id) REFERENCES categories__migration(id) "
+                        "DEFERRABLE INITIALLY DEFERRED"
+                        ")"
+                    )
+                )
+                category_columns = "id, name, slug, parent_id, is_active"
+                connection.execute(
+                    text(
+                        "INSERT INTO categories__migration (" + category_columns + ") "
+                        "SELECT " + category_columns + " FROM categories"
+                    )
+                )
+                connection.execute(text("PRAGMA defer_foreign_keys = ON"))
+                connection.execute(text("DROP TABLE categories"))
+                connection.execute(
+                    text("ALTER TABLE categories__migration RENAME TO categories")
+                )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_categories_parent_id "
+                        "ON categories (parent_id)"
+                    )
+                )
 
         if "order_items" in tables:
             columns = {c["name"] for c in inspector.get_columns("order_items")}
@@ -399,9 +441,26 @@ def migrate_db(connection: Connection | None = None) -> None:
                         "review_count INTEGER NOT NULL DEFAULT 0"
                     )
                 )
+                columns.add("review_count")
             fks = inspector.get_foreign_keys("product_metadata")
             fk_tables = {fk.get("referred_table") for fk in fks}
-            if "products" not in fk_tables or "categories" not in fk_tables:
+            metadata_sql = ""
+            if connection.dialect.name == "sqlite":
+                metadata_sql = connection.execute(
+                    text(
+                        "SELECT sql FROM sqlite_master "
+                        "WHERE type = 'table' AND name = 'product_metadata'"
+                    )
+                ).scalar() or ""
+            missing_checks = any(
+                constraint not in metadata_sql
+                for constraint in (
+                    "ck_product_metadata_rating_range",
+                    "ck_product_metadata_review_count_nonnegative",
+                    "ck_product_metadata_sales_count_nonnegative",
+                )
+            )
+            if "products" not in fk_tables or "categories" not in fk_tables or missing_checks:
                 if connection.dialect.name == "sqlite":
                     # SQLite does not support ALTER TABLE ADD CONSTRAINT FOREIGN KEY.
                     # Table rebuild migration procedure:
@@ -419,7 +478,12 @@ def migrate_db(connection: Connection | None = None) -> None:
                             "AND category_id NOT IN (SELECT id FROM categories)"
                         )
                     )
-                    # 2. Create replacement table with new foreign key constraints
+                    # 2. Create replacement table with foreign keys and counter checks
+                    moderation_column = (
+                        ", is_moderated_deactivated BOOLEAN NOT NULL DEFAULT FALSE"
+                        if "is_moderated_deactivated" in columns
+                        else ""
+                    )
                     connection.execute(
                         text(
                             "CREATE TABLE product_metadata__migration ("
@@ -429,20 +493,29 @@ def migrate_db(connection: Connection | None = None) -> None:
                             "review_count INTEGER NOT NULL DEFAULT 0, "
                             "sales_count INTEGER NOT NULL DEFAULT 0, "
                             "created_at DATETIME NOT NULL, "
-                            "FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE, "
-                            "FOREIGN KEY(category_id) REFERENCES categories(id)"
-                            ")"
+                            + moderation_column.lstrip(",")
+                            + (", " if moderation_column else "")
+                            + "CONSTRAINT ck_product_metadata_rating_range "
+                            + "CHECK (rating >= 0 AND rating <= 5), "
+                            + "CONSTRAINT ck_product_metadata_review_count_nonnegative "
+                            + "CHECK (review_count >= 0), "
+                            + "CONSTRAINT ck_product_metadata_sales_count_nonnegative "
+                            + "CHECK (sales_count >= 0), "
+                            + "FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE, "
+                            + "FOREIGN KEY(category_id) REFERENCES categories(id)"
+                            + ")"
                         )
                     )
                     # 3. Copy existing valid data
+                    copy_columns = (
+                        "product_id, category_id, rating, review_count, sales_count, created_at"
+                    )
+                    if "is_moderated_deactivated" in columns:
+                        copy_columns += ", is_moderated_deactivated"
                     connection.execute(
                         text(
-                            "INSERT INTO product_metadata__migration "
-                            "(product_id, category_id, rating, review_count, "
-                            "sales_count, created_at) "
-                            "SELECT product_id, category_id, rating, review_count, "
-                            "sales_count, created_at "
-                            "FROM product_metadata"
+                            "INSERT INTO product_metadata__migration (" + copy_columns + ") "
+                            "SELECT " + copy_columns + " FROM product_metadata"
                         )
                     )
                     # 4. Swap tables and recreate index
@@ -456,6 +529,7 @@ def migrate_db(connection: Connection | None = None) -> None:
                             "ON product_metadata (category_id)"
                         )
                     )
+                    columns.add("is_moderated_deactivated")
 
         # Backfill ProductMetadata for any existing products that lack metadata
         if "products" in tables and "product_metadata" in tables:

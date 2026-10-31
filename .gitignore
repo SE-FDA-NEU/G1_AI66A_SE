@@ -15,7 +15,7 @@ credentials.json
 *.db-journal
 *.db-wal
 *.db-shm
-.pytest_temp/
+.pytest_temp*/
 
 # Python
 __pycache__/
