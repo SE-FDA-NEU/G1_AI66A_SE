@@ -294,6 +294,46 @@ screenshots with deterministic fixture data, set
 `$env:UPDATE_ORDER_SUMMARY_SCREENSHOTS = '1'` before running the browser suite.
 Local verification, CI, human review and clean-clone verification are separate.
 
+## Task #152: admin catalog and voucher screens
+
+Expected behavior comes from #152, parent #113 and the
+[UI contract](us21-admin-ui.md). Tests use production page assets, a real browser,
+authenticated FastAPI requests and isolated SQLite; selected failure/held responses
+are explicit test doubles. They do not represent human user acceptance.
+
+| ID | Action / partition | Expected result | Verification |
+|---|---|---|---|
+| U152-01 | Create/edit/delete category; cancel deletion first | Native form checks, confirmed CRUD with persisted category changes; cancellation sends no DELETE | Real API/database lifecycle |
+| U152-02 | Open editor; Tab/Shift+Tab; Escape | Named modal, initial/trapped focus, inert background and focus restoration | Browser keyboard interactions |
+| U152-03 | Create each voucher type, with/without an optional cap; invalid end date; cancel/confirm creation | No request for invalid/cancelled input; exactly one POST with the full expected JSON payload, integer values/limits, UTC periods and no client-supplied scope/owner; API stores platform scope | Five-case payload decision table and committed voucher rows |
+| U152-04 | Cancel/confirm voucher status change | Cancel sends no PATCH; confirmation updates the named code once | Production toggle/API integration |
+| U152-05 | Read fails, code duplicates, then transient save failure | Retry works; backend error is shown and focused in the form; input remains; controls unlock; corrected retry succeeds | Read/server/network error paths |
+| U152-06 | Hold save; repeat submit; press Escape | One mutation, visible/live progress, locked controls and no pending dismissal | Controlled pending response |
+| U152-07 | Cancel/confirm product moderation; search empty; view at 390px | Correct product state; no cancelled PATCH; empty feedback; no horizontal page overflow | Catalog integration and mobile geometry |
+| U152-08 | Guest/buyer/seller opens portal | Access denied without requests for admin datasets | Role partitions, existing server authorization coverage |
+| U152-09 | Account changes before a prepared write or before an old read finishes | No prepared write; late private rows discarded and portal hidden | Account-context race regressions |
+| U152-10 | Older search response arrives after a newer empty result | Newer filter result remains visible | Out-of-order real API responses |
+| U152-11 | Whitespace name or invalid slug | Invalid field feedback and no mutation | Client validation partitions |
+| U152-12 | Fixed voucher with a carried-over cap; free shipping with a stale disabled value | Fixed voucher POST omits the `max_discount` key entirely; free shipping sends `discount_value: 0`; enabled empty caps send null | Exact JSON assertions before inspecting persisted rows; direct-request backend checks belong to #151 |
+| U152-13 | Existing account modal: keyboard trap, Cancel/Escape, failed save, corrected retry | Cancel sends no PATCH/audit; focus restores, error retains input, successful retry records the status and authenticated audit; background unlocks | Real account API/database regression |
+| U152-14 | Existing dispute modal: required notes, Escape, failed decision, retry; approve with/without restock and reject | No cancelled POST; focus/error recovery preserved; exact decision JSON, actor/notes, order/escrow state and conditional inventory effects persist | Three real dispute workflow cases after integrating #151 |
+
+Use the README Python environment and the browser dependency installed by CI:
+
+~~~powershell
+$env:DEBUG = 'false'
+python -m pip install playwright
+python -m pytest tests/test_admin_portal_browser.py tests/test_admin_portal.py tests/test_ui_docs_contract.py -q
+python -m ruff check src tests/test_admin_portal_browser.py tests/test_admin_portal.py
+node --check src/web/static/admin-portal.js
+git diff --check
+~~~
+
+Chrome/Edge is detected on Windows; set `BROWSER_PATH` if installed elsewhere.
+To regenerate the documented screenshots with fake data, set
+`ADMIN_UI_ARTIFACTS=docs/images/us21` before running the browser suite. Run results
+belong in the PR, without marking unverified CI or human review complete.
+
 ## Task #151: admin authorization and dispute workflow
 
 Expected behavior comes from #151, parent #113, and the
