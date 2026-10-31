@@ -29,10 +29,10 @@ class Order(SQLModel, table=True):
 
     status: str = Field(max_length=30)
 
-    payment_status: str = Field(default="PAID", max_length=30)
-
-    # Nullable for orders created before payment tracking was introduced.
+    # NULL only for orders placed before US20 payment tracking (legacy, #148).
     payment_method: str | None = Field(default=None, max_length=10)
+
+    payment_status: str = Field(default="UNPAID", max_length=30)
 
     escrow_status: str = Field(default="HELD", max_length=30)
 

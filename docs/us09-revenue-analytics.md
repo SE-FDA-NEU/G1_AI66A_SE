@@ -631,3 +631,36 @@ To keep US09 within its current story scope, the following features are not requ
 * advanced product-ranking analytics.
 
 These features may be introduced through separate stories if required later.
+
+## 18. Low-stock alerts and metric tests (#144, story #110)
+
+`GET /api/v1/seller/analytics/low-stock` reports each active stock unit of the
+authenticated seller whose available stock (`stock_quantity - reserved_stock`) is at
+or below `threshold` (default 5). Existing behaviour is kept: the threshold applies to
+available stock, and inactive products are excluded.
+
+- A product without variants is one row, as before.
+- A product with active variants is stocked per variant (#145/#146), so only its
+  variants are reported, each with `variant_id`, `variant_sku` and `variant_name`.
+  The product row is not reported as well, so the same units are never counted twice.
+  Product rows return these three fields as `null`.
+- Rows are ordered by available stock, then product ID and variant ID.
+
+Best sellers keep their ranking by `units_sold` (or `revenue`) and now break ties by
+product ID, so the order is the same on every request.
+
+`tests/test_seller_analytics_metrics.py` uses its own SQLite file for each test, with
+values worked out by hand. It covers stock 0, 5 and 6 for products and variants,
+reserved stock, seller and active-catalog scope, whole first and last days of a range,
+the January/February month boundary, revenue from `COMPLETED` seller orders only,
+counting a multi-item order once, and the stable best-seller rank.
+
+**Not covered yet:** `gross_order_value`, `pending_escrow_revenue` and
+`cancellation_rate` from story #110 do not exist on `main`. The analytics API task
+#142 adds them, using the settlement facts from #148. Their tests are added once those
+fields are merged, with the timestamps documented in `docs/us20-payments.md`
+section 8.
+
+```bash
+python -m pytest tests/test_seller_analytics_metrics.py tests/test_us18_seller_analytics.py -q
+```

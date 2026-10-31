@@ -488,14 +488,13 @@ function renderOrder(order) {
   table.appendChild(tbody);
   elements.itemsList.replaceChildren(table);
 
-  // Payment and Escrow badges
   PaymentDisplay.renderBadges(order, elements.badgePaymentMethod, elements.badgePaymentStatus);
   if (elements.badgeEscrowStatus) {
     elements.badgeEscrowStatus.hidden = false;
     elements.badgeEscrowStatus.textContent = "Escrow: " + (order.escrow_status || "HELD");
     elements.badgeEscrowStatus.className = "badge " + (
       order.escrow_status === "PAUSED" ? "badge-warning" :
-      order.escrow_status === "REFUNDED" ? "badge-purple" : "badge-info"
+      ["REFUNDED", "VOIDED"].includes(order.escrow_status) ? "badge-purple" : "badge-info"
     );
   }
   if (elements.escrowNotice) {

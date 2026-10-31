@@ -23,6 +23,7 @@ from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.schemas.orders import CheckoutRequest
 from src.services.orders import checkout
+from src.services.payments import record_payment_result
 from tests.cart_db import add_product, create_cart_engine
 from tests.test_checkout import BODY, headers
 
@@ -74,7 +75,12 @@ def purchase(engine, *, variant=False, shops=1):
                 CartItem(buyer_id=2, product_id=product_id, variant_id=variant_id, quantity=2)
             )
         session.commit()
-        order, _ = checkout(session, 2, CheckoutRequest(**BODY), "purchase")
+        # A collected prepaid order, so cancelling it has a payment to refund (US20).
+        order, _ = checkout(
+            session, 2, CheckoutRequest(**BODY, payment_method="VIETQR"), "purchase"
+        )
+        record_payment_result(session, order.id, "PAID", "DEMO_OPERATOR", f"paid-{order.id}")
+        session.commit()
         return order.id, [child.id for child in order.sub_orders], ids
 
 
@@ -110,8 +116,9 @@ def assert_cancelled(engine, order_id, children, products):
             assert (child.status, child.payment_status, child.escrow_status) == (
                 "CANCELLED",
                 "REFUNDED",
-                "REFUNDED",
+                "VOIDED",
             )
+            assert child.refunded_amount == child.total_amount
         for product_id in products:
             assert session.get(Product, product_id).stock_quantity == 10
             assert session.get(ProductMetadata, product_id).sales_count == 0
@@ -197,11 +204,8 @@ def test_cancellation_only_marks_collected_payments_refunded(engine, payment):
         child = session.get(SellerOrder, children[0])
         expected = "REFUNDED" if payment == "PAID" else payment
         assert parent.payment_status == child.payment_status == expected
-        assert (
-            parent.escrow_status
-            == child.escrow_status
-            == ("REFUNDED" if payment == "PAID" else "VOIDED")
-        )
+        # D5: a cancelled share is never settled, paid or not.
+        assert parent.escrow_status == child.escrow_status == "VOIDED"
 
 
 @pytest.mark.parametrize("route", ["buyer-post", "seller-patch"])
@@ -293,7 +297,8 @@ def test_partial_seller_cancellation_leaves_other_shop_untouched(engine):
     with Session(engine) as session:
         workflow.seller_status_change(session, 1, "CANCELLED", sub_order_id=children[0])
     with Session(engine) as session:
-        assert session.get(Order, order_id).payment_status == "PARTIALLY_REFUNDED"
+        # US20 2.2: one shop refunded and one still paid summarizes as PAID.
+        assert session.get(Order, order_id).payment_status == "PAID"
         assert session.get(SellerOrder, children[1]).payment_status == "PAID"
         assert session.get(SellerOrder, children[1]).status == "PENDING"
         assert session.get(Product, products[1]).stock_quantity == 8

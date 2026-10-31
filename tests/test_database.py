@@ -271,6 +271,20 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
         assert p2_meta[2] == 0.0
         assert p2_meta[3] == 0
 
+        metadata_sql = connection.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'product_metadata'"
+        ).fetchone()[0]
+        assert "ck_product_metadata_rating_range" in metadata_sql
+        assert "ck_product_metadata_review_count_nonnegative" in metadata_sql
+        assert "ck_product_metadata_sales_count_nonnegative" in metadata_sql
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                'UPDATE product_metadata SET sales_count = -1 WHERE product_id = 1'
+            )
+            connection.commit()
+
         # Foreign key constraint must now be enforced by SQLite
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
@@ -279,4 +293,53 @@ def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: 
                 "VALUES (8888, 1, 0.0, 0, '2026-10-23 00:00:00')"
             )
             connection.commit()
+
+
+def test_legacy_category_parent_fk_migration_preserves_relationships_and_reruns(
+    tmp_path: Path,
+) -> None:
+    """Category self-FKs are added without losing valid hierarchy rows."""
+    db_path = tmp_path / "legacy_categories.db"
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute(
+            """
+            CREATE TABLE categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                parent_id INTEGER,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO categories (id, name, slug, parent_id, is_active) VALUES (?, ?, ?, ?, ?)",
+            [(1, "Electronics", "electronics", None, 1), (2, "Keyboards", "keyboards", 1, 1)],
+        )
+        connection.commit()
+
+    run_python(["-m", "src.database"], db_path)
+    with closing(sqlite3.connect(db_path)) as connection:
+        fk_rows = connection.execute("PRAGMA foreign_key_list(categories)").fetchall()
+        assert any(row[2:5] == ("categories", "parent_id", "id") for row in fk_rows)
+        assert connection.execute(
+            "SELECT id, name, slug, parent_id, is_active FROM categories ORDER BY id"
+        ).fetchall() == [
+            (1, "Electronics", "electronics", None, 1),
+            (2, "Keyboards", "keyboards", 1, 1),
+        ]
+
+        connection.execute("PRAGMA foreign_keys=ON")
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("UPDATE categories SET parent_id = 999 WHERE id = 2")
+            connection.commit()
+        connection.rollback()
+
+    run_python(["-m", "src.database"], db_path)
+    with closing(sqlite3.connect(db_path)) as connection:
+        fk_rows = connection.execute("PRAGMA foreign_key_list(categories)").fetchall()
+        assert any(row[2:5] == ("categories", "parent_id", "id") for row in fk_rows)
+        assert connection.execute(
+            "SELECT id, parent_id FROM categories ORDER BY id"
+        ).fetchall() == [(1, None), (2, 1)]
 

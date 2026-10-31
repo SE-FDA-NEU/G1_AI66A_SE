@@ -178,7 +178,7 @@ form.addEventListener("submit", event => {
     if (Object.keys(errors).length) { showFields(form, "checkout", errors); message("Please correct the highlighted fields."); return; }
   }
   // The exact quote the buyer reviewed; the server rejects it if anything changed since.
-  body = {...body, payment_method: form.elements.payment_method.value, ...voucherBody(), quote_revision:quote.quote_revision};
+  body = {...body, payment_method: form.elements.payment_method?.value || "COD", ...voucherBody(), quote_revision:quote.quote_revision};
   pending = {key:crypto.randomUUID(),body};
   sessionStorage.setItem(storageKey, JSON.stringify(pending)); submit();
 });

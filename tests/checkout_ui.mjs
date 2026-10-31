@@ -109,6 +109,14 @@ test.context.paymentBadges=[{hidden:true,textContent:"",className:""},{hidden:tr
 vm.runInContext("PaymentDisplay.renderBadges({payment_method:'WALLET',payment_status:'UNPAID'}, paymentBadges[0], paymentBadges[1])",test.context);
 assert.match(test.context.paymentBadges[1].textContent,/Awaiting payment/);
 assert.ok(!test.context.paymentBadges[1].textContent.includes("Paid"));
+// Legacy orders do not get badge-success even with legacy PAID status.
+vm.runInContext("PaymentDisplay.renderBadges({payment_method:null,payment_status:'PAID'}, paymentBadges[0], paymentBadges[1])",test.context);
+assert.equal(test.context.paymentBadges[1].className,"badge");
+assert.equal(test.context.paymentBadges[1].textContent,"Payment not recorded");
+// Destructuring PaymentDisplay methods works without this-binding issues.
+vm.runInContext("const {summary, renderBadges} = PaymentDisplay; paymentSummary = summary({payment_method:'VIETQR',payment_status:'UNPAID'})",test.context);
+assert.equal(test.context.paymentSummary.method,"Payment method: VietQR");
+assert.match(test.context.paymentSummary.status,/Awaiting payment \(demo result not recorded\)/);
 // Another buyer's order, or one that does not exist, explains what to do next.
 test=setup([{status:404,payload:{error:{code:"ERR_ORDER_NOT_FOUND",message:"Order not found."}}}],null,`${paymentSource}\n${confirmationSource}`);
 await tick();

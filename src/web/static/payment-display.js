@@ -7,8 +7,8 @@ globalThis.PaymentDisplay = Object.freeze({
     if (!order.payment_method) {
       return {method: "Payment method: Not recorded", status: "Payment not recorded (order placed before payment tracking)."};
     }
-    const method = this.methodNames[order.payment_method] || order.payment_method;
-    const status = this.statusNames[order.payment_status] || "Payment status not recorded";
+    const method = PaymentDisplay.methodNames[order.payment_method] || order.payment_method;
+    const status = PaymentDisplay.statusNames[order.payment_status] || "Payment status not recorded";
     const demoNote = order.payment_status === "UNPAID" && order.payment_method !== "COD"
       ? " (demo result not recorded)" : "";
     return {method: `Payment method: ${method}`, status: `${status}${demoNote}`};
@@ -17,17 +17,19 @@ globalThis.PaymentDisplay = Object.freeze({
     if (methodElement) {
       methodElement.hidden = false;
       methodElement.textContent = order.payment_method
-        ? `Payment: ${this.methodNames[order.payment_method] || order.payment_method}`
+        ? `Payment: ${PaymentDisplay.methodNames[order.payment_method] || order.payment_method}`
         : "Payment method: Not recorded";
       methodElement.className = "badge";
     }
     if (statusElement) {
       statusElement.hidden = false;
       statusElement.textContent = order.payment_method
-        ? `Payment status: ${this.statusNames[order.payment_status] || "Not recorded"}`
+        ? `Payment status: ${PaymentDisplay.statusNames[order.payment_status] || "Not recorded"}`
         : "Payment not recorded";
-      statusElement.className = "badge " + (order.payment_status === "REFUNDED"
-        ? "badge-purple" : order.payment_status === "PAID" ? "badge-success" : "");
+      statusElement.className = "badge" + (
+        order.payment_method && order.payment_status === "REFUNDED" ? " badge-purple" :
+        order.payment_method && order.payment_status === "PAID" ? " badge-success" : ""
+      );
     }
   },
 });

@@ -523,3 +523,26 @@ human review and CI are separate from local UI implementation.
 | Separate financial summary and time series | Four labelled cards; native SVG and exact-value table; honest unavailable/legacy states until #142 | A143-05–08 in the same matrix |
 | Actual API integration and reporting dates | Chrome uses production assets and FastAPI with persisted SQLite orders, without canned responses; strict candidate mode rejects legacy-only verification | A143-12 in the same matrix; post-merge #142 verification remains pending |
 | Best-selling quantity ranking | `/seller/analytics/products` shares the dashboard; `units_sold DESC` and purchase-price sales values from existing API | A143-01, 03, 06–08, 10–11 in the same matrix |
+
+## US19 category and variant APIs (#111, #146)
+
+Runtime: **Implemented.** Task #146 implements the backend category hierarchy and seller
+variant management endpoints specified in [docs/us19-categories-variants-snapshots.md](us19-categories-variants-snapshots.md).
+Product options, hierarchy validation, and optimistic concurrency controls are enforced on the server.
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Category administration & hierarchy rules | `src/api/categories.py`: `POST`, `PATCH`, `DELETE /api/v1/categories`, `GET /admin`; validates slug regex, active parent, cycle/ancestor rejection, blocks deactivation with active children | `tests/test_us19_categories_variants.py:test_admin_categories_enforce_hierarchy_permissions_and_soft_deactivation` |
+| Seller product variant management | `src/api/seller_variants.py`: `GET`, `POST`, `PATCH`, `DELETE /api/v1/seller/products/{id}/variants`; shop-scoped SKU uniqueness, integer VND price, non-negative stock | `tests/test_us19_categories_variants.py:test_variants_are_shop_owned_and_checkout_keeps_purchase_snapshots` |
+| Optimistic concurrency & stock validation | `src/api/seller_variants.py`: `PATCH` requires `expected_version`, rejects stale edits with 409 `ERR_CONCURRENCY_CONFLICT`, prevents stock below reserved | `tests/test_us19_categories_variants.py:test_variant_updates_require_displayed_version_and_keep_physical_stock` |
+| Shop isolation and authorization | `_owned_product()` in `src/api/seller_variants.py` ensures 403 `ERR_RESOURCE_OWNER` on foreign products; admin dependency protects category mutations | `tests/test_us19_categories_variants.py:test_other_shop_cannot_manage_variant` |
+| Soft deactivation | Deactivating category or variant sets `is_active=False` rather than deleting rows, preserving historical integrity | `tests/test_us19_categories_variants.py` |
+
+Exclusions for #146: Product detail option selector and seller variant manager UI (#111 UI slice), cart variant selection and purchase-time snapshots (#111 checkout/order history slice).
+
+## US19 immutable purchase snapshot verification (#111, #147)
+
+Requirement: preserve server-owned purchase facts after catalog changes. Implementation:
+existing checkout snapshot writes, historical readers, and nullable seller image responses.
+See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
+and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).
