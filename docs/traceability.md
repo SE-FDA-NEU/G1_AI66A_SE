@@ -661,3 +661,12 @@ Exclusions: page-specific visual redesign, new frontend dependencies, and
 backend/API behavior. Browser screenshots and human review remain delivery
 evidence, not claims made by this local implementation.
 
+## Order detail date/time and recorded total (#159)
+
+The order detail page displays the persisted creation date/time and grand total,
+distinguishing recorded price components where available. The existing receipt API
+enforces buyer ownership. Browser coverage verifies recorded prices, zero totals,
+legacy fallback, reload/retry behavior, responsive layouts and ownership denial.
+
+Exclusions: payment selection/display, pricing changes, new API fields, migrations,
+third-party map rendering and seller-dashboard changes.

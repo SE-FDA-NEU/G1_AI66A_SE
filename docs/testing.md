@@ -446,3 +446,28 @@ git diff --check
 This slice adds no new browser behavior or dependency. Visual review at the
 existing responsive breakpoints is still separate from these automated checks.
 
+## Issue #159: recorded order date and total
+
+`tests/test_order_summary_browser.py` executes the production order page in
+Chromium/Chrome, routes requests through real FastAPI handlers, and uses fresh
+SQLite files. Third-party map resources are blocked; map rendering is outside this
+fix. Prices and timestamps below are independent expected purchase facts.
+
+| Case | Expected result |
+|---|---|
+| Two shops, vouchers, catalog edited after purchase; 390/768/1280 px; reload | Stored 2026-01-02 15:04 UTC displays as 22:04 GMT+7; grand total is 433,000 VND with no viewport overflow |
+| Real zero-total voucher checkout | Grand total is 0 VND and zero discounts remain 0 |
+| Switch discounted order and legacy-pricing order | Stored totals and breakdowns reload correctly; unavailable legacy explanation is visible |
+| Detail read fails, then Retry succeeds | Summary stays hidden on failure; Retry displays the receipt |
+| Another authenticated buyer opens the order URL | API denies access; no summary or item details are shown |
+
+Run with Python 3.12, README dependencies, Playwright, and installed Chrome:
+
+```powershell
+python -m pytest tests/test_order_summary_browser.py -q
+python -m ruff check tests/test_order_summary_browser.py
+node --check src/web/static/order.js
+git diff --check
+```
+
+Set `UPDATE_ORDER_SUMMARY_SCREENSHOTS=1` to regenerate deterministic screenshots.
