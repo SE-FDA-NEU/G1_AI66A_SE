@@ -600,7 +600,6 @@ existing admin/account behavior from this task's category audit and dispute chan
 | Account status history and prohibited-action checks | Existing account status transaction and `AccountAuditLog`; strict request fields and UTC audit response | A151-02, 06 in the same matrix |
 | Atomic dispute escalation and decision effects | Admin dispute service/repository, shared return settlement/restock helpers and existing order history | A151-07-13 in the same matrix |
 | Preserve legacy facts without invented history | Nullable dispute creation actor migration; audit table registered during initialization | A151-14 in the same matrix |
-
 ## US21 admin route registry and access rules (#113, #153)
 
 Every admin route implemented on `main` after #151, with its access rule and audit
