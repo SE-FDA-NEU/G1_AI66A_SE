@@ -557,6 +557,7 @@ The [UI contract](us21-admin-ui.md) records the scope over the existing portal.
 | Create/manage platform vouchers | Existing API, explicit confirmations, three types, caps/limits and UTC validity controls | U152-03-05 in the same matrix |
 | Accessible feedback and recovery | Live status/error regions, retained input, pending locks, modal keyboard controls and mobile layout | U152-02, 05-07 in the same matrix |
 | Preserve current account/filter context | Current token checks around touched requests; list sequence guards | U152-08-10 in the same matrix |
+| Exact voucher payload and shared-dialog compatibility | Disabled fixed cap omitted; free-shipping value normalized; existing account/dispute dialogs retain keyboard, cancel, error and save behavior | U152-03, 12-14 in the same matrix |
 
 ## US21 admin backend workflow (#113, #151)
 

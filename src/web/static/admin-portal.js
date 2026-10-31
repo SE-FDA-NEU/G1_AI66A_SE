@@ -696,13 +696,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const payload = {
             code: elements.voucherCode.value, discount_type: discountType,
             discount_value: discountType === 'FREE_SHIPPING' ? 0 : Number(elements.voucherVal.value),
-            max_discount: elements.voucherMax.disabled || elements.voucherMax.value === '' ?
-                null : Number(elements.voucherMax.value),
             min_order_value: Number(elements.voucherMin.value || 0),
             usage_limit: elements.voucherUsageLimit.value === '' ? null : Number(elements.voucherUsageLimit.value),
             per_user_limit: elements.voucherUserLimit.value === '' ? null : Number(elements.voucherUserLimit.value),
             starts_at: starts.toISOString(), ends_at: ends.toISOString(), is_active: true,
         };
+        if (!elements.voucherMax.disabled) {
+            payload.max_discount = elements.voucherMax.value === '' ? null : Number(elements.voucherMax.value);
+        }
         const discount = discountType === 'PERCENTAGE' ? `${payload.discount_value / 100}% off` :
             discountType === 'FREE_SHIPPING' ? 'free shipping' : `${payload.discount_value} VND off`;
         if (!confirm(`Create active platform voucher ${payload.code}: ${discount}, from ${payload.starts_at} to ${payload.ends_at} (UTC)?`)) return;
