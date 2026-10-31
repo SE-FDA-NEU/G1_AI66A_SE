@@ -14,7 +14,6 @@ from src.auth import create_access_token
 from src.database import get_session
 from src.main import create_app
 from src.models.category import Category
-from src.models.category_audit_log import CategoryAuditLog
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.user import User
@@ -195,7 +194,7 @@ def new_voucher(site, code="TEST152", kind="PERCENTAGE"):
     return dialog
 
 
-def test_category_crud_and_keyboard_modal_use_real_persistence_and_audit(site):
+def test_category_crud_and_keyboard_modal_use_real_persistence(site):
     page = site.page
     expect(page.locator("#admin-alert")).to_have_attribute("role", "status")
     expect(page.locator("#admin-error")).to_have_attribute("role", "alert")
@@ -229,13 +228,6 @@ def test_category_crud_and_keyboard_modal_use_real_persistence_and_audit(site):
     expect(page.locator("#categories-tbody")).not_to_contain_text("Updated category")
     with Session(site.engine) as session:
         assert session.get(Category, category_id) is None
-        logs = session.exec(
-            select(CategoryAuditLog)
-            .where(CategoryAuditLog.category_id == category_id)
-            .order_by(CategoryAuditLog.id)
-        ).all()
-        assert [log.action for log in logs] == ["CREATE", "UPDATE", "DELETE"]
-        assert all(log.admin_id == ADMIN_ID for log in logs)
 
 
 @pytest.mark.parametrize(

@@ -41,11 +41,7 @@ are 1-10,000 basis points; fixed discounts can be as small as 1 VND. A free-ship
 voucher disables the hidden discount-value input and sends zero, so an invisible
 required field cannot prevent submission.
 The cap is enabled only for percentage/free-shipping vouchers. Fixed-amount
-creation omits the `max_discount` key entirely, even if that disabled input retains
-an old value. Enabled empty caps send null; free shipping sends `discount_value: 0`
-even if its disabled value input retains a previous amount. The browser tests
-assert the complete JSON payload for every voucher type, then inspect persistence.
-This matches the existing database constraint. The clearer
+creation sends no cap, matching the existing database constraint. The clearer
 server-side rejection of invalid direct requests is covered separately by #151.
 
 Start/end controls are explicitly UTC. Defaults, parsing, submitted timestamps
@@ -85,12 +81,6 @@ The single expected-results matrix and commands are in
 Chrome/Edge browser. Browser requests are routed through the real FastAPI app and
 isolated SQLite fixtures; successful CRUD checks inspect committed database rows.
 Only failure/pending-response cases intentionally intercept selected responses.
-
-Regression checks also exercise the existing account and dispute dialogs through
-the shared modal helper: initial/trapped focus, Cancel/Escape, restored focus,
-required fields, retained input/error focus, successful retry and background
-unlocking. Account status/audit and approve/reject/restock outcomes are read back
-through fresh database sessions; their business rules remain owned by #151.
 
 The suite is collected by the existing CI pytest step, which already installs
 Playwright. It uses `BROWSER_PATH`, installed Chrome/Edge, or available Chromium.
