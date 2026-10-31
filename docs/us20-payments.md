@@ -475,13 +475,13 @@ Raise it in #106 if the team wants it.
 | Workflow wiring | `src/services/order_workflow.py`, `src/api/orders.py`, `src/services/returns.py`, `src/api/admin.py` | Cancellation refunds once and voids; `DELIVERED`, or `COMPLETED` from `SHIPPED`, collects COD; every completion path runs the release guard; return submission and admin escalation pause escrow; approval refunds a collected payment and voids; rejection resumes and runs the guard |
 | Receipt | `src/services/orders.py` | `payment_method`, `paid_amount`, `refunded_amount`; per sub-order `refunded_amount`; seller view adds `commission_amount`, `seller_net_amount`, `settled_at`. Legacy orders return `null` payment fields; the order page shows "Payment not recorded" |
 | Operator command | `src/payments.py` | `python -m src.payments record-result --order ID --result PAID\|FAILED\|RETRY --event-key KEY` (D4); no HTTP surface |
+| Section 6.1 matrix (review follow-up) | `tests/test_payment_matrix.py` | One test per cell: 11 reachable rows × payment, failure, cancellation, completion and return events; cells the workflow never delivers are rejected without writes. The payment-vs-completion, payment-vs-approval, payment-vs-rejection and same-result pairs also run concurrently |
 | Event order (review follow-up) | `tests/test_payment_event_order.py` | Every section 6.2 pair in both orders; the same result twice; R5 (nothing after release); R2 (two cancellations on independent SQLite connections commit one `REFUND`); payment and cancellation concurrently. I1–I6 and I8 are checked after every step |
 | Tests | `tests/test_payments.py` | Seller net example and boundaries, each method, COD on delivery and release once, buyer confirmation from `SHIPPED`, complete-before-paid, `FAILED` after `PAID` ignored, duplicate keys, refund once across two routes, late payment after cancellation, return review holds escrow, receipts, legacy rules, summaries, migration rerun, operator command |
 
 Not in #148: the analytics figures `settled_income` and `escrow_pending` (D6, with the
 US18 owner in #142), the seed rows with recorded payments that depend on them, the
-payment selector and labels (#149), the remaining rows of the section 6.1 matrix and
-the other concurrent pairs (#150), and the meta-test that only `payments.py` writes payment fields. Return
+payment selector and labels (#149), further edge cases and analytics reconciliation (#150), and the meta-test that only `payments.py` writes payment fields. Return
 submission still sets `RETURN_REQUESTED` in `returns.py`, then calls
 `pause_settlement`.
 
