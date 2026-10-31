@@ -18,6 +18,13 @@ from src.services.notifications import notify_transition
 from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
 from src.services.orders import CheckoutError
+from src.services.payments import (
+    PaymentError,
+    collect_cod,
+    refund_seller_order,
+    try_release,
+    void_settlement,
+)
 from src.services.returns import sync_parent_order_state
 
 
@@ -78,18 +85,10 @@ def _apply_status(
         ] = now
     if status == "SHIPPED" and tracking_number:
         values["tracking_number"] = tracking_number
-    if status == "CANCELLED":
-        # Current main records payments as statuses, without a payment provider.
-        # Never claim a refund for a payment that was not collected.
-        if child.payment_status == "PAID":
-            values["payment_status"] = "REFUNDED"
-            values["escrow_status"] = "REFUNDED"
-        elif child.payment_status in {"UNPAID", "FAILED"}:
-            values["escrow_status"] = "VOIDED"
-        else:
-            raise WorkflowError(
-                "ERR_INVALID_PAYMENT_STATE", "Payment needs reconciliation before cancellation."
-            )
+    if status == "CANCELLED" and child.payment_status not in {"PAID", "UNPAID", "FAILED"}:
+        raise WorkflowError(
+            "ERR_INVALID_PAYMENT_STATE", "Payment needs reconciliation before cancellation."
+        )
     changed = session.exec(
         update(SellerOrder)
         .where(
@@ -106,6 +105,19 @@ def _apply_status(
             "ERR_CONCURRENCY_CONFLICT", "The seller order changed. Please refresh and retry."
         )
     session.refresh(child)
+
+    # Payment and escrow effects belong to the payment service, in this transaction.
+    refunded = False
+    try:
+        if status == "CANCELLED":
+            refunded = refund_seller_order(session, child, actor_id)
+            void_settlement(session, child)
+        elif status in {"DELIVERED", "COMPLETED"}:
+            collect_cod(session, parent, child, actor_id)
+            if status == "COMPLETED":
+                try_release(session, child)
+    except PaymentError as exc:
+        raise WorkflowError(exc.code, exc.message, exc.status) from exc
 
     note = None
     if status == "CANCELLED":
@@ -128,7 +140,7 @@ def _apply_status(
         note = "Cancelled by buyer. Stock restored." if buyer else "Stock restored."
         if old_status == "CANCELLATION_REQUESTED":
             note = "Cancellation approved by seller. Stock restored."
-        if child.payment_status == "REFUNDED":
+        if refunded:
             note += " Tracked payment marked refunded."
     elif status == "CANCELLATION_REQUESTED":
         note = "Cancellation requested by buyer." if buyer else "Cancellation requested."

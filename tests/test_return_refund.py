@@ -93,6 +93,8 @@ def test_setup():
             buyer_id=buyer_a.id,
             total_amount=300_000,
             status="DELIVERED",
+            # A collected prepaid order; without a method it would be legacy (US20 10).
+            payment_method="VIETQR",
             payment_status="PAID",
             escrow_status="HELD",
             recipient_name="Return Buyer A",
@@ -394,7 +396,7 @@ def test_approve_return_request_with_restock(client, test_setup):
         so = session.get(SellerOrder, test_setup["seller_order_id"])
         assert so.status == "RETURNED_REFUNDED"
         assert so.payment_status == "REFUNDED"
-        assert so.escrow_status == "REFUNDED"
+        assert so.escrow_status == "VOIDED"  # US20 D5: a returned share is never settled
 
         buyer_notif = session.exec(
             select(Notification).where(
@@ -680,7 +682,7 @@ def test_multi_seller_order_partial_return_approval(client, test_setup):
         so_a = session.get(SellerOrder, test_setup["seller_order_id"])
         assert so_a.status == "RETURNED_REFUNDED"
         assert so_a.payment_status == "REFUNDED"
-        assert so_a.escrow_status == "REFUNDED"
+        assert so_a.escrow_status == "VOIDED"
 
         # Seller B order remains unchanged: DELIVERED, PAID, HELD
         so_b = session.get(SellerOrder, so_b_id)
@@ -691,7 +693,8 @@ def test_multi_seller_order_partial_return_approval(client, test_setup):
         # Parent order reflects partial state:
         parent = session.get(Order, test_setup["order_id"])
         assert parent.status == "DELIVERED"  # remaining sub-order is DELIVERED
-        assert parent.payment_status == "PARTIALLY_REFUNDED"  # NOT fully REFUNDED
+        # AC2: PARTIALLY_REFUNDED is not a valid status; the paid share keeps the parent PAID.
+        assert parent.payment_status == "PAID"
         assert parent.escrow_status == "HELD"  # NOT REFUNDED or RELEASED
 
 

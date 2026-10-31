@@ -17,6 +17,7 @@ from src.services.order_history import record_transition
 from src.services.order_states import is_allowed_transition
 from src.services.order_workflow import WorkflowError, buyer_cancellation, seller_status_change
 from src.services.orders import CheckoutError, checkout, receipt
+from src.services.payments import collect_cod, sync_parent_payment, try_release
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -179,9 +180,13 @@ def update_buyer_order_status(
                     ),
                     target_path="/seller/orders",
                 )
+                # COD from SHIPPED is collected at completion; then the release guard runs.
+                session.flush()
+                collect_cod(session, order, sub_order, user.id)
+                try_release(session, sub_order)
         order.status = "COMPLETED"
         order.completed_at = now
-        session.add(order)
+        sync_parent_payment(session, order)
         session.commit()
         return OrderResponse(data=receipt(session, user.id, order.id))
 

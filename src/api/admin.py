@@ -39,6 +39,7 @@ from src.schemas.admin import (
 )
 from src.services.inventory import restore_order_item_stock
 from src.services.order_history import record_transition
+from src.services.payments import pause_settlement
 from src.services.returns import (
     ReturnError,
     check_return_settlement,
@@ -825,9 +826,12 @@ def admin_create_or_escalate_dispute(
     )
     session.add(dispute)
 
-    # Transition sub-order to indicate pending dispute review
+    # Transition sub-order to indicate pending dispute review; escrow is held meanwhile (R4).
     so.status = "RETURN_REQUESTED"
     session.add(so)
+    session.flush()
+    pause_settlement(session, so)
+    sync_parent_order_state(session, order)
     session.commit()
     session.refresh(dispute)
 
@@ -914,7 +918,7 @@ def admin_decide_dispute(
     if so and order:
         old_status = so.status
         try:
-            settle_return(session, so, payload.action, now)
+            settle_return(session, so, payload.action, now, admin.id)
         except ReturnError as exc:
             raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
         if payload.action == "APPROVE":

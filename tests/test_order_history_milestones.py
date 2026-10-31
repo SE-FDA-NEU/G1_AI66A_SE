@@ -44,6 +44,9 @@ def audit_data(tmp_path):
                 id=1,
                 buyer_id=1,
                 status="CONFIRMED",
+                # A collected prepaid order, so cancellation has a payment to refund (US20).
+                payment_method="VIETQR",
+                payment_status="PAID",
                 total_amount=200,
                 recipient_name="Buyer",
                 delivery_address="Test street",
@@ -53,8 +56,14 @@ def audit_data(tmp_path):
         session.flush()
         session.add_all(
             [
-                SellerOrder(id=1, order_id=1, seller_id=2, status="CONFIRMED"),
-                SellerOrder(id=2, order_id=1, seller_id=3, status="CONFIRMED"),
+                SellerOrder(
+                    id=1, order_id=1, seller_id=2, status="CONFIRMED",
+                    payment_status="PAID", total_amount=100,
+                ),
+                SellerOrder(
+                    id=2, order_id=1, seller_id=3, status="CONFIRMED",
+                    payment_status="PAID", total_amount=100,
+                ),
             ]
         )
         session.flush()
