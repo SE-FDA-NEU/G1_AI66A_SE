@@ -342,19 +342,20 @@ document.getElementById("reload-addresses").addEventListener("click", () => runA
 addressForm.addEventListener("submit", event => {
   event.preventDefault();
   if (!addressForm.reportValidity()) return;
+  clearFields(addressForm, "address");
+  const phone_number = normalizePhoneNumber(addressForm.elements.phone_number.value);
+  const phoneError = phoneValidationError(phone_number);
+  if (phoneError) {
+    showFields(addressForm, "address", {phone_number: [phoneError]});
+    addressStatus.textContent = "Please correct the highlighted fields.";
+    return;
+  }
   const focusId = editingAddress ? `address-${editingAddress.id}-edit` : "address-choice";
   const successMessage = editingAddress ? "Address updated." : "Address added.";
   return runAddress(async () => {
-    clearFields(addressForm, "address");
-    const body = Object.fromEntries(addressFields.map(name => [name, name === "phone_number" ? normalizePhoneNumber(addressForm.elements[name].value) : addressForm.elements[name].value.trim()]));
+    const body = Object.fromEntries(addressFields.map(name => [name, name === "phone_number" ? phone_number : addressForm.elements[name].value.trim()]));
     body.is_default = addressForm.elements.is_default.checked;
     if (editingAddress) body.version = editingAddress.version;
-    const phoneError = phoneValidationError(body.phone_number);
-    if (phoneError) {
-      showFields(addressForm, "address", {phone_number: [phoneError]});
-      addressStatus.textContent = "Please correct the highlighted fields.";
-      return;
-    }
     await request(editingAddress ? `/api/v1/addresses/${editingAddress.id}` : "/api/v1/addresses", {method:editingAddress ? "PUT" : "POST", body:JSON.stringify(body)});
     addressForm.hidden = true;
     await loadAddresses(false);

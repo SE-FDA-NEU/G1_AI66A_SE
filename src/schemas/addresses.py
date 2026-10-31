@@ -5,7 +5,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
-from src.schemas.delivery import valid_phone, visible_text
+from src.schemas.delivery import normalize_phone, valid_phone, visible_text
 
 PositiveID = Annotated[int, Field(strict=True, gt=0)]
 
@@ -21,7 +21,10 @@ class AddressCreate(BaseModel):
     detailed_address: str = Field(min_length=1, max_length=500)
     is_default: StrictBool = False
 
-    _phone = field_validator("phone_number")(valid_phone)
+    @field_validator("phone_number")
+    @classmethod
+    def _phone(cls, value: str) -> str:
+        return normalize_phone(valid_phone(value))
     _visible = field_validator(
         "recipient_name", "province", "district", "ward", "detailed_address"
     )(visible_text)

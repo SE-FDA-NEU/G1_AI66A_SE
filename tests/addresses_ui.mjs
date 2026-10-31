@@ -43,6 +43,21 @@ assert.ok(!test.nodes.get("address-status").textContent.includes("Saving"));
 test.nodes.get("cancel-address").handlers.click();
 assert.ok(!test.nodes.get("address-status").textContent.includes("Saving"),
   "Cancelling after a rejected save must not leave an indefinite saving status");
+// Client-side invalid phone on create: no request sent, no success announced, focus kept on phone field.
+test=setup([user,empty],null,undefined,[list([])]);await tick();
+test.nodes.get("add-address").handlers.click();
+for(const name of ["recipient_name","phone_number","province","district","ward","detailed_address"])test.nodes.get("address-form").elements[name].value=a[name];
+test.nodes.get("address-form").elements.phone_number.value="123";
+const callsBeforeCreate=test.calls.length;
+await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
+assert.equal(test.calls.length,callsBeforeCreate,"No request sent on invalid phone create");
+assert.equal(test.nodes.get("address-status").textContent,"Please correct the highlighted fields.");
+assert.ok(!test.nodes.get("address-status").textContent.includes("Address added."));
+assert.equal(test.nodes.get("address-form").elements.phone_number["aria-invalid"],"true");
+assert.equal(test.nodes.get("address-form").elements.phone_number.focused,true,"Focus must remain on the invalid phone field");
+assert.equal(test.nodes.get("address-form").hidden,false);
+test.nodes.get("cancel-address").handlers.click();
+
 // Successful create, edit with version, default and delete/cancel including a bodyless 204.
 test=setup([user,empty],null,undefined,[list([]),{status:201,payload:{data:a}},list([a]),{payload:{data:{...a,version:2}}},list([{...a,version:2}]),{status:204},list([])]);await tick();
 test.nodes.get("add-address").handlers.click();
@@ -57,6 +72,20 @@ card.children[1].handlers.click();
 assert.equal(test.nodes.get("address-form").elements.recipient_name.value,a.recipient_name);
 test.nodes.get("cancel-address").handlers.click();
 assert.equal(card.children[1].focused,true,"Cancel edit returns to that address's Edit button");
+
+// Client-side invalid phone on edit: no request sent, no success announced, focus kept on phone field.
+card.children[1].handlers.click();
+test.nodes.get("address-form").elements.phone_number.value="123";
+const callsBeforeEdit=test.calls.length;
+await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
+assert.equal(test.calls.length,callsBeforeEdit,"No request sent on invalid phone edit");
+assert.equal(test.nodes.get("address-status").textContent,"Please correct the highlighted fields.");
+assert.ok(!test.nodes.get("address-status").textContent.includes("Address updated."));
+assert.equal(test.nodes.get("address-form").elements.phone_number["aria-invalid"],"true");
+assert.equal(test.nodes.get("address-form").elements.phone_number.focused,true,"Focus must remain on the invalid phone field on edit");
+assert.equal(test.nodes.get("address-form").hidden,false);
+test.nodes.get("address-form").elements.phone_number.value=a.phone_number;
+
 card.children[1].handlers.click();
 await test.nodes.get("address-form").handlers.submit({preventDefault(){}});
 const put=test.calls.find(call=>call.options.method==="PUT");

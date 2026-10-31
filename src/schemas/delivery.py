@@ -4,13 +4,17 @@ import re
 import unicodedata
 
 
+def normalize_phone(value: str) -> str:
+    return re.sub(r" {2,}", " ", value.strip())
+
+
 def valid_phone(value: str) -> str:
-    normalized = re.sub(r" {2,}", " ", value.strip())
-    if any(c not in "+0123456789 ()-" for c in normalized):
+    cleaned = value.strip()
+    if any(c not in "+0123456789 ()-" for c in cleaned):
         raise ValueError("Phone contains invalid characters")
-    if not 7 <= sum(c in "0123456789" for c in normalized) <= 15:
+    if not 7 <= sum(c in "0123456789" for c in cleaned) <= 15:
         raise ValueError("Phone must contain 7 to 15 digits")
-    return normalized
+    return value
 
 
 def visible_text(value: str) -> str:

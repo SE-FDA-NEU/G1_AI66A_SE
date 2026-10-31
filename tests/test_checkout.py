@@ -1,10 +1,11 @@
 """US04 transaction tests use independent sessions on real SQLite files."""
 
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 import pytest
-from sqlalchemy import event, text
+from sqlalchemy import delete, event, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
@@ -93,6 +94,64 @@ def test_checkout_normalizes_phone_before_persisting(engine):
     assert result.phone_number == "+84 912 345 678"
     with Session(engine) as session:
         assert session.get(Order, result.id).phone_number == "+84 912 345 678"
+
+
+def test_pre_change_checkout_followed_by_post_change_retry_succeeds(engine):
+    """Replaying a checkout request created on base revision e8285aa succeeds without 409 conflict.
+
+    On base revision e8285aa, valid_phone did not collapse repeated spaces, so the
+    request hash and snapshot preserved the uncollapsed phone number. Retrying the
+    identical payload post-change must succeed without rewriting historical snapshots.
+    """
+    add_product(engine, "P-100")
+    fill(engine)
+
+    raw_phone = "+84  912  345  678"
+    prechange_body = {**BODY, "phone_number": raw_phone}
+    key = "prechange-order-key-1"
+
+    # 1. Simulate an order placed on base revision e8285aa
+    prechange_req = CheckoutRequest(**prechange_body)
+    prechange_hash = hashlib.sha256(
+        prechange_req.model_dump_json(exclude_unset=True).encode()
+    ).hexdigest()
+
+    with Session(engine) as session:
+        hist_order = Order(
+            buyer_id=2,
+            total_amount=100,
+            status="PENDING",
+            request_key=key,
+            request_hash=prechange_hash,
+            recipient_name=prechange_body["recipient_name"],
+            phone_number=raw_phone,
+            delivery_address=prechange_body["delivery_address"],
+        )
+        session.add(hist_order)
+        session.exec(delete(CartItem).where(CartItem.buyer_id == 2))
+        session.commit()
+        hist_id = hist_order.id
+
+    # 2. Replay identical payload and key post-change
+    retry_result, created = place(engine, buyer=2, key=key, body=prechange_body)
+
+    # Must succeed (not created again, returns existing receipt, no 409)
+    assert not created
+    assert retry_result.id == hist_id
+    assert retry_result.recipient_name == prechange_body["recipient_name"]
+
+    # Historical snapshot in database must not be rewritten
+    with Session(engine) as session:
+        saved_order = session.get(Order, hist_id)
+        assert saved_order.phone_number == raw_phone
+        assert saved_order.request_hash == prechange_hash
+
+    # 3. Replay with normalized phone number also succeeds
+    retry_norm_result, created_norm = place(
+        engine, buyer=2, key=key, body={**BODY, "phone_number": "+84 912 345 678"}
+    )
+    assert not created_norm
+    assert retry_norm_result.id == hist_id
 
 
 @pytest.mark.parametrize(
