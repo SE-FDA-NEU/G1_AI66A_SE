@@ -145,6 +145,10 @@ def test_persisted_date_time_and_multishop_price_breakdown(browser, api, engine,
         view.open(order_id)
         page = view.page
         expect(page.locator("#summary-metrics-bar")).to_be_visible()
+        expect(page.locator("#badge-payment-method")).to_have_text("Payment: Cash on delivery")
+        expect(page.locator("#badge-payment-status")).to_have_text(
+            "Payment status: Awaiting payment",
+        )
         expect(page.locator("#order-placed-val")).to_contain_text("22:04")
         expect(page.locator("#order-placed-val")).to_contain_text("2026")
         expect(page.locator("#order-placed-val")).to_contain_text("GMT+7")

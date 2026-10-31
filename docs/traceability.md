@@ -478,14 +478,16 @@ Local calculation completion does not establish story-wide acceptance or CI/revi
 
 ## US20 contract (#112, #148–#150)
 
-Runtime: **Partial.** `payment_status` and `escrow_status` exist since PR #170. Methods,
-recorded results and settlement are not implemented. Contract proposed in
-[docs/us20-payments.md](us20-payments.md); each task PR confirms or amends its part.
+Runtime: **Partial.** `payment_status` and `escrow_status` remain the existing
+state fields. #149 adds `orders.payment_method`, the required checkout selector,
+and method/status display on confirmation and order details. Real payment results,
+state transitions and settlement remain deferred to #148 and #150. Contract and
+scope boundary: [docs/us20-payments.md](us20-payments.md).
 
 | Task | Contract section | Evidence required before closing |
 |---|---|---|
 | #148 payment fields, validation, escrow and settlement | 1–7, 9, 10 | Transition matrix; event deduplication; release guard on every completion path; refund once; migration fresh, from `17638838` and rerun |
-| #149 payment selector and status display | 2.1, 3, 8 | Method stored and shown; demo methods labelled; no success shown before a recorded result; seller-scoped settlement fields |
+| #149 payment selector and status display | 2.1, 3, 8 | `payment_method` migration and checkout contract; confirmation/order display; legacy/null and unpaid-demo states; `tests/test_checkout.py`, `tests/test_database.py`, `tests/checkout_ui.mjs`; settlement remains out of scope |
 | #150 payment and settlement tests | 4, 6, 8, 10, 11 | Section 11 matrix and criteria R1–R6 and L; section 6.2 pairs in both orders and concurrently; invariants I1–I8 after every step; reconciliation identity |
 
 Pending decisions D1–D6 (section 12 of the contract) must be confirmed by their owners before the code that depends on them merges.
@@ -557,3 +559,16 @@ switching/reload, responsive layouts, retry and ownership.
 
 Exclusions: payment selection/display assigned to #149, pricing changes, new API
 fields, migrations, third-party map rendering and seller-dashboard changes.
+
+## US21 admin backend workflow (#113, #151)
+
+The [assigned backend boundary and API contract](us21-admin-workflow.md) distinguish
+existing admin/account behavior from this task's category audit and dispute changes.
+
+| Assigned requirement | Implementation | Verification |
+|---|---|---|
+| Explicit active-admin guard and authenticated actor | Existing `auth.AdminUser`; category/account/dispute controllers derive identity from it | [A151-01-02](testing.md#task-151-admin-authorization-and-dispute-workflow) |
+| Validated category administration with durable audit | Shared hierarchy/audit service, category audit repository/model and admin audit read API; both existing mutation surfaces | A151-03-05 in the same matrix |
+| Account status history and prohibited-action checks | Existing account status transaction and `AccountAuditLog`; strict request fields and UTC audit response | A151-02, 06 in the same matrix |
+| Atomic dispute escalation and decision effects | Admin dispute service/repository, shared return settlement/restock helpers and existing order history | A151-07-13 in the same matrix |
+| Preserve legacy facts without invented history | Nullable dispute creation actor migration; audit table registered during initialization | A151-14 in the same matrix |

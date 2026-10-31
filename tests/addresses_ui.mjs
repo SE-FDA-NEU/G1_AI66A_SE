@@ -108,7 +108,7 @@ assert.equal(vm.runInContext("reviewRequired",test.context),false);
 test=setup([user,cart,quote,new Error("timeout")],null,undefined,[list([a])]);await tick();await tick();
 test.nodes.get("checkout-form").handlers.submit({preventDefault(){}});await tick();
 const post=orderPost(test);
-assert.deepEqual(JSON.parse(post.options.body),{...pending.body,quote_revision:"b".repeat(64)});
+assert.deepEqual(JSON.parse(post.options.body),{...pending.body,payment_method:"VIETQR",quote_revision:"b".repeat(64)});
 assert.equal(test.nodes.get("address-choice").disabled,true);
 const before=test.calls.length;
 test.nodes.get("add-address").handlers.click();
@@ -150,7 +150,7 @@ assert.equal(test.nodes.get("address-status").textContent,"Default address updat
 test=setup([user,cart,quote,new Error("timeout")],null,undefined,[list([a])]);await tick();await tick();
 test.nodes.get("address-choice").value="";test.nodes.get("address-choice").handlers.change();
 test.nodes.get("checkout-form").handlers.submit({preventDefault(){}});await tick();
-assert.deepEqual(Object.keys(JSON.parse(orderPost(test).options.body)).sort(),["delivery_address","phone_number","quote_revision","recipient_name"]);
+assert.deepEqual(Object.keys(JSON.parse(orderPost(test).options.body)).sort(),["delivery_address","payment_method","phone_number","quote_revision","recipient_name"]);
 // A late response from the previous account cannot render addresses.
 let resolve;
 const late=new Promise(done=>{resolve=done;});

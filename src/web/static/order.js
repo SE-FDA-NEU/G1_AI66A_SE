@@ -93,6 +93,7 @@ const elements = {
   orderSwitcherWrap: document.getElementById("order-switcher-wrap"),
   orderSelect: document.getElementById("order-select"),
   // Badges & Escrow
+  badgePaymentMethod: document.getElementById("badge-payment-method"),
   badgePaymentStatus: document.getElementById("badge-payment-status"),
   badgeEscrowStatus: document.getElementById("badge-escrow-status"),
   escrowNotice: document.getElementById("escrow-paused-notice"),
@@ -376,7 +377,9 @@ function startPolling(orderId) {
           !currentOrder ||
           currentOrder.status !== updated.status ||
           JSON.stringify(currentOrder.sub_orders) !== JSON.stringify(updated.sub_orders) ||
-          currentOrder.tracking_number !== updated.tracking_number
+          currentOrder.tracking_number !== updated.tracking_number ||
+          currentOrder.payment_method !== updated.payment_method ||
+          currentOrder.payment_status !== updated.payment_status
         ) {
           renderOrder(updated);
         }
@@ -531,18 +534,7 @@ function renderOrder(order) {
   table.appendChild(tbody);
   elements.itemsList.replaceChildren(table);
 
-  // Payment and Escrow badges
-  if (elements.badgePaymentStatus) {
-    elements.badgePaymentStatus.hidden = false;
-    // Legacy orders have no recorded payment; never present the old PAID default (US20 §10).
-    elements.badgePaymentStatus.textContent = order.payment_status ?
-      "Payment: " + order.payment_status :
-      "Payment not recorded (order placed before payment tracking)";
-    elements.badgePaymentStatus.className = "badge " + (
-      order.payment_status === "REFUNDED" ? "badge-purple" :
-      order.payment_status === "PAID" ? "badge-success" : "badge-info"
-    );
-  }
+  PaymentDisplay.renderBadges(order, elements.badgePaymentMethod, elements.badgePaymentStatus);
   if (elements.badgeEscrowStatus) {
     elements.badgeEscrowStatus.hidden = false;
     elements.badgeEscrowStatus.textContent = "Escrow: " + (order.escrow_status || "HELD");

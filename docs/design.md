@@ -1416,9 +1416,13 @@ The [UI boundary](us17-buyer-returns.md) records the data contract; the
 
 ## US20 payments and escrow settlement contract (#112)
 
-Design only. `payment_status` and `escrow_status` already exist on `orders` and
-`seller_orders` (PR #170), but there is no payment method, recorded result or settlement
-yet. The proposed contract for #148–#150 is in
+The checkout and buyer-facing display slice (#149) is implemented: checkout
+records one of the four documented payment methods, and confirmation/order
+details display the method and recorded status. No provider is invoked and the
+UI does not claim payment success for an unrecorded result. `payment_status`
+and `escrow_status` already exist on `orders` and
+`seller_orders` (PR #170). Payment-method capture/display is implemented;
+Payment-result transitions and settlement remain deferred to #148–#150. The shared contract is in
 [US20 payments and settlement](us20-payments.md). It covers four tracked methods with no
 provider; the five #112 payment statuses (no `PARTIALLY_REFUNDED`); seller net
 `B_s − floor(B_s × rate_bps / 10000)` with no deduction for platform-funded discounts; a
@@ -1428,3 +1432,17 @@ explicit legacy-order rules. The commission rate, COD timing, refund amount, dem
 recording, the escrow name `VOIDED` and the analytics keys are pending decisions D1–D6.
 Their owners confirm them before the dependent code merges. Legacy bodies are recorded
 as COD until the checkout UI (#149) sends a method.
+
+## US21 admin workflow boundary (#151)
+
+New administrative dispute logic follows controller -> service -> repository ->
+models, with one service-owned transaction for state, audit, inventory and
+notifications. Category routes retain their existing interfaces and use a shared
+hierarchy/audit service. Existing account transactions and the explicit
+`AdminUser` guard are reused.
+
+`category_audit_logs` retains before/after category snapshots and the authenticated
+actor even after legacy category deletion. `return_disputes.created_by_user_id`
+records new escalation actors and remains null for unknown legacy actors. See the
+[US21 backend contract](us21-admin-workflow.md) for API/migration behavior and the
+[verification matrix](testing.md#task-151-admin-authorization-and-dispute-workflow).
