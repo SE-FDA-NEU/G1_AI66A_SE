@@ -3,9 +3,8 @@
 Story #112, tasks #148 (payment fields, state validation, escrow and settlement), #149
 (payment selector and status display) and #150 (payment and settlement tests).
 
-**Status: core implemented by #148 (section 13), using the D1–D5 proposals; those rows
-are still pending owner confirmation, which blocks merging per section 12.** Originally
-**contract only.** It is written against `main` at
+**Status: core implemented by #148 (section 13). Decisions D1–D5 were confirmed on
+2026-10-31 ([PR #208 comment](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)); D6 is still pending.** Originally **contract only.** It is written against `main` at
 `17638838a5eb1369a42df694c0d3b59a17c06d49` (after PR #171). Part of the state already
 exists there (section 1). Everything else is a proposal that the owners of #148–#150
 confirm or amend in their own pull requests.
@@ -453,11 +452,11 @@ work is not merged. Everything marked binding in this document is outside this t
 
 | ID | Decision | Proposal | Reason | Confirm in (owner) | Status | Blocked until confirmed |
 |---|---|---|---|---|---|---|
-| D1 | Commission rate | 500 bps, snapshotted per seller order | AC4 needs a rate; the formula itself is binding | #112 (PO `leducminh290506-eng`), #148 | Pending | Merging the settlement part of #148 |
-| D2 | When COD counts as paid | When the seller order reaches `DELIVERED`, or `COMPLETED` straight from `SHIPPED` | Returns start from `DELIVERED`; recording it later would leave a returned COD order with nothing to refund, although the buyer paid on delivery | #106 and #109 (`teddywristh`), #148 | Pending | The COD collection hook in #148 and the COD rows of #150 |
-| D3 | Refund amount | Full seller-order `total_amount`, shipping included | Returns cover a whole seller order on `main`; cancellation happens before shipment | #109 (`teddywristh`), #140, #148 | Pending | The amount in `refund_seller_order` |
-| D4 | How prepaid demo results are recorded | Local operator command with no HTTP surface | #149 must not show success without a documented result; no public way to mark an order paid | #149 (`teddywristh`), #148 | Pending | The operator command and the #149 demo labels |
-| D5 | Escrow value after cancellation or approved return | `VOIDED` instead of `REFUNDED` | An unpaid cancelled order's escrow was never refunded. Removing `PARTIALLY_REFUNDED` is binding (AC2) and not part of this row | #109 (`teddywristh`) | Pending | The escrow value mapping in the migration and the matching change in `returns.py` |
+| D1 | Commission rate | 500 bps, snapshotted per seller order | AC4 needs a rate; the formula itself is binding | #112 (PO `leducminh290506-eng`), #148 | Confirmed ([2026-10-31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)) | Merging the settlement part of #148 |
+| D2 | When COD counts as paid | When the seller order reaches `DELIVERED`, or `COMPLETED` straight from `SHIPPED` | Returns start from `DELIVERED`; recording it later would leave a returned COD order with nothing to refund, although the buyer paid on delivery | #106 and #109 (`teddywristh`), #148 | Confirmed ([2026-10-31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)) | The COD collection hook in #148 and the COD rows of #150 |
+| D3 | Refund amount | Full seller-order `total_amount`, shipping included | Returns cover a whole seller order on `main`; cancellation happens before shipment | #109 (`teddywristh`), #140, #148 | Confirmed ([2026-10-31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)) | The amount in `refund_seller_order` |
+| D4 | How prepaid demo results are recorded | Local operator command with no HTTP surface | #149 must not show success without a documented result; no public way to mark an order paid | #149 (`teddywristh`), #148 | Confirmed ([2026-10-31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)) | The operator command and the #149 demo labels |
+| D5 | Escrow value after cancellation or approved return | `VOIDED` instead of `REFUNDED` | An unpaid cancelled order's escrow was never refunded. Removing `PARTIALLY_REFUNDED` is binding (AC2) and not part of this row | #109 (`teddywristh`) | Confirmed ([2026-10-31](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)) | The escrow value mapping in the migration and the matching change in `returns.py` |
 | D6 | Settled income in analytics | Add `settled_income` and `escrow_pending`; US18 `revenue` stays gross | AC3 and AC4 need settled income kept apart from completed sales | #110 (`leducminh290506-eng`) | Pending | The analytics response keys |
 
 **Not part of this contract:** blocking `SHIPPED` while a prepaid seller order is

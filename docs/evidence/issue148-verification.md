@@ -44,7 +44,8 @@ uvicorn src.main:app --host 127.0.0.1 --port 8148
 
 The server log had no errors. Browser-driven checks (`*browser*`) were not run.
 
-## Still open
+## Decisions
 
-Decisions D1–D5 in `docs/us20-payments.md` section 12 are pending owner confirmation.
-This file does not confirm them.
+Decisions D1–D5 were confirmed on 2026-10-31 ([PR #208 comment](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)) and the
+register in `docs/us20-payments.md` section 12 now says so. D6 (analytics) is still
+pending and outside #148.
