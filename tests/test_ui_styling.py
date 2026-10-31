@@ -1,10 +1,9 @@
-"""Tests for UI styling, link button contrast on hover, and form input sizing (US22, #114)."""
+"""Tests for UI styling, link button contrast on hover, and form input sizing (US22, #114, #155)."""
 
 import re
 from html.parser import HTMLParser
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -12,6 +11,20 @@ BASE_CSS = ROOT / "src" / "web" / "static" / "base.css"
 CHECKOUT_HTML = ROOT / "src" / "web" / "pages" / "checkout.html"
 CART_HTML = ROOT / "src" / "web" / "pages" / "cart.html"
 PRODUCT_DETAIL_HTML = ROOT / "src" / "web" / "pages" / "product-detail.html"
+
+CORE_SCREENS = [
+    "products.html",
+    "product-detail.html",
+    "cart.html",
+    "checkout.html",
+    "order.html",
+    "seller-products.html",
+    "seller-product-new.html",
+    "seller-orders.html",
+    "seller-analytics.html",
+    "seller-vouchers.html",
+    "admin-portal.html",
+]
 
 
 class InputCollector(HTMLParser):
@@ -52,7 +65,7 @@ def test_link_button_labels_preserve_contrasting_text_on_hover() -> None:
     hover_block = hover_match.group(1)
 
     assert "color: #ffffff;" in hover_block, (
-        "button:hover, .button:hover must explicitly set color: #ffffff to preserve contrast on <a> elements"
+        "button:hover, .button:hover must set color: #ffffff to preserve contrast on <a> elements"
     )
     assert "background-color: var(--color-accent-hover);" in hover_block, (
         "button:hover, .button:hover must set background-color: var(--color-accent-hover)"
@@ -103,8 +116,9 @@ def test_untyped_inputs_included_in_desktop_form_styles() -> None:
     css = BASE_CSS.read_text(encoding="utf-8")
 
     # Locate the desktop form controls rule that includes min-height: 42px
-    match = re.search(r"(input:not\(\[type\]\)[\s\S]*?\{[\s\S]*?min-height:\s*42px;[\s\S]*?\})", css)
-    assert match, "Desktop form input rule must include input:not([type]) and min-height: 42px in base.css"
+    pattern = r"(input:not\(\[type\]\)[\s\S]*?\{[\s\S]*?min-height:\s*42px;[\s\S]*?\})"
+    match = re.search(pattern, css)
+    assert match, "Desktop form input rule must include input:not([type]) and min-height: 42px"
     block = match.group(1)
 
     assert 'input[type="text"]' in block
@@ -149,9 +163,8 @@ def test_checkout_form_inputs_have_explicit_text_type() -> None:
         if inp_id in expected_text_input_ids:
             found_ids[inp_id] = inp.get("type")
 
-    assert set(found_ids.keys()) == expected_text_input_ids, (
-        f"Missing expected inputs in checkout.html: {expected_text_input_ids - set(found_ids.keys())}"
-    )
+    missing = expected_text_input_ids - set(found_ids.keys())
+    assert set(found_ids.keys()) == expected_text_input_ids, f"Missing inputs: {missing}"
     for inp_id, inp_type in found_ids.items():
         assert inp_type == "text", f"Input #{inp_id} must have type='text', found: {inp_type}"
 
@@ -181,3 +194,51 @@ def test_link_buttons_in_core_templates_use_button_class() -> None:
 
     detail_html = PRODUCT_DETAIL_HTML.read_text(encoding="utf-8")
     assert '<a class="button button--link" href="/products">Back to catalogue</a>' in detail_html
+
+
+def test_all_core_screens_include_base_design_system_stylesheet() -> None:
+    """All core marketplace screens must include base.css for shared design tokens (US22, #155)."""
+    for screen_name in CORE_SCREENS:
+        path = ROOT / "src" / "web" / "pages" / screen_name
+        assert path.exists(), f"Core screen {screen_name} must exist"
+        html = path.read_text(encoding="utf-8")
+        assert "/static/base.css" in html, f"{screen_name} must link /static/base.css"
+
+
+def test_all_core_screens_have_responsive_viewport_meta() -> None:
+    """All core marketplace screens must declare viewport meta tag for mobile responsiveness."""
+    for screen_name in CORE_SCREENS:
+        path = ROOT / "src" / "web" / "pages" / screen_name
+        html = path.read_text(encoding="utf-8")
+        assert '<meta name="viewport"' in html, f"{screen_name} must have viewport meta tag"
+        assert "width=device-width" in html, f"{screen_name} must set width=device-width"
+
+
+def test_table_screens_have_horizontal_scroll_containers() -> None:
+    """Screens with complex tables must wrap tables in horizontal scroll containers."""
+    table_screens = [
+        "seller-products.html",
+        "seller-vouchers.html",
+        "admin-portal.html",
+        "seller-analytics.html",
+    ]
+    for screen_name in table_screens:
+        path = ROOT / "src" / "web" / "pages" / screen_name
+        html = path.read_text(encoding="utf-8")
+        assert "table-container" in html or "table-scroll" in html, (
+            f"{screen_name} must wrap table in a scrollable container for responsiveness"
+        )
+
+
+def test_seller_analytics_css_has_responsive_breakpoints() -> None:
+    """seller-analytics.css must provide grid collapse breakpoints for tablet and mobile."""
+    css = (ROOT / "src" / "web" / "static" / "seller-analytics.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 950px)" in css
+    assert "@media (max-width: 540px)" in css
+
+
+def test_admin_portal_css_has_responsive_breakpoints() -> None:
+    """admin-portal.css must provide responsive breakpoints for small screens."""
+    css = (ROOT / "src" / "web" / "static" / "admin-portal.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 840px)" in css
+    assert "portal-layout" in css
