@@ -584,3 +584,46 @@ existing admin/account behavior from this task's category audit and dispute chan
 | Account status history and prohibited-action checks | Existing account status transaction and `AccountAuditLog`; strict request fields and UTC audit response | A151-02, 06 in the same matrix |
 | Atomic dispute escalation and decision effects | Admin dispute service/repository, shared return settlement/restock helpers and existing order history | A151-07-13 in the same matrix |
 | Preserve legacy facts without invented history | Nullable dispute creation actor migration; audit table registered during initialization | A151-14 in the same matrix |
+
+## US21 admin route registry and access rules (#113, #153)
+
+Every admin route implemented on `main` after #151, with its access rule and audit
+evidence. `tests/test_admin_security.py` derives the route list from the application's
+routers and fails if a route is added, removed or left without the `AdminUser` guard
+without updating this table. Browser routes are those called by the current
+`src/web/static/admin-portal.js`; screens delivered by #152 are not claimed here.
+
+Access for every row: guest 401 `ERR_AUTH_REQUIRED`; buyer or seller 403
+`ERR_ADMIN_REQUIRED`; restricted or suspended administrator 403
+`ERR_ACCOUNT_RESTRICTED`, read from the database on each request. Implementation PR
+for all rows: [#212](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/212) (#151);
+security tests: `tests/test_admin_security.py`, [#215](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/215) (#153).
+Status: Implemented.
+
+| API route | Browser route | Story / task | Role | Ownership / scope | Audit | Test IDs |
+|---|---|---|---|---|---|---|
+| `GET /api/v1/admin/category-audits` | — | #151 | admin | Platform-wide read | Read-only; no audit row | A153-01..03 |
+| `GET /api/v1/admin/categories` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only | A153-01..03 |
+| `POST /api/v1/admin/categories` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | `category_audit_logs` CREATE, same transaction | A153-01..05 |
+| `PUT /api/v1/admin/categories/{category_id}` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | `category_audit_logs` UPDATE with before/after | A153-01..05 |
+| `DELETE /api/v1/admin/categories/{category_id}` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | `category_audit_logs` DELETE (+ UPDATE per reparented child) | A153-01..05 |
+| `GET /api/v1/admin/users` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only; shows recent account audits | A153-01..03 |
+| `GET /api/v1/admin/users/{user_id}` | — | #151 | admin | Platform-wide | Read-only; shows account audits | A153-01..03 |
+| `PATCH /api/v1/admin/users/{user_id}/status` | `/admin`, `/admin/portal` | #151 | admin | Target user; admin cannot restrict self | `account_audit_logs` actor, old/new status, reason, UTC time | A153-01..06 |
+| `GET /api/v1/admin/vouchers` | `/admin`, `/admin/portal` | #151 | admin | PLATFORM vouchers only | Read-only | A153-01..03 |
+| `POST /api/v1/admin/vouchers` | `/admin`, `/admin/portal` | #151 | admin | Always PLATFORM scope, no seller | **No audit record (gap)** | A153-01..03, 07 |
+| `PATCH /api/v1/admin/vouchers/{voucher_id}` | `/admin`, `/admin/portal` | #151 | admin | PLATFORM vouchers only; SHOP voucher is 404 | **No audit record (gap)** | A153-01..03, 07 |
+| `GET /api/v1/admin/products` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only | A153-01..03 |
+| `PATCH /api/v1/admin/products/{product_id}/status` | `/admin`, `/admin/portal` | #151 | admin | Owner seller cannot be changed | **No audit record (gap)**; moderation flag only | A153-01..03, 07 |
+| `GET /api/v1/admin/disputes` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only; shows creator and decision facts | A153-01..03 |
+| `POST /api/v1/admin/disputes` | — (portal does not call escalation) | #151 | admin | Seller order must belong to the parent order | `created_by_user_id`; order history on a new transition | A153-01..03 |
+| `POST /api/v1/admin/disputes/{dispute_id}/decision` | `/admin`, `/admin/portal` | #151, #140 | admin | Dispute/order/buyer/seller relationships verified | Dispute decider/time, order history, `REFUND` payment event | A153-01..03, 08 |
+| `GET /api/v1/categories/admin` | — (no browser caller) | #151 | admin | Platform-wide | Read-only | A153-01..03 |
+| `POST /api/v1/categories` | — (no browser caller) | #151 | admin | Platform-wide | `category_audit_logs` CREATE | A153-01..03 |
+| `PATCH /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide | `category_audit_logs` UPDATE | A153-01..03 |
+| `DELETE /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide, soft deactivation | `category_audit_logs` DEACTIVATE | A153-01..03 |
+
+Known gaps recorded rather than hidden: platform voucher create/update and product
+moderation write no audit record, so "who changed this voucher/product" cannot be answered
+from the database. Adding that history needs its own task; this one only tests and
+documents current behavior.

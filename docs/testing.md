@@ -373,3 +373,34 @@ git diff --check
 No UI or browser interaction is added by this backend task. Test execution results
 and AI assistance disclosure belong in the PR; they do not establish human review
 or story-wide acceptance.
+
+## Task #153: admin route registry and security tests
+
+Expected behavior comes from #153, parent #113 and the
+[US21 contract](us21-admin-workflow.md). Tests send direct HTTP requests with signed
+tokens on isolated SQLite files; no UI state is treated as access control.
+
+| ID | Partition / action | Expected result | Verification |
+|---|---|---|---|
+| A153-01 | Add, remove or unguard an admin route | Registry test fails until `traceability.md` and the test registry are updated; every admin route depends on `require_admin` | Route discovery from routers plus OpenAPI |
+| A153-02 | Guest, buyer, other buyer, seller, other seller, restricted and suspended admin call each admin route with a valid request | 401/403 with the documented code and an identical database snapshot | Actor x route matrix |
+| A153-03 | Active admin calls each route with a valid request | Documented success status | Same registry |
+| A153-04 | Token issued while ACTIVE, account restricted afterwards | Next request is 403 `ERR_ACCOUNT_RESTRICTED`, no write; token role must match the database role | Restriction and forged-role cases |
+| A153-05 | Unknown ids; malformed or unknown fields; limit below/above 1-100 | 404 `*_NOT_FOUND` or 422 `ERR_VALIDATION`, no write | Partition tables |
+| A153-06 | Actor id supplied in query or body | Audit actor is the authenticated admin; forbidden fields are rejected | Actor spoofing cases |
+| A153-07 | Scope, seller or owner supplied for vouchers/products; seller edits foreign or platform voucher; admin route targets shop voucher | Scope and owner come from the server; foreign access is 404 with no write | Scope and ownership cases |
+| A153-08 | Seller and admin approve the same restockable paid return; outsiders try the seller route | Same stock, payment, escrow and parent result; outsiders get 403 and no write | Parity and cross-account cases |
+| A153-09 | Failed category mutations; two admins act in sequence | No audit row for failures; history names the real actor, newest first | Audit history cases |
+
+Run with the README Python 3.12 environment:
+
+~~~powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_admin_security.py tests/test_admin_workflow.py tests/test_admin_portal.py -q
+python -m ruff check tests/test_admin_security.py
+git diff --check
+~~~
+
+Audit for platform vouchers and product moderation does not exist; it is listed as a gap
+in the traceability table, not tested as if present. CI, review and a clean-clone run
+need separate evidence.
