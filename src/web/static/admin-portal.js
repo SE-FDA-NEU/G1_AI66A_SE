@@ -3,6 +3,11 @@
 document.addEventListener('DOMContentLoaded', async () => {
     let currentUser = null;
     let categoriesList = [];
+    let pageToken = null;
+    let mutating = false;
+    let activeModal = null;
+    let modalOpener = null;
+    const listVersions = new Map();
 
     const elements = {
         unauthorizedBanner: document.getElementById('admin-unauthorized-banner'),
@@ -83,17 +88,197 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function showAlert(message, type = 'success') {
-        elements.alertBox.textContent = message;
-        elements.alertBox.className = `portal-alert portal-alert-${type}`;
-        elements.alertBox.style.display = 'block';
-        setTimeout(() => {
-            elements.alertBox.style.display = 'none';
-        }, 5000);
+        const errorBox = document.getElementById('admin-error');
+        elements.alertBox.textContent = type === 'danger' ? '' : message;
+        errorBox.textContent = type === 'danger' ? message : '';
+        if (type === 'danger' && activeModal) {
+            const feedback = formFeedback(activeModal.querySelector('form'));
+            feedback.textContent = message;
+            if (!mutating) feedback.focus();
+        }
+    }
+
+    function formFeedback(form) {
+        let feedback = form.querySelector('.form-feedback');
+        if (!feedback) {
+            feedback = document.createElement('p');
+            feedback.className = 'form-feedback';
+            feedback.tabIndex = -1;
+            feedback.setAttribute('role', 'alert');
+            form.prepend(feedback);
+        }
+        return feedback;
+    }
+
+    function formProgress(form) {
+        let status = form.querySelector('.form-progress');
+        if (!status) {
+            status = document.createElement('p');
+            status.className = 'form-progress';
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
+            form.prepend(status);
+        }
+        return status;
+    }
+
+    function openModal(modal) {
+        if (mutating) return;
+        modalOpener = document.activeElement;
+        activeModal = modal;
+        const heading = modal.querySelector('h3');
+        heading.id ||= `${modal.id}-heading`;
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', heading.id);
+        modal.querySelectorAll('input,select,textarea').forEach(input => input.setCustomValidity(''));
+        formFeedback(modal.querySelector('form')).textContent = '';
+        formProgress(modal.querySelector('form')).textContent = '';
+        modal.style.display = 'flex';
+        document.querySelector('main').inert = true;
+        document.querySelector('header').inert = true;
+        modal.querySelector('input:not([type="hidden"]),select,textarea,button').focus();
+    }
+
+    function closeModal(force = false, modal = activeModal) {
+        if (!activeModal || activeModal !== modal || (mutating && !force)) return;
+        activeModal.style.display = 'none';
+        activeModal = null;
+        document.querySelector('main').inert = false;
+        document.querySelector('header').inert = false;
+        if (modalOpener?.isConnected && !modalOpener.disabled) modalOpener.focus();
+    }
+
+    document.addEventListener('keydown', event => {
+        if (!activeModal) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeModal();
+        } else if (event.key === 'Tab') {
+            const controls = [...activeModal.querySelectorAll('input,select,textarea,button,a[href]')]
+                .filter(control => !control.disabled && control.getClientRects().length);
+            if (!controls.length) { event.preventDefault(); return; }
+            const first = controls[0], last = controls.at(-1);
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault(); last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault(); first.focus();
+            }
+        }
+    });
+
+    for (const form of [elements.formCategory, elements.formVoucher]) {
+        const clearValidation = () => {
+            form.querySelectorAll('input,select').forEach(input => input.setCustomValidity(''));
+            formFeedback(form).textContent = '';
+        };
+        form.addEventListener('input', clearValidation);
+        form.addEventListener('change', clearValidation);
+    }
+
+    function requireAccountContext() {
+        if (getToken() === pageToken) return;
+        closeModal(true);
+        elements.portalContent.style.display = 'none';
+        elements.unauthorizedBanner.style.display = 'block';
+        for (const body of [elements.catalogTbody, elements.categoriesTbody, elements.vouchersTbody]) body.replaceChildren();
+        const error = new Error('Your account changed. Sign in again and reload the portal.');
+        error.accountChanged = true;
+        throw error;
+    }
+
+    async function adminRequest(url, options = {}) {
+        requireAccountContext();
+        const response = await fetch(url, {...options, headers: {
+            'Content-Type': 'application/json', ...authHeaders(), ...options.headers,
+        }});
+        const data = response.status === 204 ? null : await response.json();
+        requireAccountContext();
+        if (!response.ok) {
+            const detail = data?.error || data?.detail;
+            const error = new Error(detail?.message || 'The request failed. Review your input and try again.');
+            if (response.status === 401 || ['ERR_ADMIN_REQUIRED', 'ERR_ACCOUNT_RESTRICTED'].includes(detail?.code)) {
+                closeModal(true);
+                elements.portalContent.style.display = 'none';
+                elements.unauthorizedBanner.style.display = 'block';
+                error.accountChanged = true;
+            }
+            throw error;
+        }
+        return data;
+    }
+
+    async function runChange(button, form, action, focusAfter) {
+        if (mutating) return;
+        mutating = true;
+        const controls = [...document.querySelectorAll('#admin-portal-content input, #admin-portal-content select, #admin-portal-content button'),
+            ...(activeModal?.querySelectorAll('input,select,textarea,button') || [])];
+        const previous = controls.map(control => [control, control.disabled]);
+        controls.forEach(control => {control.disabled = true;});
+        (form || button).setAttribute('aria-busy', 'true');
+        if (form) {
+            formFeedback(form).textContent = '';
+            formProgress(form).textContent = 'Saving changes...';
+        }
+        showAlert('Saving changes...');
+        let succeeded = false, failed = false;
+        try { await action(); succeeded = true; }
+        catch (error) {
+            if (!error.accountChanged) {
+                const message = `${error.message} Your input is preserved. Review the current data before retrying.`;
+                showAlert(message, 'danger');
+                failed = true;
+            }
+        } finally {
+            previous.forEach(([control, disabled]) => {control.disabled = disabled;});
+            (form || button).setAttribute('aria-busy', 'false');
+            if (form) formProgress(form).textContent = '';
+            mutating = false;
+        }
+        if (failed && form) formFeedback(form).focus();
+        if (succeeded && focusAfter) focusAfter().focus();
+    }
+
+    function listState(kind, body, columns, message, retry) {
+        document.getElementById(`${kind}-feedback`).textContent = message;
+        body.replaceChildren();
+        const row = document.createElement('tr'), cell = document.createElement('td');
+        cell.colSpan = columns;
+        cell.textContent = message;
+        if (retry) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.textContent = 'Retry'; button.className = 'btn btn-secondary';
+            button.addEventListener('click', retry); cell.append(' ', button);
+        }
+        row.append(cell); body.append(row);
+    }
+
+    async function loadRows(kind, url, body, columns, render, retry) {
+        const version = (listVersions.get(kind) || 0) + 1;
+        listVersions.set(kind, version);
+        body.setAttribute('aria-busy', 'true');
+        listState(kind, body, columns, 'Loading...', null);
+        try {
+            const rows = await adminRequest(url);
+            if (listVersions.get(kind) !== version) return;
+            if (!Array.isArray(rows)) throw new Error('Unexpected server response.');
+            render(rows);
+            if (!rows.length) listState(kind, body, columns, 'No matching records.', null);
+            document.getElementById(`${kind}-feedback`).textContent =
+                `${rows.length} record${rows.length === 1 ? '' : 's'} loaded.`;
+        } catch (error) {
+            if (!error.accountChanged && listVersions.get(kind) === version) {
+                listState(kind, body, columns, `Could not load records. ${error.message}`, retry);
+            }
+        } finally {
+            if (listVersions.get(kind) === version) body.setAttribute('aria-busy', 'false');
+        }
     }
 
     // Check Admin Authentication
     async function checkAuth() {
         const token = getToken();
+        pageToken = token;
         if (!token) {
             elements.unauthorizedBanner.style.display = 'block';
             elements.portalContent.style.display = 'none';
@@ -144,10 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Close Modals
     document.querySelectorAll('.btn-cancel-modal').forEach(btn => {
         btn.addEventListener('click', () => {
-            elements.modalCategory.style.display = 'none';
-            elements.modalVoucher.style.display = 'none';
-            elements.modalUser.style.display = 'none';
-            elements.modalDispute.style.display = 'none';
+            closeModal();
         });
     });
 
@@ -161,28 +343,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Catalog Moderation
     // -----------------------------------------------------------------------
     async function loadCatalog() {
+        const params = new URLSearchParams();
         const query = elements.catalogSearch.value.trim();
-        const statusVal = elements.catalogStatusFilter.value;
-        let url = '/api/v1/admin/products?';
-        if (query) url += `q=${encodeURIComponent(query)}&`;
-        if (statusVal === 'active') url += 'is_active=true&';
-        else if (statusVal === 'inactive') url += 'is_active=false&';
-
-        try {
-            const res = await fetch(url, { headers: authHeaders() });
-            if (!res.ok) throw new Error('Failed to load products');
-            const products = await res.json();
-            renderCatalog(products);
-        } catch (err) {
-            elements.catalogTbody.innerHTML = '';
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = 8;
-            td.className = 'text-center text-danger';
-            td.textContent = 'Failed to load catalog products.';
-            tr.appendChild(td);
-            elements.catalogTbody.appendChild(tr);
-        }
+        const status = elements.catalogStatusFilter.value;
+        if (query) params.set('q', query);
+        if (status) params.set('is_active', String(status === 'active'));
+        return loadRows('catalog', `/api/v1/admin/products?${params}`, elements.catalogTbody,
+            8, renderCatalog, loadCatalog);
     }
 
     function renderCatalog(products) {
@@ -238,24 +405,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             const toggleBtn = document.createElement('button');
             toggleBtn.className = p.is_active ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm';
             toggleBtn.textContent = p.is_active ? 'Deactivate' : 'Reactivate';
+            toggleBtn.id = `catalog-toggle-${p.id}`;
+            toggleBtn.setAttribute('aria-label', `${p.is_active ? 'Deactivate' : 'Reactivate'} product ${p.code}`);
             toggleBtn.addEventListener('click', async () => {
-                const actionWord = p.is_active ? 'deactivate' : 'reactivate';
-                if (!confirm(`Are you sure you want to ${actionWord} product ${p.code} (${p.name})?`)) return;
-                try {
-                    const res = await fetch(`/api/v1/admin/products/${p.id}/status`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...authHeaders()
-                        },
-                        body: JSON.stringify({ is_active: !p.is_active })
-                    });
-                    if (!res.ok) throw new Error('Status change failed');
-                    showAlert(`Product ${p.code} has been ${!p.is_active ? 'reactivated' : 'deactivated'}.`);
-                    loadCatalog();
-                } catch (err) {
-                    showAlert(err.message, 'danger');
-                }
+                if (mutating) return;
+                const action = p.is_active ? 'deactivate' : 'reactivate';
+                if (!confirm(`Confirm: ${action} product ${p.code} (${p.name})?`)) return;
+                return runChange(toggleBtn, null, async () => {
+                    await adminRequest(`/api/v1/admin/products/${p.id}/status`,
+                        {method: 'PATCH', body: JSON.stringify({is_active: !p.is_active})});
+                    await loadCatalog();
+                    showAlert(`Product ${p.code} has been ${p.is_active ? 'deactivated' : 'reactivated'}.`);
+                }, () => document.getElementById(`catalog-toggle-${p.id}`) || elements.catalogSearch);
             });
             tdActions.appendChild(toggleBtn);
             tr.appendChild(tdActions);
@@ -271,22 +432,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Categories Management
     // -----------------------------------------------------------------------
     async function loadCategories() {
-        try {
-            const res = await fetch('/api/v1/admin/categories', { headers: authHeaders() });
-            if (!res.ok) throw new Error('Failed to load categories');
-            categoriesList = await res.json();
-            renderCategories(categoriesList);
-            populateCategoryParentSelect(categoriesList);
-        } catch (err) {
-            elements.categoriesTbody.innerHTML = '';
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = 6;
-            td.className = 'text-center text-danger';
-            td.textContent = 'Failed to load categories.';
-            tr.appendChild(td);
-            elements.categoriesTbody.appendChild(tr);
-        }
+        return loadRows('categories', '/api/v1/admin/categories', elements.categoriesTbody, 6,
+            rows => {categoriesList = rows; renderCategories(rows); populateCategoryParentSelect(rows);},
+            loadCategories);
     }
 
     function renderCategories(categories) {
@@ -328,19 +476,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.textContent = 'Delete';
+            editBtn.setAttribute('aria-label', `Edit category ${cat.name}`);
+            delBtn.setAttribute('aria-label', `Delete category ${cat.name}`);
             delBtn.addEventListener('click', async () => {
-                if (!confirm(`Delete category "${cat.name}"? Subcategories will be moved to top level.`)) return;
-                try {
-                    const res = await fetch(`/api/v1/admin/categories/${cat.id}`, {
-                        method: 'DELETE',
-                        headers: authHeaders()
-                    });
-                    if (!res.ok) throw new Error('Failed to delete category');
+                if (mutating) return;
+                const parent = cat.parent_id === null ? 'the top level' : `parent category #${cat.parent_id}`;
+                if (!confirm(`Delete category "${cat.name}"? Direct children will move to ${parent}; products will be unlinked.`)) return;
+                return runChange(delBtn, null, async () => {
+                    await adminRequest(`/api/v1/admin/categories/${cat.id}`, {method: 'DELETE'});
+                    await loadCategories();
                     showAlert(`Category "${cat.name}" deleted.`);
-                    loadCategories();
-                } catch (err) {
-                    showAlert(err.message, 'danger');
-                }
+                }, () => elements.btnNewCategory);
             });
 
             tdActions.appendChild(editBtn);
@@ -369,7 +515,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         elements.categorySlugInput.value = cat.slug;
         populateCategoryParentSelect(categoriesList, cat.id);
         elements.categoryParentSelect.value = cat.parent_id !== null ? cat.parent_id : '';
-        elements.modalCategory.style.display = 'flex';
+        openModal(elements.modalCategory);
     }
 
     elements.btnNewCategory.addEventListener('click', () => {
@@ -379,61 +525,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         elements.categorySlugInput.value = '';
         populateCategoryParentSelect(categoriesList);
         elements.categoryParentSelect.value = '';
-        elements.modalCategory.style.display = 'flex';
+        openModal(elements.modalCategory);
     });
 
-    elements.formCategory.addEventListener('submit', async (e) => {
-        e.preventDefault();
+    elements.formCategory.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (mutating) return;
+        elements.categoryNameInput.value = elements.categoryNameInput.value.trim();
+        elements.categorySlugInput.value = elements.categorySlugInput.value.trim();
+        if (!elements.formCategory.reportValidity()) return;
         const id = elements.categoryIdInput.value;
-        const name = elements.categoryNameInput.value.trim();
-        const slug = elements.categorySlugInput.value.trim();
-        const parentId = elements.categoryParentSelect.value ? parseInt(elements.categoryParentSelect.value, 10) : null;
-
-        const payload = { name, slug, parent_id: parentId };
-        const method = id ? 'PUT' : 'POST';
-        const url = id ? `/api/v1/admin/categories/${id}` : '/api/v1/admin/categories';
-
-        try {
-            const res = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...authHeaders()
-                },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                const msg = data.detail?.message || 'Category save failed';
-                throw new Error(msg);
-            }
-            elements.modalCategory.style.display = 'none';
+        const payload = {name: elements.categoryNameInput.value, slug: elements.categorySlugInput.value,
+            parent_id: elements.categoryParentSelect.value ? Number(elements.categoryParentSelect.value) : null};
+        return runChange(event.submitter, elements.formCategory, async () => {
+            await adminRequest(id ? `/api/v1/admin/categories/${id}` : '/api/v1/admin/categories',
+                {method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)});
+            closeModal(true);
+            await loadCategories();
             showAlert(id ? 'Category updated successfully.' : 'Category created successfully.');
-            loadCategories();
-        } catch (err) {
-            showAlert(err.message, 'danger');
-        }
+        }, () => elements.btnNewCategory);
     });
 
     // -----------------------------------------------------------------------
     // Platform Vouchers
     // -----------------------------------------------------------------------
     async function loadVouchers() {
-        try {
-            const res = await fetch('/api/v1/admin/vouchers', { headers: authHeaders() });
-            if (!res.ok) throw new Error('Failed to load vouchers');
-            const vouchers = await res.json();
-            renderVouchers(vouchers);
-        } catch (err) {
-            elements.vouchersTbody.innerHTML = '';
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = 8;
-            td.className = 'text-center text-danger';
-            td.textContent = 'Failed to load platform vouchers.';
-            tr.appendChild(td);
-            elements.vouchersTbody.appendChild(tr);
-        }
+        return loadRows('vouchers', '/api/v1/admin/vouchers', elements.vouchersTbody,
+            9, renderVouchers, loadVouchers);
+    }
+
+    function voucherDate(value) {
+        const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : value + 'Z';
+        const date = new Date(timestamp);
+        return Number.isFinite(date.getTime()) ? date.toLocaleString('en-GB', {
+            timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short',
+        }) + ' UTC' : 'Date unavailable';
     }
 
     function renderVouchers(vouchers) {
@@ -482,8 +608,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             tr.appendChild(tdUsage);
 
             const tdDates = document.createElement('td');
-            const sDate = new Date(v.starts_at).toLocaleDateString();
-            const eDate = new Date(v.ends_at).toLocaleDateString();
+            const sDate = voucherDate(v.starts_at);
+            const eDate = voucherDate(v.ends_at);
             tdDates.textContent = `${sDate} - ${eDate}`;
             tr.appendChild(tdDates);
 
@@ -498,22 +624,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const toggleBtn = document.createElement('button');
             toggleBtn.className = v.is_active ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
             toggleBtn.textContent = v.is_active ? 'Deactivate' : 'Activate';
+            toggleBtn.id = `voucher-toggle-${v.id}`;
+            toggleBtn.setAttribute('aria-label', `${v.is_active ? 'Deactivate' : 'Activate'} voucher ${v.code}`);
             toggleBtn.addEventListener('click', async () => {
-                try {
-                    const res = await fetch(`/api/v1/admin/vouchers/${v.id}`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...authHeaders()
-                        },
-                        body: JSON.stringify({ is_active: !v.is_active })
-                    });
-                    if (!res.ok) throw new Error('Status change failed');
+                if (mutating) return;
+                if (!confirm(`${v.is_active ? 'Deactivate' : 'Activate'} platform voucher ${v.code}?`)) return;
+                return runChange(toggleBtn, null, async () => {
+                    await adminRequest(`/api/v1/admin/vouchers/${v.id}`,
+                        {method: 'PATCH', body: JSON.stringify({is_active: !v.is_active})});
+                    await loadVouchers();
                     showAlert(`Voucher ${v.code} status updated.`);
-                    loadVouchers();
-                } catch (err) {
-                    showAlert(err.message, 'danger');
-                }
+                }, () => document.getElementById(`voucher-toggle-${v.id}`) || elements.btnNewVoucher);
             });
             tdActions.appendChild(toggleBtn);
             tr.appendChild(tdActions);
@@ -522,8 +643,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    elements.voucherType.addEventListener('change', () => {
+    function updateVoucherType() {
         const val = elements.voucherType.value;
+        elements.voucherVal.disabled = val === 'FREE_SHIPPING';
+        elements.voucherMax.disabled = val === 'FIXED_AMOUNT';
+        elements.voucherMax.closest('.form-group').style.display =
+            val === 'FIXED_AMOUNT' ? 'none' : 'flex';
         if (val === 'PERCENTAGE') {
             elements.labelVoucherVal.textContent = 'Discount Value * (bps: 1000 = 10%)';
             elements.voucherVal.value = '1000';
@@ -533,68 +658,60 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (val === 'FIXED_AMOUNT') {
             elements.labelVoucherVal.textContent = 'Discount Amount (VND) *';
             elements.voucherVal.value = '50000';
-            elements.voucherVal.min = '1000';
+            elements.voucherVal.min = '1';
             elements.voucherVal.removeAttribute('max');
             document.getElementById('group-discount-val').style.display = 'block';
         } else {
             document.getElementById('group-discount-val').style.display = 'none';
         }
-    });
+    }
+    elements.voucherType.addEventListener('change', updateVoucherType);
 
     elements.btnNewVoucher.addEventListener('click', () => {
         elements.formVoucher.reset();
+        updateVoucherType();
         const now = new Date();
         const nextMonth = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
         elements.voucherStarts.value = now.toISOString().slice(0, 16);
         elements.voucherEnds.value = nextMonth.toISOString().slice(0, 16);
-        elements.modalVoucher.style.display = 'flex';
+        openModal(elements.modalVoucher);
     });
 
-    elements.formVoucher.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const code = elements.voucherCode.value.trim().toUpperCase();
-        const discountType = elements.voucherType.value;
-        const discountVal = discountType === 'FREE_SHIPPING' ? 0 : parseInt(elements.voucherVal.value, 10);
-        const maxDiscount = elements.voucherMax.value ? parseInt(elements.voucherMax.value, 10) : null;
-        const minOrder = parseInt(elements.voucherMin.value || '0', 10);
-        const usageLimit = elements.voucherUsageLimit.value ? parseInt(elements.voucherUsageLimit.value, 10) : null;
-        const userLimit = elements.voucherUserLimit.value ? parseInt(elements.voucherUserLimit.value, 10) : null;
-        const startsAt = new Date(elements.voucherStarts.value).toISOString();
-        const endsAt = new Date(elements.voucherEnds.value).toISOString();
-
-        const payload = {
-            code,
-            discount_type: discountType,
-            discount_value: discountVal,
-            max_discount: maxDiscount,
-            min_order_value: minOrder,
-            usage_limit: usageLimit,
-            per_user_limit: userLimit,
-            starts_at: startsAt,
-            ends_at: endsAt,
-            is_active: true
-        };
-
-        try {
-            const res = await fetch('/api/v1/admin/vouchers', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...authHeaders()
-                },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                const msg = data.detail?.message || 'Failed to create platform voucher';
-                throw new Error(msg);
-            }
-            elements.modalVoucher.style.display = 'none';
-            showAlert(`Platform voucher ${code} created successfully.`);
-            loadVouchers();
-        } catch (err) {
-            showAlert(err.message, 'danger');
+    elements.formVoucher.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (mutating) return;
+        elements.voucherCode.value = elements.voucherCode.value.trim().toUpperCase();
+        const numericFields = [elements.voucherVal, elements.voucherMax, elements.voucherMin,
+            elements.voucherUsageLimit, elements.voucherUserLimit];
+        for (const field of numericFields) {
+            field.setCustomValidity(!field.disabled && field.value !== '' &&
+                !Number.isSafeInteger(Number(field.value)) ? 'Enter a whole number.' : '');
         }
+        const starts = new Date(elements.voucherStarts.value + 'Z');
+        const ends = new Date(elements.voucherEnds.value + 'Z');
+        elements.voucherEnds.setCustomValidity(Number.isFinite(starts.getTime()) &&
+            Number.isFinite(ends.getTime()) && ends > starts ? '' : 'End date must be after the start date (UTC).');
+        if (!elements.formVoucher.reportValidity()) return;
+        const discountType = elements.voucherType.value;
+        const payload = {
+            code: elements.voucherCode.value, discount_type: discountType,
+            discount_value: discountType === 'FREE_SHIPPING' ? 0 : Number(elements.voucherVal.value),
+            max_discount: elements.voucherMax.disabled || elements.voucherMax.value === '' ?
+                null : Number(elements.voucherMax.value),
+            min_order_value: Number(elements.voucherMin.value || 0),
+            usage_limit: elements.voucherUsageLimit.value === '' ? null : Number(elements.voucherUsageLimit.value),
+            per_user_limit: elements.voucherUserLimit.value === '' ? null : Number(elements.voucherUserLimit.value),
+            starts_at: starts.toISOString(), ends_at: ends.toISOString(), is_active: true,
+        };
+        const discount = discountType === 'PERCENTAGE' ? `${payload.discount_value / 100}% off` :
+            discountType === 'FREE_SHIPPING' ? 'free shipping' : `${payload.discount_value} VND off`;
+        if (!confirm(`Create active platform voucher ${payload.code}: ${discount}, from ${payload.starts_at} to ${payload.ends_at} (UTC)?`)) return;
+        return runChange(event.submitter, elements.formVoucher, async () => {
+            await adminRequest('/api/v1/admin/vouchers', {method: 'POST', body: JSON.stringify(payload)});
+            closeModal(true);
+            await loadVouchers();
+            showAlert(`Platform voucher ${payload.code} created successfully.`);
+        }, () => elements.btnNewVoucher);
     });
 
     // -----------------------------------------------------------------------
@@ -710,7 +827,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             elements.userAuditsList.innerHTML += '<em>No previous status changes recorded.</em>';
         }
 
-        elements.modalUser.style.display = 'flex';
+        openModal(elements.modalUser);
     }
 
     elements.formUserStatus.addEventListener('submit', async (e) => {
@@ -733,7 +850,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const msg = data.detail?.message || 'Status change failed';
                 throw new Error(msg);
             }
-            elements.modalUser.style.display = 'none';
+            closeModal(true, elements.modalUser);
             showAlert('User account status updated successfully.');
             loadUsers();
         } catch (err) {
@@ -859,7 +976,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         elements.groupDisputeRestock.style.display = 'block';
         elements.disputeRestock.checked = true;
         elements.disputeNotes.value = '';
-        elements.modalDispute.style.display = 'flex';
+        openModal(elements.modalDispute);
     }
 
     elements.disputeAction.addEventListener('change', () => {
@@ -895,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const msg = data.detail?.message || 'Failed to submit adjudication decision';
                 throw new Error(msg);
             }
-            elements.modalDispute.style.display = 'none';
+            closeModal(true, elements.modalDispute);
             showAlert(`Dispute #${disputeId} has been ${action === 'APPROVE' ? 'approved' : 'rejected'}.`);
             loadDisputes();
         } catch (err) {
