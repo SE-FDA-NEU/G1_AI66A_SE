@@ -572,7 +572,7 @@ Access for every row: guest 401 `ERR_AUTH_REQUIRED`; buyer or seller 403
 `ERR_ADMIN_REQUIRED`; restricted or suspended administrator 403
 `ERR_ACCOUNT_RESTRICTED`, read from the database on each request. Implementation PR
 for all rows: [#212](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/212) (#151);
-security tests: tests/test_admin_security.py, PR for #153 (see its description).
+security tests: `tests/test_admin_security.py`, [#215](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/215) (#153).
 Status: Implemented.
 
 | API route | Browser route | Story / task | Role | Ownership / scope | Audit | Test IDs |
