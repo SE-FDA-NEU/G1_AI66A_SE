@@ -488,15 +488,21 @@ function renderOrder(order) {
   // Payment and Escrow badges
   if (elements.badgePaymentStatus) {
     elements.badgePaymentStatus.hidden = false;
-    elements.badgePaymentStatus.textContent = "Payment: " + (order.payment_status || "PAID");
-    elements.badgePaymentStatus.className = "badge " + (order.payment_status === "REFUNDED" ? "badge-purple" : "badge-success");
+    // Legacy orders have no recorded payment; never present the old PAID default (US20 §10).
+    elements.badgePaymentStatus.textContent = order.payment_status ?
+      "Payment: " + order.payment_status :
+      "Payment not recorded (order placed before payment tracking)";
+    elements.badgePaymentStatus.className = "badge " + (
+      order.payment_status === "REFUNDED" ? "badge-purple" :
+      order.payment_status === "PAID" ? "badge-success" : "badge-info"
+    );
   }
   if (elements.badgeEscrowStatus) {
     elements.badgeEscrowStatus.hidden = false;
     elements.badgeEscrowStatus.textContent = "Escrow: " + (order.escrow_status || "HELD");
     elements.badgeEscrowStatus.className = "badge " + (
       order.escrow_status === "PAUSED" ? "badge-warning" :
-      order.escrow_status === "REFUNDED" ? "badge-purple" : "badge-info"
+      ["REFUNDED", "VOIDED"].includes(order.escrow_status) ? "badge-purple" : "badge-info"
     );
   }
   if (elements.escrowNotice) {

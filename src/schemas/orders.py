@@ -1,7 +1,7 @@
 """Checkout contracts; money is integer VND and items come from the buyer cart."""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -39,6 +39,8 @@ class QuotedCheckout(VoucherSelection):
     """Checkout fields from US16 section 5.2; absent fields keep legacy pricing."""
 
     quote_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # US20 section 3: absent means COD until the payment selector (#149) always sends it.
+    payment_method: Literal["COD", "VIETQR", "WALLET", "CARD"] | None = None
 
 
 class CheckoutRequest(QuotedCheckout):
@@ -71,8 +73,14 @@ class SubOrderSummary(BaseModel):
     id: int
     seller_id: int
     status: str
-    payment_status: str = "PAID"
+    # null for orders placed before payment tracking (US20 section 10).
+    payment_status: str | None = None
     escrow_status: str = "HELD"
+    refunded_amount: int | None = None
+    # Seller-scoped receipts only; never shown to the buyer.
+    commission_amount: int | None = None
+    seller_net_amount: int | None = None
+    settled_at: datetime | None = None
     tracking_number: str | None = None
     shipped_at: datetime | None = None
     delivered_at: datetime | None = None
@@ -118,8 +126,11 @@ class OrderData(BaseModel):
     recipient_name: str
     delivery_address: str
     phone_number: str
-    payment_status: str = "PAID"
+    payment_method: str | None = None
+    payment_status: str | None = None
     escrow_status: str = "HELD"
+    paid_amount: int | None = None
+    refunded_amount: int | None = None
     created_at: datetime
     tracking_number: str | None = None
     shipped_at: datetime | None = None
