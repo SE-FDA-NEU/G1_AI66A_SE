@@ -547,6 +547,18 @@ existing checkout snapshot writes, historical readers, and nullable seller image
 See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
 and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).
 
+## US21 admin catalog and voucher UI (#113, #152)
+
+The [UI contract](us21-admin-ui.md) records the scope over the existing portal.
+
+| Assigned requirement | Implementation | Verification |
+|---|---|---|
+| Category management and product moderation | Existing admin routes with confirmed actions, form validation and readable list states in `admin-portal.js` | [U152-01, 07, 11](testing.md#task-152-admin-catalog-and-voucher-screens) |
+| Create/manage platform vouchers | Existing API, explicit confirmations, three types, caps/limits and UTC validity controls | U152-03-05 in the same matrix |
+| Accessible feedback and recovery | Live status/error regions, retained input, pending locks, modal keyboard controls and mobile layout | U152-02, 05-07 in the same matrix |
+| Preserve current account/filter context | Current token checks around touched requests; list sequence guards | U152-08-10 in the same matrix |
+| Exact voucher payload and shared-dialog compatibility | Disabled fixed cap omitted; free-shipping value normalized; existing account/dispute dialogs retain keyboard, cancel, error and save behavior | U152-03, 12-14 in the same matrix |
+
 ## US21 admin backend workflow (#113, #151)
 
 The [assigned backend boundary and API contract](us21-admin-workflow.md) distinguish
