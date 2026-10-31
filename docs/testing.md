@@ -213,3 +213,37 @@ git diff --check
 The suite is discovered by the existing CI pytest step. No new browser dependency
 is needed: this task tests persistence and API contracts and adds no new screen.
 Only report CI/review/clean-clone results after they have actually been verified.
+
+## Issue #159: recorded order date and total
+
+`tests/test_order_summary_browser.py` executes the production order page in
+Chromium/Chrome, routes requests through real FastAPI handlers, and uses fresh
+SQLite files. Third-party map resources are blocked; map rendering is outside this
+fix. Prices and timestamps below are independent expected purchase facts.
+
+| Case | Expected result |
+|---|---|
+| Two shops, vouchers, catalog edited after purchase; 390/768/1280 px; reload | Stored 2026-01-02 15:04 UTC displays as 22:04 GMT+7 in the configured browser; subtotal 500,000 minus shop 30,000 minus platform 47,000 plus shipping 40,000 minus shipping discount 30,000 = grand total 433,000 VND; no viewport overflow |
+| Real zero-total voucher checkout | Grand total is 0 VND, not the 50,000 VND item subtotal; zero discounts remain 0, not negative zero |
+| Switch discounted order -> legacy-pricing order -> first order | Stored totals 433,000 -> 70,000 -> 433,000; old breakdown clears and the unavailable explanation is visible for legacy pricing |
+| Detail read fails, then Retry succeeds | Summary stays hidden on the initial failure; Retry displays the actual receipt |
+| Another authenticated buyer opens the order URL | API denies access; no summary or item details are shown |
+
+Run with Python 3.12, README dependencies, Playwright, and installed Chrome:
+
+```powershell
+python -m pip install playwright
+$env:DEBUG = 'false'
+python -m pytest tests/test_order_summary_browser.py -q
+python -m ruff check tests/test_order_summary_browser.py
+node --check src/web/static/order.js
+node tests/buyer_returns_ui.mjs
+git diff --check
+```
+
+The fixture tries Playwright Chromium, then installed Chrome. Set `BROWSER_PATH`
+to an installed Chrome/Edge executable when automatic detection is unavailable.
+The existing CI pytest step discovers this file. To regenerate the desktop/mobile
+screenshots with deterministic fixture data, set
+`$env:UPDATE_ORDER_SUMMARY_SCREENSHOTS = '1'` before running the browser suite.
+Local verification, CI, human review and clean-clone verification are separate.
