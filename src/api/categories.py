@@ -11,6 +11,13 @@ from src.auth import AdminUser
 from src.database import SessionDep
 from src.errors import error_detail
 from src.models.category import Category
+from src.services.admin_categories import (
+    CategoryError,
+    is_slug_conflict,
+    record_action,
+    snapshot,
+    validate_parent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,31 +111,10 @@ def list_admin_categories(_admin: AdminUser, session: SessionDep) -> list[Catego
 
 
 def _validate_parent(session, parent_id: int | None, category_id: int | None = None) -> None:
-    if parent_id is None:
-        return
-    visited: set[int] = set()
-    current_id = parent_id
-    while current_id is not None:
-        if current_id == category_id:
-            raise HTTPException(
-                status_code=422,
-                detail=error_detail(
-                    "ERR_CATEGORY_HIERARCHY", "A category cannot be its own ancestor."
-                ),
-            )
-        if current_id in visited:
-            raise HTTPException(
-                status_code=409,
-                detail=error_detail("ERR_CATEGORY_HIERARCHY", "The category hierarchy is invalid."),
-            )
-        visited.add(current_id)
-        parent = session.get(Category, current_id)
-        if parent is None or not parent.is_active:
-            raise HTTPException(
-                status_code=422,
-                detail=error_detail("ERR_CATEGORY_PARENT", "Select an active parent category."),
-            )
-        current_id = parent.parent_id
+    try:
+        validate_parent(session, parent_id, category_id)
+    except CategoryError as exc:
+        raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
 
 
 @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
@@ -139,10 +125,14 @@ def create_category(
     category = Category(name=body.name, slug=body.slug, parent_id=body.parent_id)
     try:
         session.add(category)
+        session.flush()
+        record_action(session, _admin, category.id, "CREATE", None, snapshot(category))
         session.commit()
         session.refresh(category)
     except IntegrityError as exc:
         session.rollback()
+        if not is_slug_conflict(exc):
+            raise
         raise HTTPException(
             status_code=409,
             detail=error_detail("ERR_CATEGORY_SLUG", "That category slug is already in use."),
@@ -174,6 +164,7 @@ def update_category(
         raise HTTPException(
             status_code=404, detail=error_detail("ERR_CATEGORY_NOT_FOUND", "Category not found.")
         )
+    before = snapshot(category)
     if "parent_id" in body.model_fields_set:
         _validate_parent(session, body.parent_id, category_id)
         category.parent_id = body.parent_id
@@ -201,10 +192,13 @@ def update_category(
         category.is_active = body.is_active
     try:
         session.add(category)
+        record_action(session, _admin, category.id, "UPDATE", before, snapshot(category))
         session.commit()
         session.refresh(category)
     except IntegrityError as exc:
         session.rollback()
+        if not is_slug_conflict(exc):
+            raise
         raise HTTPException(
             status_code=409,
             detail=error_detail("ERR_CATEGORY_SLUG", "That category slug is already in use."),
@@ -235,8 +229,10 @@ def deactivate_category(
             status_code=409,
             detail=error_detail("ERR_CATEGORY_HAS_CHILDREN", "Deactivate child categories first."),
         )
+    before = snapshot(category)
     category.is_active = False
     session.add(category)
+    record_action(session, _admin, category.id, "DEACTIVATE", before, snapshot(category))
     session.commit()
     return CategoryResponse(
         id=category.id,
