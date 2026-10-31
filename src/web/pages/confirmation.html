@@ -6,6 +6,7 @@
   <title>Order confirmation | Mini Marketplace</title>
   <link rel="stylesheet" href="/static/base.css">
   <link rel="stylesheet" href="/static/checkout.css">
+  <script src="/static/payment-display.js" defer></script>
   <script src="/static/confirmation.js" defer></script>
 </head>
 <body>
@@ -17,6 +18,10 @@
   <main>
     <h1>Order confirmation</h1>
     <p id="status" role="status">Loading confirmation...</p>
+    <section id="payment-summary" aria-label="Payment status">
+      <p id="payment-method"></p>
+      <p id="payment-status"></p>
+    </section>
     <section id="receipt"></section>
     <p id="error" role="alert"></p>
     <button id="retry" type="button" hidden>Retry</button>

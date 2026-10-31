@@ -80,6 +80,29 @@ def test_multi_seller_checkout_and_price_snapshots(engine):
         assert sorted(i.unit_price for i in receipt(session, 2, result.id).items) == [100, 300]
 
 
+def test_checkout_persists_selected_payment_method_and_receipt(engine):
+    add_product(engine, "P-100")
+    fill(engine)
+    result, created = place(engine, body={**BODY, "payment_method": "VIETQR"})
+    assert created
+    with Session(engine) as session:
+        stored = session.get(Order, result.id)
+        assert stored is not None and stored.payment_method == "VIETQR"
+        assert stored.payment_status == "UNPAID"
+        order_receipt = receipt(session, 2, result.id)
+        assert order_receipt.payment_method == "VIETQR"
+        assert order_receipt.payment_status == "UNPAID"
+
+
+def test_checkout_omitted_payment_method_uses_legacy_cod_compatibility(engine):
+    add_product(engine, "P-100")
+    fill(engine)
+    result, created = place(engine)
+    assert created
+    with Session(engine) as session:
+        assert session.get(Order, result.id).payment_method == "COD"
+
+
 @pytest.mark.parametrize(
     "changes", [{"is_active": False}, {"stock_quantity": 0}, {"reserved_stock": 10}]
 )
@@ -233,6 +256,32 @@ def test_api_validation_does_not_write(api, engine, patch):
     response = api.post("/api/v1/orders", json={**BODY, **patch}, headers=headers(engine))
     assert response.status_code == 422
     assert counts(engine) == [0, 0, 0]
+
+
+def test_api_rejects_unknown_payment_method_without_writing(api, engine):
+    response = api.post(
+        "/api/v1/orders",
+        json={**BODY, "payment_method": "BITCOIN"},
+        headers=headers(engine),
+    )
+    assert response.status_code == 422
+    assert "payment_method" in response.json()["error"]["fields"]
+    assert counts(engine) == [0, 0, 0]
+
+
+def test_api_fresh_prepaid_order_returns_unpaid_payment_status(api, engine):
+    add_product(engine, "P-100")
+    fill(engine)
+    response = api.post(
+        "/api/v1/orders",
+        json={**BODY, "payment_method": "VIETQR"},
+        headers=headers(engine),
+    )
+    assert response.status_code == 201
+    payload = response.json()["data"]
+    assert payload["payment_method"] == "VIETQR"
+    assert payload["payment_status"] == "UNPAID"
+    assert payload["escrow_status"] == "HELD"
 
 
 def test_auth_empty_cart_key_and_pages(api, engine):

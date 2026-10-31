@@ -2,9 +2,10 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import case
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select, update
 
 from src.auth import AdminUser
@@ -12,19 +13,16 @@ from src.database import SessionDep
 from src.errors import error_detail
 from src.models.account_audit_log import AccountAuditLog
 from src.models.category import Category
-from src.models.notification import Notification
-from src.models.order import Order
-from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.return_dispute import ReturnDispute
-from src.models.return_request import ReturnRequest
-from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.voucher import Voucher
 from src.schemas.admin import (
     AccountAuditLogResponse,
     CategoryAdminResponse,
+    CategoryAuditLogResponse,
+    CategorySnapshot,
     CreateCategoryRequest,
     CreateVoucherRequest,
     DisputeDecisionRequest,
@@ -37,19 +35,53 @@ from src.schemas.admin import (
     UserAdminResponse,
     VoucherAdminResponse,
 )
-from src.services.inventory import restore_order_item_stock
-from src.services.order_history import record_transition
-from src.services.payments import pause_settlement
-from src.services.returns import (
-    ReturnError,
-    check_return_settlement,
-    settle_return,
-    sync_parent_order_state,
+from src.services.admin_categories import (
+    CategoryError,
+    audit_history,
+    is_slug_conflict,
+    record_action,
+    snapshot,
+    validate_parent,
 )
+from src.services.admin_disputes import (
+    EVIDENCE_MAX_LENGTH,
+    REASON_MAX_LENGTH,
+    adjudicate_dispute,
+    escalate_dispute,
+)
+from src.services.returns import ReturnError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
+
+
+def _validate_admin_parent(session, parent_id, category_id=None):
+    try:
+        validate_parent(session, parent_id, category_id)
+    except CategoryError as exc:
+        code = "ERR_PARENT_NOT_FOUND" if exc.code == "ERR_CATEGORY_PARENT" else "ERR_CATEGORY_CYCLE"
+        raise HTTPException(400, detail=error_detail(code, exc.message)) from exc
+
+
+@router.get("/category-audits", response_model=list[CategoryAuditLogResponse])
+def admin_category_audits(
+    admin: AdminUser, session: SessionDep, limit: int = Query(100, ge=1, le=100)
+) -> list[CategoryAuditLogResponse]:
+    return [
+        CategoryAuditLogResponse(
+            id=row.id,
+            category_id=row.category_id,
+            admin_id=row.admin_id,
+            action=row.action,
+            created_at=row.created_at,
+            before=CategorySnapshot.model_validate_json(row.before_json)
+            if row.before_json
+            else None,
+            after=CategorySnapshot.model_validate_json(row.after_json) if row.after_json else None,
+        )
+        for row in audit_history(session, limit)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -66,9 +98,7 @@ def admin_list_categories(
     results = []
     for cat in categories:
         count = len(
-            session.exec(
-                select(ProductMetadata).where(ProductMetadata.category_id == cat.id)
-            ).all()
+            session.exec(select(ProductMetadata).where(ProductMetadata.category_id == cat.id)).all()
         )
         results.append(
             CategoryAdminResponse(
@@ -77,6 +107,7 @@ def admin_list_categories(
                 slug=cat.slug,
                 parent_id=cat.parent_id,
                 product_count=count,
+                is_active=cat.is_active,
             )
         )
     return results
@@ -89,7 +120,6 @@ def admin_create_category(
     session: SessionDep,
 ) -> CategoryAdminResponse:
     """Create a new product category with policy validation."""
-    del admin
     slug = payload.slug.strip().lower()
     existing = session.exec(select(Category).where(Category.slug == slug)).first()
     if existing:
@@ -98,23 +128,26 @@ def admin_create_category(
             detail=error_detail("ERR_CATEGORY_EXISTS", "A category with this slug already exists."),
         )
 
-    if payload.parent_id is not None:
-        parent = session.get(Category, payload.parent_id)
-        if not parent:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_detail(
-                    "ERR_PARENT_NOT_FOUND", "Specified parent category does not exist."
-                ),
-            )
+    _validate_admin_parent(session, payload.parent_id)
 
     cat = Category(
         name=payload.name.strip(),
         slug=slug,
         parent_id=payload.parent_id,
     )
-    session.add(cat)
-    session.commit()
+    try:
+        session.add(cat)
+        session.flush()
+        record_action(session, admin, cat.id, "CREATE", None, snapshot(cat))
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        if not is_slug_conflict(exc):
+            raise
+        raise HTTPException(
+            409,
+            detail=error_detail("ERR_CATEGORY_EXISTS", "A category with this slug already exists."),
+        ) from exc
     session.refresh(cat)
     return CategoryAdminResponse(
         id=cat.id,  # type: ignore[arg-type]
@@ -122,6 +155,7 @@ def admin_create_category(
         slug=cat.slug,
         parent_id=cat.parent_id,
         product_count=0,
+        is_active=cat.is_active,
     )
 
 
@@ -133,7 +167,6 @@ def admin_update_category(
     session: SessionDep,
 ) -> CategoryAdminResponse:
     """Update a category name, slug, or parent hierarchy, validating cycles."""
-    del admin
     cat = session.get(Category, category_id)
     if not cat:
         raise HTTPException(
@@ -141,33 +174,9 @@ def admin_update_category(
             detail=error_detail("ERR_CATEGORY_NOT_FOUND", "Category not found."),
         )
 
+    before = snapshot(cat)
     if payload.parent_id is not None:
-        if payload.parent_id == category_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_detail("ERR_CATEGORY_CYCLE", "Category cannot be its own parent."),
-            )
-        parent = session.get(Category, payload.parent_id)
-        if not parent:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_detail(
-                    "ERR_PARENT_NOT_FOUND", "Specified parent category does not exist."
-                ),
-            )
-        # Cycle prevention: verify target parent is not a descendant
-        curr = parent
-        while curr.parent_id is not None:
-            if curr.parent_id == category_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=error_detail(
-                        "ERR_CATEGORY_CYCLE", "Cannot move a category under its descendant."
-                    ),
-                )
-            curr = session.get(Category, curr.parent_id)
-            if not curr:
-                break
+        _validate_admin_parent(session, payload.parent_id, category_id)
         cat.parent_id = payload.parent_id
     elif payload.parent_id is None and "parent_id" in payload.model_fields_set:
         cat.parent_id = None
@@ -188,13 +197,21 @@ def admin_update_category(
     if payload.name is not None:
         cat.name = payload.name.strip()
 
-    session.add(cat)
-    session.commit()
+    try:
+        session.add(cat)
+        record_action(session, admin, cat.id, "UPDATE", before, snapshot(cat))
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        if not is_slug_conflict(exc):
+            raise
+        raise HTTPException(
+            409,
+            detail=error_detail("ERR_CATEGORY_EXISTS", "A category with this slug already exists."),
+        ) from exc
     session.refresh(cat)
     count = len(
-        session.exec(
-            select(ProductMetadata).where(ProductMetadata.category_id == cat.id)
-        ).all()
+        session.exec(select(ProductMetadata).where(ProductMetadata.category_id == cat.id)).all()
     )
     return CategoryAdminResponse(
         id=cat.id,  # type: ignore[arg-type]
@@ -202,6 +219,7 @@ def admin_update_category(
         slug=cat.slug,
         parent_id=cat.parent_id,
         product_count=count,
+        is_active=cat.is_active,
     )
 
 
@@ -212,7 +230,6 @@ def admin_delete_category(
     session: SessionDep,
 ) -> None:
     """Delete a category, reparenting child categories."""
-    del admin
     cat = session.get(Category, category_id)
     if not cat:
         raise HTTPException(
@@ -223,8 +240,10 @@ def admin_delete_category(
     # Re-parent direct children to this category's parent
     children = session.exec(select(Category).where(Category.parent_id == category_id)).all()
     for child in children:
+        before = snapshot(child)
         child.parent_id = cat.parent_id
         session.add(child)
+        record_action(session, admin, child.id, "UPDATE", before, snapshot(child))
 
     # Unlink products referencing this category
     metas = session.exec(
@@ -234,6 +253,7 @@ def admin_delete_category(
         meta.category_id = None
         session.add(meta)
 
+    record_action(session, admin, cat.id, "DELETE", snapshot(cat), None)
     session.delete(cat)
     session.commit()
 
@@ -485,6 +505,13 @@ def admin_create_voucher(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_detail(
                     "ERR_INVALID_DISCOUNT", "Fixed amount discount must be greater than 0 ₫."
+                ),
+            )
+        if payload.max_discount is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_detail(
+                    "ERR_INVALID_DISCOUNT", "Fixed amount vouchers cannot have a max discount cap."
                 ),
             )
     elif payload.discount_type == "FREE_SHIPPING":
@@ -748,6 +775,7 @@ def admin_list_disputes(
                 decided_by_user_id=d.decided_by_user_id,
                 decided_by_name=decider.name if decider else None,
                 is_restockable=d.is_restockable,
+                created_by_user_id=d.created_by_user_id,
                 created_at=d.created_at,
                 decided_at=d.decided_at,
             )
@@ -757,100 +785,18 @@ def admin_list_disputes(
 
 @router.post("/disputes", response_model=ReturnDisputeResponse, status_code=201)
 def admin_create_or_escalate_dispute(
-    order_id: int,
-    seller_order_id: int,
-    reason: str,
-    evidence: str,
+    order_id: Annotated[int, Query(gt=0)],
+    seller_order_id: Annotated[int, Query(gt=0)],
+    reason: Annotated[str, Query(min_length=1, max_length=REASON_MAX_LENGTH)],
+    evidence: Annotated[str, Query(min_length=1, max_length=EVIDENCE_MAX_LENGTH)],
     admin: AdminUser,
     session: SessionDep,
 ) -> ReturnDisputeResponse:
-    """Escalate an order into an administrative return dispute."""
-    del admin
-    order = session.get(Order, order_id)
-    so = session.get(SellerOrder, seller_order_id)
-    if not order or not so:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=error_detail("ERR_ORDER_NOT_FOUND", "Order or seller order not found."),
-        )
-
-    # 1. Validate parent-child relationship
-    if so.order_id != order.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_detail(
-                "ERR_SUB_ORDER_MISMATCH", "Seller order does not belong to specified order."
-            ),
-        )
-
-    # 2. Validate permitted escalation state
-    if so.status not in ("RETURN_REQUESTED", "DELIVERED"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_detail(
-                "ERR_INVALID_DISPUTE_STATE",
-                f"Cannot escalate sub-order in status {so.status} to dispute.",
-            ),
-        )
-
-    # 3. Enforce uniqueness: only 1 dispute per seller order
-    existing = session.exec(
-        select(ReturnDispute).where(ReturnDispute.seller_order_id == so.id)
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=error_detail(
-                "ERR_DISPUTE_EXISTS", "A dispute has already been created for this sub-order."
-            ),
-        )
-
-    # 4. Link to underlying return request if present
-    ret_req = session.exec(
-        select(ReturnRequest)
-        .where(ReturnRequest.seller_order_id == so.id)
-        .order_by(ReturnRequest.id.desc())
-    ).first()
-    return_request_id = ret_req.id if ret_req else None
-
-    dispute = ReturnDispute(
-        order_id=order.id,  # type: ignore[arg-type]
-        seller_order_id=so.id,  # type: ignore[arg-type]
-        return_request_id=return_request_id,
-        buyer_id=order.buyer_id,
-        seller_id=so.seller_id,
-        reason=reason.strip(),
-        evidence=evidence.strip(),
-        status="PENDING",
-        created_at=datetime.now(UTC),
-    )
-    session.add(dispute)
-
-    # Transition sub-order to indicate pending dispute review; escrow is held meanwhile (R4).
-    so.status = "RETURN_REQUESTED"
-    session.add(so)
-    session.flush()
-    pause_settlement(session, so)
-    sync_parent_order_state(session, order)
-    session.commit()
-    session.refresh(dispute)
-
-    return ReturnDisputeResponse(
-        id=dispute.id,  # type: ignore[arg-type]
-        order_id=dispute.order_id,
-        seller_order_id=dispute.seller_order_id,
-        return_request_id=dispute.return_request_id,
-        buyer_id=dispute.buyer_id,
-        seller_id=dispute.seller_id,
-        reason=dispute.reason,
-        evidence=dispute.evidence,
-        status=dispute.status,
-        decision_notes=None,
-        decided_by_user_id=None,
-        is_restockable=False,
-        created_at=dispute.created_at,
-        decided_at=None,
-    )
+    """Escalate an order using the shared transactional dispute workflow."""
+    try:
+        return escalate_dispute(session, admin, order_id, seller_order_id, reason, evidence)
+    except ReturnError as exc:
+        raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
 
 
 @router.post("/disputes/{dispute_id}/decision", response_model=ReturnDisputeResponse)
@@ -860,158 +806,8 @@ def admin_decide_dispute(
     admin: AdminUser,
     session: SessionDep,
 ) -> ReturnDisputeResponse:
-    """Adjudicate an escalated return dispute with side effects on order and inventory."""
-    dispute = session.get(ReturnDispute, dispute_id)
-    if not dispute:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=error_detail("ERR_DISPUTE_NOT_FOUND", "Return dispute not found."),
-        )
-
-    now = datetime.now(UTC)
-    target_status = "APPROVED" if payload.action == "APPROVE" else "REJECTED"
-    so = session.get(SellerOrder, dispute.seller_order_id)
-    order = session.get(Order, dispute.order_id)
-    # The same settlement rules as a seller decision, checked before anything is written.
-    if so and order and dispute.status == "PENDING":
-        try:
-            check_return_settlement(so, payload.action)
-        except ReturnError as exc:
-            raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
-
-    # Atomic conditional update on ReturnDispute to prevent duplicate adjudication
-    changed = session.exec(
-        update(ReturnDispute)
-        .where(ReturnDispute.id == dispute_id, ReturnDispute.status == "PENDING")
-        .values(
-            status=target_status,
-            decided_by_user_id=admin.id,
-            decided_at=now,
-            decision_notes=payload.decision_notes.strip(),
-            is_restockable=payload.is_restockable if payload.action == "APPROVE" else False,
-        )
-        .execution_options(synchronize_session=False)
-    )
-    if changed.rowcount != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_detail(
-                "ERR_DISPUTE_RESOLVED", "This dispute has already been adjudicated."
-            ),
-        )
-
-    # Link dispute to underlying ReturnRequest and close it atomically
-    if dispute.return_request_id:
-        session.exec(
-            update(ReturnRequest)
-            .where(ReturnRequest.id == dispute.return_request_id, ReturnRequest.status == "PENDING")
-            .values(
-                status=target_status,
-                decided_by_user_id=admin.id,
-                decided_at=now,
-                decision_notes=payload.decision_notes.strip(),
-                is_restockable=payload.is_restockable if payload.action == "APPROVE" else False,
-            )
-            .execution_options(synchronize_session=False)
-        )
-
-    if so and order:
-        old_status = so.status
-        try:
-            settle_return(session, so, payload.action, now, admin.id)
-        except ReturnError as exc:
-            raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
-        if payload.action == "APPROVE":
-            if payload.is_restockable:
-                items = session.exec(
-                    select(OrderItem).where(OrderItem.seller_order_id == so.id)
-                ).all()
-                for item in items:
-                    restore_order_item_stock(session, item)
-                    session.exec(
-                        update(ProductMetadata)
-                        .where(ProductMetadata.product_id == item.product_id)
-                        .values(
-                            sales_count=case(
-                                (ProductMetadata.sales_count - item.quantity < 0, 0),
-                                else_=ProductMetadata.sales_count - item.quantity,
-                            )
-                        )
-                        .execution_options(synchronize_session=False)
-                    )
-
-            record_transition(
-                session,
-                seller_order_id=so.id,
-                from_status=old_status,
-                to_status="RETURNED_REFUNDED",
-                actor=admin,
-                note=f"Dispute approved by Admin {admin.name}: {payload.decision_notes}",
-            )
-        else:
-            record_transition(
-                session,
-                seller_order_id=so.id,
-                from_status=old_status,
-                to_status="COMPLETED",
-                actor=admin,
-                note=f"Dispute rejected by Admin {admin.name}: {payload.decision_notes}",
-            )
-
-        # Sync parent order state atomically
-        sync_parent_order_state(session, order)
-        session.add(order)
-
-        # Notify buyer and seller
-        action_name = payload.action.lower()
-        session.add(
-            Notification(
-                recipient_user_id=order.buyer_id,
-                order_id=order.id,
-                event_key=f"dispute:{dispute.id}:{action_name}:buyer",
-                message=(
-                    f"Dispute for order #{order.id} was {target_status.lower()} "
-                    "by platform administration."
-                ),
-                target_path=f"/orders/{order.id}",
-                created_at=now,
-            )
-        )
-        session.add(
-            Notification(
-                recipient_user_id=so.seller_id,
-                order_id=order.id,
-                event_key=f"dispute:{dispute.id}:{action_name}:seller",
-                message=(
-                    f"Dispute for sub-order #{so.id} was {target_status.lower()} "
-                    "by platform administration."
-                ),
-                target_path="/seller/orders",
-                created_at=now,
-            )
-        )
-
-    session.commit()
-    session.refresh(dispute)
-
-    buyer = session.get(User, dispute.buyer_id)
-    seller = session.get(User, dispute.seller_id)
-    return ReturnDisputeResponse(
-        id=dispute.id,  # type: ignore[arg-type]
-        order_id=dispute.order_id,
-        seller_order_id=dispute.seller_order_id,
-        return_request_id=dispute.return_request_id,
-        buyer_id=dispute.buyer_id,
-        buyer_name=buyer.name if buyer else None,
-        seller_id=dispute.seller_id,
-        seller_name=seller.name if seller else None,
-        reason=dispute.reason,
-        evidence=dispute.evidence,
-        status=dispute.status,
-        decision_notes=dispute.decision_notes,
-        decided_by_user_id=dispute.decided_by_user_id,
-        decided_by_name=admin.name,
-        is_restockable=dispute.is_restockable,
-        created_at=dispute.created_at,
-        decided_at=dispute.decided_at,
-    )
+    """Adjudicate once; settlement, audit, inventory and notifications commit together."""
+    try:
+        return adjudicate_dispute(session, admin, dispute_id, payload)
+    except ReturnError as exc:
+        raise HTTPException(exc.status, detail=error_detail(exc.code, exc.message)) from exc
