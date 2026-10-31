@@ -338,7 +338,10 @@ input[type="tel"],
 input[type="url"],
 input[type="date"],
 textarea,
-select {
+select,
+.input,
+.select,
+.textarea {
   display: block;
   width: 100%;
   min-height: var(--control-height);
@@ -354,20 +357,27 @@ select {
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
 }
 
-textarea {
+textarea,
+.textarea {
   min-height: 96px;
   resize: vertical;
 }
 
 input:hover,
 textarea:hover,
-select:hover {
+select:hover,
+.input:hover,
+.textarea:hover,
+.select:hover {
   border-color: var(--color-border-hover);
 }
 
 input:focus,
 textarea:focus,
-select:focus {
+select:focus,
+.input:focus,
+.textarea:focus,
+.select:focus {
   outline: none;
   border-color: var(--color-border-focus);
   box-shadow: var(--shadow-ring);
@@ -375,7 +385,10 @@ select:focus {
 
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
+select:focus-visible,
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
   outline: var(--focus-width) solid var(--color-accent);
   outline-offset: 1px;
   box-shadow: var(--shadow-ring);
@@ -383,7 +396,10 @@ select:focus-visible {
 
 input:disabled,
 textarea:disabled,
-select:disabled {
+select:disabled,
+.input:disabled,
+.textarea:disabled,
+.select:disabled {
   background-color: var(--color-disabled-bg);
   color: var(--color-disabled-text);
   border-color: var(--color-border);
@@ -562,12 +578,6 @@ legend {
   margin-top: var(--space-4);
 }
 
-.input,
-.select,
-.textarea {
-  min-height: var(--control-height);
-}
-
 .table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -621,15 +631,20 @@ table.table tbody tr:last-child td {
   line-height: 1.2;
 }
 
+.badge.badge--neutral,
 .badge--neutral {
   color: var(--color-text-secondary);
   background: var(--color-surface-subtle);
   border-color: var(--color-border);
 }
 
+.badge.badge--success,
 .badge--success { color: var(--color-success-text); background: var(--color-success-bg); border-color: var(--color-success-border); }
+.badge.badge--warning,
 .badge--warning { color: var(--color-warning-text); background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.badge.badge--danger,
 .badge--danger { color: var(--color-danger-text); background: var(--color-danger-bg); border-color: var(--color-danger-border); }
+.badge.badge--info,
 .badge--info { color: var(--color-info-text); background: var(--color-info-bg); border-color: var(--color-info-border); }
 
 .alert {
@@ -637,9 +652,13 @@ table.table tbody tr:last-child td {
   border-radius: var(--radius-md);
 }
 
+.alert.alert--success,
 .alert--success { color: var(--color-success-text); background: var(--color-success-bg); border-color: var(--color-success-border); }
+.alert.alert--warning,
 .alert--warning { color: var(--color-warning-text); background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.alert.alert--danger,
 .alert--danger { color: var(--color-danger-text); background: var(--color-danger-bg); border-color: var(--color-danger-border); }
+.alert.alert--info,
 .alert--info { color: var(--color-info-text); background: var(--color-info-bg); border-color: var(--color-info-border); }
 
 /* Pagination */
@@ -707,10 +726,17 @@ table.table tbody tr:last-child td {
   input[type="tel"],
   input[type="url"],
   input[type="date"],
-  textarea,
-  select {
+  select,
+  .input,
+  .select {
     min-height: 44px;
     font-size: 16px; /* Prevents auto-zoom on iOS */
+  }
+
+  textarea,
+  .textarea {
+    min-height: 96px;
+    font-size: 16px;
   }
 }
 

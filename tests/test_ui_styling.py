@@ -11,6 +11,7 @@ BASE_CSS = ROOT / "src" / "web" / "static" / "base.css"
 CHECKOUT_HTML = ROOT / "src" / "web" / "pages" / "checkout.html"
 CART_HTML = ROOT / "src" / "web" / "pages" / "cart.html"
 PRODUCT_DETAIL_HTML = ROOT / "src" / "web" / "pages" / "product-detail.html"
+ORDER_CSS = ROOT / "src" / "web" / "static" / "order.css"
 
 
 class InputCollector(HTMLParser):
@@ -218,3 +219,171 @@ def test_link_buttons_in_core_templates_use_button_class() -> None:
 
     detail_html = PRODUCT_DETAIL_HTML.read_text(encoding="utf-8")
     assert '<a class="button button--link" href="/products">Back to catalogue</a>' in detail_html
+
+
+def test_control_aliases_preserve_native_sizing_and_textarea_min_height() -> None:
+    """Control aliases .input, .select, .textarea must integrate into native control rules.
+
+    - .textarea must preserve min-height: 96px on desktop and mobile instead of collapsing to 42px.
+    - .select and .input must expand to 44px on mobile for touch compliance.
+    - No isolated alias rule may override native controls with a duplicate declaration.
+    """
+    css = BASE_CSS.read_text(encoding="utf-8")
+
+    # 1. Desktop base rule includes .input, .select, .textarea alongside native elements
+    base_rule_match = re.search(
+        r"input:not\(\[type\]\)[\s\S]*?textarea[\s\S]*?select[\s\S]*?\{[\s\S]*?min-height:\s*var\(--control-height\);[\s\S]*?\}",
+        css,
+    )
+    assert base_rule_match, "Base control rule with --control-height must exist"
+    base_selectors = base_rule_match.group(0).split("{")[0]
+    assert ".input" in base_selectors
+    assert ".select" in base_selectors
+    assert ".textarea" in base_selectors
+
+    # 2. textarea and .textarea must share the 96px minimum height
+    ta_match = re.search(r"textarea,\s*\.textarea\s*\{[\s\S]*?min-height:\s*96px;[\s\S]*?\}", css)
+    assert ta_match, "textarea and .textarea must both specify min-height: 96px"
+
+    # 3. No duplicate isolated class rule resetting .textarea to var(--control-height)
+    for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", css):
+        sel_text, body = m.group(1).strip(), m.group(2).strip()
+        if "min-height" in body:
+            selectors = [s.strip() for s in sel_text.split(",")]
+            # An isolated alias rule targets .textarea without native textarea
+            has_ta_alias = any(s == ".textarea" for s in selectors)
+            has_native_ta = any(s == "textarea" for s in selectors)
+            if has_ta_alias and not has_native_ta:
+                raise AssertionError(
+                    f"Found conflicting isolated .textarea rule: {sel_text} {{ {body} }}"
+                )
+
+    # 4. Mobile media query includes .input and .select at 44px, and textarea / .textarea at 96px
+    media_match = re.search(r"@media\s*\(max-width:\s*640px\)\s*\{([\s\S]+?)\}\s*@media", css)
+    assert media_match, "Mobile media query (max-width: 640px) must exist"
+    mobile_css = media_match.group(1)
+
+    mobile_controls_match = re.search(
+        r"input:not\(\[type\]\)[\s\S]*?select[\s\S]*?\{[\s\S]*?min-height:\s*44px;[\s\S]*?\}",
+        mobile_css,
+    )
+    assert mobile_controls_match, "Mobile 44px min-height rule must exist"
+    mobile_sel_block = mobile_controls_match.group(0).split("{")[0]
+    assert ".input" in mobile_sel_block
+    assert ".select" in mobile_sel_block
+
+    mobile_ta_match = re.search(
+        r"textarea,\s*\.textarea\s*\{[\s\S]*?min-height:\s*96px;[\s\S]*?\}",
+        mobile_css,
+    )
+    assert mobile_ta_match, "Mobile textarea and .textarea must preserve min-height: 96px"
+
+
+def test_semantic_badge_variants_resist_order_stylesheet_cascade_override() -> None:
+    """Semantic badge variants must have higher specificity than the page-specific .badge rule.
+
+    When base.css and order.css are both loaded, .badge--success, .badge--warning,
+    .badge--danger, and .badge--info must retain their semantic foreground/background
+    and not be overridden by the order stylesheet's neutral .badge colors.
+    """
+    base_css = BASE_CSS.read_text(encoding="utf-8")
+    order_css = ORDER_CSS.read_text(encoding="utf-8")
+
+    # 1. Base stylesheet must declare compound selectors (.badge.badge--*) with
+    # specificity (0, 2, 0)
+    for variant in ("neutral", "success", "warning", "danger", "info"):
+        compound_selector = f".badge.badge--{variant}"
+        assert compound_selector in base_css, (
+            f"{compound_selector} compound selector required in base.css"
+        )
+
+    # 2. order.css .badge rule must not use !important to override semantic variants
+    order_badge_match = re.search(r"\.badge\s*\{([^}]+)\}", order_css)
+    assert order_badge_match, ".badge rule must exist in order.css"
+    order_badge_block = order_badge_match.group(1)
+    assert "!important" not in order_badge_block
+
+    # 3. Simulate the CSS cascade for an element: <span class="badge badge--success">
+    def selector_matches_badge(sel: str, element_classes: set[str]) -> bool:
+        sel = sel.strip()
+        if "#" in sel:
+            return False
+        tag_match = re.match(r"^([a-z0-9_-]+)", sel)
+        if tag_match and tag_match.group(1) != "span":
+            return False
+        base_part = re.sub(r":not\([^)]*\)", "", sel)
+        required_classes = set(re.findall(r"\.([\w-]+)", base_part))
+        if not required_classes or not required_classes.issubset(element_classes):
+            return False
+        for neg_cls in re.findall(r":not\(\.([\w-]+)\)", sel):
+            if neg_cls in element_classes:
+                return False
+        for neg_attr in re.findall(r':not\(\[class\*="([\w-]+)"\]\)', sel):
+            if any(neg_attr in c for c in element_classes):
+                return False
+        return True
+
+    def calculate_winning_declarations(
+        classes: set[str], properties: list[str]
+    ) -> dict[str, tuple[tuple[int, int, int], int, str]]:
+        winning: dict[str, tuple[tuple[int, int, int], int, str]] = {}
+        rule_index = 0
+
+        combined_css = [("base.css", base_css), ("order.css", order_css)]
+        for _, sheet_text in combined_css:
+            clean = re.sub(r"/\*[\s\S]*?\*/", "", sheet_text)
+            clean = re.sub(r"@keyframes[\s\S]*?\}\s*\}", "", clean)
+            clean = re.sub(r"@media[\s\S]*?\}\s*\}", "", clean)
+            for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", clean):
+                raw_selectors = m.group(1).strip()
+                body = m.group(2).strip()
+                if raw_selectors.startswith("@"):
+                    continue
+                rule_index += 1
+                for sel in (s.strip() for s in raw_selectors.split(",")):
+                    if not selector_matches_badge(sel, classes):
+                        continue
+
+                    class_count = len(re.findall(r"\.[\w-]+", sel)) + len(
+                        re.findall(r"\[[^\]]+\]", sel)
+                    )
+                    element_count = 1 if re.match(r"^span\b", sel) else 0
+                    specificity = (0, class_count, element_count)
+
+                    for decl in body.split(";"):
+                        if ":" in decl:
+                            prop, val = decl.split(":", 1)
+                            prop = prop.strip()
+                            val = val.strip()
+                            if prop in properties:
+                                current = winning.get(prop)
+                                if current is None or specificity > current[0] or (
+                                    specificity == current[0] and rule_index >= current[1]
+                                ):
+                                    winning[prop] = (specificity, rule_index, val)
+        return winning
+
+    success_decls = calculate_winning_declarations(
+        {"badge", "badge--success"}, ["color", "background", "background-color"]
+    )
+    assert success_decls["color"][2] == "var(--color-success-text)", (
+        f"badge--success color overridden: {success_decls['color']}"
+    )
+    success_bg = (success_decls.get("background") or success_decls.get("background-color"))[2]
+    assert success_bg == "var(--color-success-bg)", (
+        f"badge--success background overridden: {success_bg}"
+    )
+
+    danger_decls = calculate_winning_declarations(
+        {"badge", "badge--danger"}, ["color", "background", "background-color"]
+    )
+    assert danger_decls["color"][2] == "var(--color-danger-text)"
+    danger_bg = (danger_decls.get("background") or danger_decls.get("background-color"))[2]
+    assert danger_bg == "var(--color-danger-bg)"
+
+
+    neutral_decls = calculate_winning_declarations(
+        {"badge"}, ["color", "background-color"]
+    )
+    assert neutral_decls["color"][2] == "#475569"
+    assert neutral_decls["background-color"][2] == "#f1f5f9"
