@@ -28,6 +28,14 @@ class SellerOrder(SQLModel, table=True):
             name="ck_seller_orders_shipping_discount_non_negative",
         ),
         CheckConstraint("total_amount >= 0", name="ck_seller_orders_total_amount_non_negative"),
+        CheckConstraint(
+            "refunded_amount >= 0 AND refunded_amount <= total_amount",
+            name="ck_seller_orders_refunded_amount_range",
+        ),
+        CheckConstraint(
+            "commission_amount >= 0 AND seller_net_amount >= 0",
+            name="ck_seller_orders_settlement_non_negative",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -44,7 +52,7 @@ class SellerOrder(SQLModel, table=True):
 
     status: str = Field(max_length=30)
 
-    payment_status: str = Field(default="PAID", max_length=30)
+    payment_status: str = Field(default="UNPAID", max_length=30)
 
     escrow_status: str = Field(default="HELD", max_length=30)
 
@@ -67,3 +75,9 @@ class SellerOrder(SQLModel, table=True):
     shipping_discount: int = Field(default=0, ge=0)
     total_amount: int = Field(default=0, ge=0)
     pricing_policy_version: str = Field(default="LEGACY", max_length=20)
+    # US20 settlement snapshot (#148); see docs/us20-payments.md sections 4 and 5.
+    refunded_amount: int = Field(default=0, ge=0)
+    commission_rate_bps: int = Field(default=0, ge=0)
+    commission_amount: int = Field(default=0, ge=0)
+    seller_net_amount: int = Field(default=0, ge=0)
+    settled_at: datetime | None = None

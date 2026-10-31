@@ -17,6 +17,15 @@ from src.schemas.returns import CreateReturnRequest, ReturnDecisionRequest, Retu
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
 from src.services.order_history import record_transition
+from src.services.payments import (
+    PaymentError,
+    pause_settlement,
+    refund_seller_order,
+    resume_settlement,
+    sync_parent_payment,
+    try_release,
+    void_settlement,
+)
 
 # Payment states a return decision can settle without reconciliation.
 RECONCILED_PAYMENTS = frozenset({"PAID", "UNPAID", "FAILED"})
@@ -58,8 +67,6 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
         return
 
     statuses = {child.status for child in child_orders}
-    payment_statuses = {child.payment_status for child in child_orders}
-    escrow_statuses = {child.escrow_status for child in child_orders}
 
     # 1. Derive parent order.status
     if statuses == {"COMPLETED"}:
@@ -93,41 +100,8 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
     else:
         order.status = "PENDING"
 
-    # 2. Derive parent order.payment_status
-    if payment_statuses == {"REFUNDED"}:
-        order.payment_status = "REFUNDED"
-    elif "REFUNDED" in payment_statuses:
-        order.payment_status = "PARTIALLY_REFUNDED"
-    elif payment_statuses == {"UNPAID"}:
-        order.payment_status = "UNPAID"
-    elif "REFUND_PENDING" in payment_statuses:
-        order.payment_status = "REFUND_PENDING"
-    elif "PAID" not in payment_statuses and "FAILED" in payment_statuses:
-        order.payment_status = "FAILED"
-    else:
-        order.payment_status = "PAID"
-
-    # 3. Derive parent order.escrow_status
-    if "PAUSED" in escrow_statuses:
-        order.escrow_status = "PAUSED"
-    elif escrow_statuses == {"REFUNDED"}:
-        order.escrow_status = "REFUNDED"
-    elif escrow_statuses == {"RELEASED"}:
-        order.escrow_status = "RELEASED"
-    elif escrow_statuses == {"VOIDED"}:
-        order.escrow_status = "VOIDED"
-    elif "HELD" in escrow_statuses:
-        order.escrow_status = "HELD"
-    elif escrow_statuses <= {"REFUNDED", "VOIDED"}:
-        # Every share is terminal and nothing will be settled (US20 section 2.3).
-        order.escrow_status = "VOIDED"
-    elif escrow_statuses <= {"REFUNDED", "VOIDED", "RELEASED"}:
-        order.escrow_status = "PARTIALLY_SETTLED"
-    else:
-        order.escrow_status = "HELD"
-
-    session.add(order)
-
+    # 2. Payment and escrow summaries belong to the payment service (US20).
+    sync_parent_payment(session, order)
 
 def submit_return_request(
     session: Session,
@@ -194,7 +168,6 @@ def submit_return_request(
         )
         .values(
             status="RETURN_REQUESTED",
-            escrow_status="PAUSED",
         )
         .execution_options(synchronize_session=False)
     )
@@ -204,6 +177,8 @@ def submit_return_request(
             "A return request is already pending review for this order.",
             409,
         )
+    session.refresh(seller_order)
+    pause_settlement(session, seller_order)
 
     ret_req = ReturnRequest(
         order_id=order.id,
@@ -369,27 +344,28 @@ def check_return_settlement(seller_order: SellerOrder, action: str) -> None:
         )
 
 
-def settle_return(session: Session, seller_order: SellerOrder, action: str, now: datetime) -> bool:
+def settle_return(
+    session: Session, seller_order: SellerOrder, action: str, now: datetime, actor_id: int
+) -> bool:
     """Apply the US20 section 6 return rows; returns whether a payment was refunded."""
     check_return_settlement(seller_order, action)
-    refunds_payment = seller_order.payment_status == "PAID"
-    if action == "APPROVE":
-        # Refund only a collected payment; an uncollected one is voided, not refunded.
-        values: dict[str, object] = {"status": "RETURNED_REFUNDED"}
-        if refunds_payment:
-            values |= {"payment_status": "REFUNDED", "escrow_status": "REFUNDED"}
-        else:
-            values["escrow_status"] = "VOIDED"
-    else:
-        # Escrow leaves PAUSED; it is released only for a collected payment.
-        values = {
-            "status": "COMPLETED",
-            "escrow_status": "RELEASED" if refunds_payment else "HELD",
-            "completed_at": seller_order.completed_at or now,
-        }
-    _update_seller_order(session, seller_order, values)
-    return refunds_payment
-
+    try:
+        if action == "APPROVE":
+            _update_seller_order(session, seller_order, {"status": "RETURNED_REFUNDED"})
+            # Only a collected payment is refunded; the escrow is voided either way.
+            refunded = refund_seller_order(session, seller_order, actor_id)
+            void_settlement(session, seller_order)
+            return refunded
+        _update_seller_order(
+            session,
+            seller_order,
+            {"status": "COMPLETED", "completed_at": seller_order.completed_at or now},
+        )
+        resume_settlement(session, seller_order)
+        try_release(session, seller_order)
+        return False
+    except PaymentError as exc:
+        raise ReturnError(exc.code, exc.message, exc.status) from exc
 
 def decide_return_request(
     session: Session,
@@ -455,7 +431,9 @@ def decide_return_request(
             400,
         )
 
-    refunds_payment = settle_return(session, seller_order, decision.action, now)
+    refunds_payment = settle_return(
+        session, seller_order, decision.action, now, current_user.id
+    )
 
     if decision.action == "APPROVE":
         if decision.is_restockable:

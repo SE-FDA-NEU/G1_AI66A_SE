@@ -8,6 +8,7 @@ from src.models.notification import Notification
 from src.models.order import Order
 from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
+from src.models.payment_event import PaymentEvent
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
@@ -34,6 +35,7 @@ __all__ = [
     "OrderHistory",
     "SellerOrder",
     "OrderItem",
+    "PaymentEvent",
     "Review",
     "Notification",
     "Voucher",
