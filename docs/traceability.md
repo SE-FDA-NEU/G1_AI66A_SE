@@ -547,6 +547,19 @@ existing checkout snapshot writes, historical readers, and nullable seller image
 See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
 and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).
 
+## Order detail date/time and recorded total (#159)
+
+Requirement: display the selected buyer order's creation date/time and persisted
+grand total, distinguishing price components where recorded. The existing receipt
+API already supplies those facts and enforces buyer ownership. `order.html`,
+`order.js` and `order.css` implement the [detail contract](us05-buyer-order-history.md#recorded-order-summary-159).
+The [single verification matrix](testing.md#issue-159-recorded-order-date-and-total)
+covers real-browser API integration, recorded prices, zero totals, legacy fallback,
+switching/reload, responsive layouts, retry and ownership.
+
+Exclusions: payment selection/display assigned to #149, pricing changes, new API
+fields, migrations, third-party map rendering and seller-dashboard changes.
+
 ## US21 admin catalog and voucher UI (#113, #152)
 
 The [UI contract](us21-admin-ui.md) records the scope over the existing portal.
