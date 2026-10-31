@@ -92,6 +92,78 @@ def record_paid(engine, order_id, key="pay-op-1"):
 # ==============================================================================
 
 
+TARGET_PAYMENT_FIELDS = {"payment_status", "escrow_status", "settled_at"}
+
+
+def find_payment_field_mutations(tree: ast.AST) -> list[tuple[int, str]]:
+    """Scan an AST for direct or ORM writes to payment_status, escrow_status or settled_at."""
+    violations: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        # 1. Attribute assignments: obj.payment_status = ...
+        if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Attribute) and target.attr in TARGET_PAYMENT_FIELDS:
+                    violations.append((node.lineno, target.attr))
+
+        # 2. setattr(obj, "payment_status", ...)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "setattr"
+        ):
+            if (
+                len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value in TARGET_PAYMENT_FIELDS
+            ):
+                violations.append((node.lineno, node.args[1].value))
+
+        # 3. SQLAlchemy / ORM update patterns: .values(...) or .update(...)
+        elif isinstance(node, ast.Call):
+            method_name = None
+            if isinstance(node.func, ast.Attribute) and node.func.attr in {"values", "update"}:
+                method_name = node.func.attr
+            elif isinstance(node.func, ast.Name) and node.func.id in {"values", "update"}:
+                method_name = node.func.id
+
+            if method_name:
+                # Keyword arguments: .values(payment_status="PAID") or .update(values={...})
+                for kw in node.keywords:
+                    if kw.arg in TARGET_PAYMENT_FIELDS:
+                        violations.append((node.lineno, kw.arg))
+                    elif kw.arg == "values" and isinstance(kw.value, ast.Dict):
+                        for k in kw.value.keys:
+                            if isinstance(k, ast.Constant) and k.value in TARGET_PAYMENT_FIELDS:
+                                violations.append((node.lineno, k.value))
+                            elif isinstance(k, ast.Attribute) and k.attr in TARGET_PAYMENT_FIELDS:
+                                violations.append((node.lineno, k.attr))
+                # Positional dictionary argument: .values({"payment_status": "PAID"})
+                # or .values({SellerOrder.payment_status: "PAID"})
+                for arg in node.args:
+                    if isinstance(arg, ast.Dict):
+                        for k in arg.keys:
+                            if isinstance(k, ast.Constant) and k.value in TARGET_PAYMENT_FIELDS:
+                                violations.append((node.lineno, k.value))
+                            elif isinstance(k, ast.Attribute) and k.attr in TARGET_PAYMENT_FIELDS:
+                                violations.append((node.lineno, k.attr))
+                    elif isinstance(arg, (ast.List, ast.Tuple)):
+                        for elt in arg.elts:
+                            if isinstance(elt, (ast.Tuple, ast.List)) and len(elt.elts) >= 1:
+                                col = elt.elts[0]
+                                if (
+                                    isinstance(col, ast.Constant)
+                                    and col.value in TARGET_PAYMENT_FIELDS
+                                ):
+                                    violations.append((node.lineno, col.value))
+                                elif (
+                                    isinstance(col, ast.Attribute)
+                                    and col.attr in TARGET_PAYMENT_FIELDS
+                                ):
+                                    violations.append((node.lineno, col.attr))
+    return violations
+
+
 def test_payment_fields_are_only_written_by_payments_service():
     """Section 9: payment/escrow status and settled_at writes pass through payments.py."""
     violations = []
@@ -106,30 +178,62 @@ def test_payment_fields_are_only_written_by_payments_service():
             continue
 
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel_posix)
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                for target in targets:
-                    if (
-                        isinstance(target, ast.Attribute)
-                        and target.attr in {"payment_status", "escrow_status", "settled_at"}
-                    ):
-                        violations.append((rel_posix, node.lineno, target.attr))
-            elif (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "setattr"
-            ):
-                if (
-                    len(node.args) >= 2
-                    and isinstance(node.args[1], ast.Constant)
-                    and node.args[1].value in {"payment_status", "escrow_status", "settled_at"}
-                ):
-                    violations.append((rel_posix, node.lineno, node.args[1].value))
+        file_violations = find_payment_field_mutations(tree)
+        for lineno, field_name in file_violations:
+            violations.append((rel_posix, lineno, field_name))
 
     assert violations == [], (
         f"Direct payment/escrow mutations found outside payments.py: {violations}"
     )
+
+
+@pytest.mark.parametrize(
+    ("snippet", "expected_fields"),
+    [
+        (
+            (
+                "update(SellerOrder).values(\n"
+                "    payment_status='PAID', escrow_status='RELEASED', settled_at=None\n"
+                ")"
+            ),
+            {"payment_status", "escrow_status", "settled_at"},
+        ),
+        (
+            'update(SellerOrder).values({"payment_status": "PAID"})',
+            {"payment_status"},
+        ),
+        (
+            'update(SellerOrder).values({SellerOrder.escrow_status: "RELEASED"})',
+            {"escrow_status"},
+        ),
+        (
+            'session.query(SellerOrder).update({"payment_status": "PAID"})',
+            {"payment_status"},
+        ),
+        (
+            "session.query(SellerOrder).update({SellerOrder.settled_at: None})",
+            {"settled_at"},
+        ),
+        (
+            "session.execute(update(SellerOrder).values([(SellerOrder.settled_at, None)]))",
+            {"settled_at"},
+        ),
+        (
+            'order.payment_status = "PAID"',
+            {"payment_status"},
+        ),
+        (
+            'setattr(order, "escrow_status", "RELEASED")',
+            {"escrow_status"},
+        ),
+    ],
+)
+def test_architectural_guard_detects_all_mutation_patterns(snippet, expected_fields):
+    """Guard regression: scanner catches attribute assignment, setattr, and ORM update patterns."""
+    tree = ast.parse(snippet)
+    detected = find_payment_field_mutations(tree)
+    detected_fields = {field for _, field in detected}
+    assert detected_fields == expected_fields
 
 
 # ==============================================================================
@@ -253,38 +357,81 @@ def test_calculate_seller_net_rejects_negative_or_overflow_rates():
 # ==============================================================================
 
 
-def test_zero_total_order_lifecycle_and_settlement(engine):
+def test_zero_total_order_lifecycle_and_settlement(api, engine):
     """Section 3: total_amount = 0 records PAID with ZERO_TOTAL source; releases on completion."""
-    order_id, child_id = place_order(engine, "CARD", price=50_000, quantity=1, key="zero-order")
-
+    product_id = add_product(engine, "PROD-ZERO", price=50_000, stock=5)
     with Session(engine) as session:
-        order = session.get(Order, order_id)
-        child = session.get(SellerOrder, child_id)
-        child.subtotal = 0
-        child.shop_discount = 0
-        child.total_amount = 0
-        from src.services.payments import start_payment
-
-        start_payment(session, order, [child], "CARD")
+        session.add(
+            CartItem(buyer_id=BUYER_ID, product_id=product_id, quantity=1, is_selected=True)
+        )
         session.commit()
 
+    add_voucher(
+        engine,
+        "ZERO_SHOP",
+        scope="SHOP",
+        seller_id=SELLER_ID,
+        discount_type="FIXED_AMOUNT",
+        discount_value=50_000,
+    )
+    add_voucher(
+        engine,
+        "ZERO_SHIP",
+        scope="PLATFORM",
+        discount_type="FREE_SHIPPING",
+        discount_value=0,
+        max_discount=20_000,
+    )
+
+    selection = {
+        "shop_vouchers": [{"seller_id": SELLER_ID, "code": "ZERO_SHOP"}],
+        "shipping_voucher": "ZERO_SHIP",
+    }
+    quote_res = quote(api, engine, selection)
+    assert quote_res.status_code == 200, quote_res.text
+    quote_data = quote_res.json()["data"]
+    assert quote_data["grand_total"] == 0
+    revision = quote_data["quote_revision"]
+
+    place_res = place_with_vouchers(
+        api,
+        engine,
+        selection | {"quote_revision": revision, "payment_method": "CARD"},
+    )
+    assert place_res.status_code == 201, place_res.text
+    order_data = place_res.json()["data"]
+    order_id = order_data["id"]
+
     with Session(engine) as session:
         order = session.get(Order, order_id)
-        child = session.get(SellerOrder, child_id)
+        child = session.exec(select(SellerOrder).where(SellerOrder.order_id == order_id)).one()
+        child_id = child.id
+
+        # Verify PAID and monetary snapshots
+        assert child.subtotal == 50_000
+        assert child.shop_discount == 50_000
+        assert child.platform_discount == 0
+        assert child.shipping_fee == 20_000
+        assert child.shipping_discount == 20_000
         assert child.total_amount == 0
-        assert child.payment_status == "PAID"
-        assert child.escrow_status == "HELD"
+        assert child.commission_rate_bps == 500
         assert child.commission_amount == 0
         assert child.seller_net_amount == 0
+        assert child.refunded_amount == 0
+        assert child.payment_status == "PAID"
+        assert child.escrow_status == "HELD"
+        assert child.settled_at is None
         assert order.payment_status == "PAID"
         assert order.escrow_status == "HELD"
 
-        event = session.exec(
-            select(PaymentEvent).where(PaymentEvent.order_id == order_id)
-        ).one()
+        # Verify ZERO_TOTAL event
+        event = session.exec(select(PaymentEvent).where(PaymentEvent.order_id == order_id)).one()
         assert event.source == "ZERO_TOTAL"
         assert event.kind == "PAYMENT_RESULT"
         assert event.amount == 0
+        assert event.from_status == "UNPAID"
+        assert event.to_status == "PAID"
+        assert event.seller_order_id == child_id
 
     check_invariants(engine)
 
@@ -302,6 +449,7 @@ def test_zero_total_order_lifecycle_and_settlement(engine):
         assert child.escrow_status == "RELEASED"
         assert child.settled_at is not None
         assert order.escrow_status == "RELEASED"
+        assert order.payment_status == "PAID"
 
     check_invariants(engine)
 
