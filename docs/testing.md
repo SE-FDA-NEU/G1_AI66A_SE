@@ -213,3 +213,23 @@ git diff --check
 The suite is discovered by the existing CI pytest step. No new browser dependency
 is needed: this task tests persistence and API contracts and adds no new screen.
 Only report CI/review/clean-clone results after they have actually been verified.
+
+## Task #157: phone number formatting and validation
+
+| Case | Expected result | Verification |
+|---|---|---|
+| 7 and 15 ASCII digits with supported separators | Accepted; outer/repeated spaces normalize without changing digits | Existing address boundary tests and checkout schema validation |
+| Fewer/more digits or unsupported punctuation | Rejected with `phone_number` field feedback and no order/address write | Existing invalid-format tests plus browser field-error checks |
+| Manual checkout and address-book storage | Both persist the same normalized representation | `tests/test_addresses.py` and `tests/test_checkout.py` normalization regressions |
+
+```powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_addresses.py tests/test_checkout.py -q
+node tests/addresses_ui.mjs
+node tests/checkout_ui.mjs
+python -m ruff check src/schemas/delivery.py tests/test_addresses.py tests/test_checkout.py
+git diff --check
+```
+
+Country-code conversion and provider verification are intentionally outside this
+bug fix; the normalization preserves the entered digit sequence.

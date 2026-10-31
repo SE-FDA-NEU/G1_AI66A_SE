@@ -82,8 +82,8 @@ def delivery_validation_errors(errors: list[dict], body: object, checkout: bool)
         message = error["msg"].removeprefix("Value error, ")
         if name == "phone_number":
             message = (
-                "Phone number must contain 7 to 15 digits; "
-                "use only +, spaces, (), or - as separators."
+                "Phone number must contain 7 to 15 digits. "
+                "Use only +, spaces, (), or - as separators."
             )
         elif error["type"] == "missing" and name != "_form":
             message = f"Enter {name.replace('_', ' ')}."

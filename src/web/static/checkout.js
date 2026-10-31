@@ -1,5 +1,12 @@
 "use strict";
 const form = document.getElementById("checkout-form");
+const PHONE_ERROR = "Phone number must contain 7 to 15 digits. Use only +, spaces, (), or - as separators.";
+function normalizePhoneNumber(value) { return value.trim().replace(/ {2,}/g, " "); }
+function phoneValidationError(value) {
+  const normalized = normalizePhoneNumber(value);
+  const digits = normalized.match(/[0-9]/g) || [];
+  return /^[+0-9 ()-]+$/.test(normalized) && digits.length >= 7 && digits.length <= 15 ? "" : PHONE_ERROR;
+}
 const statusText = document.getElementById("status");
 const errorText = document.getElementById("error");
 const retry = document.getElementById("retry");
@@ -171,10 +178,11 @@ form.addEventListener("submit", event => {
   if (addressChoice.value && !chosen) { message("Reload your address book and select an address."); return; }
   if (chosen) body = {address_id:chosen.id, address_version:chosen.version};
   else {
-    body = Object.fromEntries(["recipient_name", "delivery_address", "phone_number"].map(name => [name,form.elements[name].value.trim()]));
+    body = Object.fromEntries(["recipient_name", "delivery_address", "phone_number"].map(name => [name,name === "phone_number" ? normalizePhoneNumber(form.elements[name].value) : form.elements[name].value.trim()]));
     const errors = {};
     for (const name of ["recipient_name", "delivery_address"]) if (!body[name]) errors[name] = ["Enter this required field."];
-    if (!/^[+0-9 ()-]+$/.test(body.phone_number) || (body.phone_number.match(/\d/g) || []).length < 7 || (body.phone_number.match(/\d/g) || []).length > 15) errors.phone_number = ["Phone number must contain 7 to 15 digits."];
+    const phoneError = phoneValidationError(body.phone_number);
+    if (phoneError) errors.phone_number = [phoneError];
     if (Object.keys(errors).length) { showFields(form, "checkout", errors); message("Please correct the highlighted fields."); return; }
   }
   // The exact quote the buyer reviewed; the server rejects it if anything changed since.
@@ -338,9 +346,15 @@ addressForm.addEventListener("submit", event => {
   const successMessage = editingAddress ? "Address updated." : "Address added.";
   return runAddress(async () => {
     clearFields(addressForm, "address");
-    const body = Object.fromEntries(addressFields.map(name => [name, addressForm.elements[name].value.trim()]));
+    const body = Object.fromEntries(addressFields.map(name => [name, name === "phone_number" ? normalizePhoneNumber(addressForm.elements[name].value) : addressForm.elements[name].value.trim()]));
     body.is_default = addressForm.elements.is_default.checked;
     if (editingAddress) body.version = editingAddress.version;
+    const phoneError = phoneValidationError(body.phone_number);
+    if (phoneError) {
+      showFields(addressForm, "address", {phone_number: [phoneError]});
+      addressStatus.textContent = "Please correct the highlighted fields.";
+      return;
+    }
     await request(editingAddress ? `/api/v1/addresses/${editingAddress.id}` : "/api/v1/addresses", {method:editingAddress ? "PUT" : "POST", body:JSON.stringify(body)});
     addressForm.hidden = true;
     await loadAddresses(false);

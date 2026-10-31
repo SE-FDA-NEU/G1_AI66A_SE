@@ -521,6 +521,12 @@ def test_address_phone_validation_valid_formats(api, engine, valid_phone):
     assert addr["phone_number"] == valid_phone.strip()
 
 
+def test_address_phone_normalizes_outer_and_repeated_spaces_without_changing_digits(api, engine):
+    addr = create(api, engine, phone_number="  +84  912  345  678  ")
+
+    assert addr["phone_number"] == "+84 912 345 678"
+
+
 @pytest.mark.parametrize(
     "field_name",
     [
