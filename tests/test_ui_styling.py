@@ -26,6 +26,12 @@ CORE_SCREENS = [
     "seller-vouchers.html",
     "admin-portal.html",
 ]
+SELLER_PRODUCT_NEW_HTML = ROOT / "src" / "web" / "pages" / "seller-product-new.html"
+LOGIN_HTML = ROOT / "src" / "web" / "pages" / "login.html"
+ORDER_HTML = ROOT / "src" / "web" / "pages" / "order.html"
+SELLER_ANALYTICS_HTML = ROOT / "src" / "web" / "pages" / "seller-analytics.html"
+SELLER_VOUCHERS_HTML = ROOT / "src" / "web" / "pages" / "seller-vouchers.html"
+ADMIN_PORTAL_HTML = ROOT / "src" / "web" / "pages" / "admin-portal.html"
 
 
 class InputCollector(HTMLParser):
@@ -607,3 +613,68 @@ def test_admin_portal_css_has_responsive_breakpoints() -> None:
     css = (ROOT / "src" / "web" / "static" / "admin-portal.css").read_text(encoding="utf-8")
     assert "@media (max-width: 840px)" in css
     assert "portal-layout" in css
+
+
+def test_required_form_fields_marked_with_asterisk() -> None:
+    """Verify that mandatory form fields are marked with an asterisk across forms (#158)."""
+    # 1. Seller Product Creation form
+    seller_html = SELLER_PRODUCT_NEW_HTML.read_text(encoding="utf-8")
+    assert "Fields marked * are required." in seller_html
+    for label in [
+        "Product name *",
+        "Description *",
+        "Price (₫) *",
+        "Stock quantity *",
+        "Image URL *",
+    ]:
+        assert f">{label}</label>" in seller_html, f"Missing asterisk in seller label: {label}"
+
+    # 2. Login form
+    login_html = LOGIN_HTML.read_text(encoding="utf-8")
+    assert "Email *" in login_html
+    assert "Password *" in login_html
+
+    # 3. Order return form
+    order_html = ORDER_HTML.read_text(encoding="utf-8")
+    assert "Delivered shop order *" in order_html
+    assert "Reason for return/refund *" in order_html
+    assert "Supporting evidence *" in order_html
+
+    # 4. Product detail forms (add to cart, option create, reviews)
+    detail_html = PRODUCT_DETAIL_HTML.read_text(encoding="utf-8")
+    assert "Quantity *" in detail_html
+    assert "SKU *" in detail_html
+    assert "Option name *" in detail_html
+    assert "Price (VND) *" in detail_html
+    assert "Stock *" in detail_html
+    assert "Completed purchase *" in detail_html
+    assert "Rating *" in detail_html
+
+    # 5. Seller analytics filter form
+    analytics_html = SELLER_ANALYTICS_HTML.read_text(encoding="utf-8")
+    assert "From (UTC, inclusive) *" in analytics_html
+    assert "To (UTC, inclusive) *" in analytics_html
+
+    # 6. Checkout address and delivery forms
+    checkout_html = CHECKOUT_HTML.read_text(encoding="utf-8")
+    assert "Recipient name *" in checkout_html
+    assert "Phone number *" in checkout_html
+    assert "Province / city *" in checkout_html
+    assert "District *" in checkout_html
+    assert "Ward *" in checkout_html
+    assert "Detailed address *" in checkout_html
+    assert "Delivery address *" in checkout_html
+    assert "Payment method *" in checkout_html
+
+    # 7. Admin portal forms
+    admin_html = ADMIN_PORTAL_HTML.read_text(encoding="utf-8")
+    assert "Category Name *" in admin_html
+    assert "Slug (Unique URL identifier) *" in admin_html
+    assert "Voucher Code *" in admin_html
+    assert "Discount Type *" in admin_html
+    assert "Start Date (UTC) *" in admin_html
+    assert "End Date (UTC) *" in admin_html
+    assert "Account Status *" in admin_html
+    assert "Moderation Reason *" in admin_html
+    assert "Adjudication Action *" in admin_html
+    assert "Decision Notes *" in admin_html

@@ -621,11 +621,11 @@ def test_form_page_and_its_assets_are_served_to_anyone(api):
     assert 'src="/static/seller-product-new.js"' in html
     assert 'href="/static/seller-product-new.css"' in html
     for field, label in [
-        ("name", "Product name"),
-        ("description", "Description"),
-        ("price", "Price (₫)"),
-        ("stock_quantity", "Stock quantity"),
-        ("image_url", "Image URL"),
+        ("name", "Product name *"),
+        ("description", "Description *"),
+        ("price", "Price (₫) *"),
+        ("stock_quantity", "Stock quantity *"),
+        ("image_url", "Image URL *"),
     ]:
         assert f'name="{field}"' in html
         assert f">{label}</label>" in html

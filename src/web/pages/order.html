@@ -353,20 +353,20 @@
       <button id="return-retry" type="button" class="ios-btn ios-btn-secondary" hidden>Retry return status</button>
       <button id="return-request-action" type="button" class="ios-btn ios-btn-primary" hidden>Request return or refund</button>
       <form id="buyer-return-form" novalidate hidden aria-busy="false">
-        <p>Requests cover one delivered shop order. Confirming receipt first ends return eligibility.</p>
+        <p>Requests cover one delivered shop order. Fields marked * are required. Confirming receipt first ends return eligibility.</p>
         <div id="return-seller-order-group" class="form-group">
-          <label for="return-seller-order-select">Delivered shop order (required)</label>
+          <label for="return-seller-order-select">Delivered shop order *</label>
           <select id="return-seller-order-select" required aria-describedby="return-target-error"></select>
           <p id="return-target-error" class="return-field-error" hidden></p>
         </div>
         <div class="form-group">
-          <label for="return-reason-input">Reason for return/refund (required)</label>
+          <label for="return-reason-input">Reason for return/refund *</label>
           <p id="return-reason-hint">Describe the issue in 3–500 characters.</p>
           <textarea id="return-reason-input" rows="3" required minlength="3" maxlength="500" class="ios-textarea" aria-describedby="return-reason-hint return-reason-error"></textarea>
           <p id="return-reason-error" class="return-field-error" hidden></p>
         </div>
         <div class="form-group">
-          <label for="return-evidence-input">Supporting evidence (required)</label>
+          <label for="return-evidence-input">Supporting evidence *</label>
           <p id="return-evidence-hint">Enter 3–2000 characters: describe the issue, include a photo link or serial number. Files are not uploaded here.</p>
           <textarea id="return-evidence-input" rows="4" required minlength="3" maxlength="2000" class="ios-textarea" aria-describedby="return-evidence-hint return-evidence-error"></textarea>
           <p id="return-evidence-error" class="return-field-error" hidden></p>

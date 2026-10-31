@@ -36,14 +36,15 @@
     </div>
 
     <form id="product-form" class="product-form" novalidate hidden>
+      <p class="field-hint">Fields marked * are required.</p>
       <div class="form-field">
-        <label for="product-name">Product name</label>
+        <label for="product-name">Product name *</label>
         <input id="product-name" name="name" type="text" maxlength="200" required autocomplete="off" aria-describedby="name-error">
         <p id="name-error" class="field-error" hidden></p>
       </div>
 
       <div class="form-field">
-        <label for="product-description">Description</label>
+        <label for="product-description">Description *</label>
         <textarea id="product-description" name="description" rows="5" maxlength="3000" required aria-describedby="description-hint description-error"></textarea>
         <p id="description-hint" class="field-hint">Up to 3000 characters.</p>
         <p id="description-error" class="field-error" hidden></p>
@@ -51,14 +52,14 @@
 
       <div class="form-row">
         <div class="form-field">
-          <label for="product-price">Price (₫)</label>
+          <label for="product-price">Price (₫) *</label>
           <input id="product-price" name="price" type="number" inputmode="numeric" min="1" max="1000000000" step="1" required aria-describedby="price-hint price-error">
           <p id="price-hint" class="field-hint">Whole VND, from 1 to 1.000.000.000 ₫.</p>
           <p id="price-error" class="field-error" hidden></p>
         </div>
 
         <div class="form-field">
-          <label for="product-stock">Stock quantity</label>
+          <label for="product-stock">Stock quantity *</label>
           <input id="product-stock" name="stock_quantity" type="number" inputmode="numeric" min="0" max="1000000" step="1" required aria-describedby="stock_quantity-hint stock_quantity-error">
           <p id="stock_quantity-hint" class="field-hint">0 is allowed: the product is shown as Out of stock.</p>
           <p id="stock_quantity-error" class="field-error" hidden></p>
@@ -66,7 +67,7 @@
       </div>
 
       <div class="form-field">
-        <label for="product-image">Image URL</label>
+        <label for="product-image">Image URL *</label>
         <input id="product-image" name="image_url" type="url" maxlength="2048" required autocomplete="off" placeholder="https://example.com/product.jpg" aria-describedby="image_url-hint image_url-error">
         <p id="image_url-hint" class="field-hint">An absolute http:// or https:// link. If the image cannot be loaded, buyers see a placeholder.</p>
         <p id="image_url-error" class="field-error" hidden></p>
