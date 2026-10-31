@@ -1432,3 +1432,17 @@ explicit legacy-order rules. The commission rate, COD timing, refund amount, dem
 recording, the escrow name `VOIDED` and the analytics keys are pending decisions D1–D6.
 Their owners confirm them before the dependent code merges. Legacy bodies are recorded
 as COD until the checkout UI (#149) sends a method.
+
+## US21 admin workflow boundary (#151)
+
+New administrative dispute logic follows controller -> service -> repository ->
+models, with one service-owned transaction for state, audit, inventory and
+notifications. Category routes retain their existing interfaces and use a shared
+hierarchy/audit service. Existing account transactions and the explicit
+`AdminUser` guard are reused.
+
+`category_audit_logs` retains before/after category snapshots and the authenticated
+actor even after legacy category deletion. `return_disputes.created_by_user_id`
+records new escalation actors and remains null for unknown legacy actors. See the
+[US21 backend contract](us21-admin-workflow.md) for API/migration behavior and the
+[verification matrix](testing.md#task-151-admin-authorization-and-dispute-workflow).

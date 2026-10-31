@@ -24,5 +24,6 @@ class ReturnDispute(SQLModel, table=True):
     decision_notes: str | None = Field(default=None, max_length=1000)
     decided_by_user_id: int | None = Field(default=None, foreign_key="users.id", nullable=True)
     is_restockable: bool = Field(default=False)
+    created_by_user_id: int | None = Field(default=None, foreign_key="users.id", nullable=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     decided_at: datetime | None = Field(default=None, nullable=True)

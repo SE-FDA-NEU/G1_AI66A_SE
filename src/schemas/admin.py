@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.schemas.order_history import order_timestamp_utc
+
 
 # ---------------------------------------------------------------------------
 # Category Schemas
@@ -31,12 +33,33 @@ class CategoryAdminResponse(BaseModel):
     slug: str
     parent_id: int | None = None
     product_count: int = 0
+    is_active: bool = True
+
+
+class CategorySnapshot(BaseModel):
+    name: str
+    slug: str
+    parent_id: int | None = None
+    is_active: bool
+
+
+class CategoryAuditLogResponse(BaseModel):
+    id: int
+    category_id: int
+    admin_id: int
+    action: str
+    before: CategorySnapshot | None
+    after: CategorySnapshot | None
+    created_at: datetime
+
+    _utc = field_validator("created_at")(order_timestamp_utc)
 
 
 # ---------------------------------------------------------------------------
 # User & Account Moderation Schemas
 # ---------------------------------------------------------------------------
 class UpdateUserStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     status: Literal["ACTIVE", "RESTRICTED", "SUSPENDED"]
     reason: str = Field(default="", max_length=500)
 
@@ -51,6 +74,8 @@ class AccountAuditLogResponse(BaseModel):
     new_status: str
     reason: str
     created_at: datetime
+
+    _utc = field_validator("created_at")(order_timestamp_utc)
 
 
 class UserAdminResponse(BaseModel):
@@ -104,7 +129,6 @@ class UpdateVoucherRequest(BaseModel):
         return v.astimezone(UTC)
 
 
-
 class VoucherAdminResponse(BaseModel):
     id: int
     code: str
@@ -150,6 +174,7 @@ class ProductAdminResponse(BaseModel):
 # Dispute Adjudication Schemas
 # ---------------------------------------------------------------------------
 class DisputeDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     action: Literal["APPROVE", "REJECT"]
     decision_notes: str = Field(default="", max_length=1000)
     is_restockable: bool = False
@@ -171,5 +196,11 @@ class ReturnDisputeResponse(BaseModel):
     decided_by_user_id: int | None = None
     decided_by_name: str | None = None
     is_restockable: bool = False
+    created_by_user_id: int | None = None
     created_at: datetime
     decided_at: datetime | None = None
+
+    @field_validator("created_at", "decided_at")
+    @classmethod
+    def utc_timestamps(cls, value):
+        return order_timestamp_utc(value) if value is not None else None

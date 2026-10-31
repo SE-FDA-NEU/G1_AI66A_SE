@@ -259,3 +259,43 @@ git diff --check
 The suite is discovered by the existing CI pytest step. No new browser dependency
 is needed: this task tests persistence and API contracts and adds no new screen.
 Only report CI/review/clean-clone results after they have actually been verified.
+
+## Task #151: admin authorization and dispute workflow
+
+Expected behavior comes from #151, parent #113, and the
+[US21 backend contract](us21-admin-workflow.md). New tests use isolated SQLite
+files, real authenticated routes, deterministic decision clocks and fresh-session
+assertions. Existing admin and return suites retain their earlier coverage.
+
+| ID | Partition / action | Expected result | Verification |
+|---|---|---|---|
+| A151-01 | Guest, buyer or seller calls category/audit/account/dispute routes directly | 401/403; no mutations, leaked audit records or actor spoofing | Direct-request authorization matrix |
+| A151-02 | Existing token belongs to a restricted/suspended admin or moderated buyer/seller | Server reads current account status and denies prohibited actions | Admin restriction and account moderation cases |
+| A151-03 | Create/update/delete via canonical or legacy categories; repeat an unchanged update | Before/after snapshots and authenticated UTC actor history commit with the change; no no-op audit | Both-route audit and legacy child-reparenting cases |
+| A151-04 | Duplicate slug, invalid ancestor, blank/unknown fields, inactive ancestor or legacy cycle | Reject without writes; keep existing route-specific error contracts | Validation partitions and cycle fixture |
+| A151-05 | Category audit INSERT fails during create, update or delete | 500 database error, not slug conflict; category, associations and audits equal before-state | Trigger failure matrix |
+| A151-06 | Moderate buyer/seller; repeat status; fail account audit; try self-restriction or actor injection | Existing restrictions/audit/deactivation remain atomic and server-owned | Account status/audit integration |
+| A151-07 | Escalate delivered order or existing pending buyer return | Pause seller/parent escrow, persist admin creator; one actual status event, existing buyer history retained | Escalation and request-linking cases |
+| A151-08 | Boundary reason/evidence, duplicate dispute, wrong parent, unavailable state, failed insert/history/commit or lost claim | Reject or roll back all dispute/state/history writes | Escalation boundaries and failure injection |
+| A151-09 | Paid/unpaid/failed payments, approve/reject and restock flag | Apply shared settlement rules, derive parent, update linked request and exact actor/time; restock only when approved and requested | Decision table with fixed UTC clock |
+| A151-10 | Restock an inactive purchased variant; repeat decision | Restore that variant only; product counter reconciles; repeated decision changes nothing | Variant and replay regressions |
+| A151-11 | Unreconciled payment, moved-on order, resolved/mismatched request, mismatched dispute ownership or forged decision fields | Reject before effects; preserve all persisted state | Invalid-adjudication partitions |
+| A151-12 | Inventory/history/notification/commit fails, or request/dispute conditional claim loses | Roll back dispute, request, orders, stock/counters, history and notifications together | Trigger/commit/claim failure matrix |
+| A151-13 | Another session changes a seller order after it was read | Conditional escalation cannot rewind the changed status | Two-session stale-state regression |
+| A151-14 | Initialize an old dispute schema twice, with existing known facts | Nullable unknown creator stays null; create empty category audit table; preserve facts and foreign keys | Legacy migration regression |
+| A151-15 | Decide a tracked paid dispute after integrating #148; inject refund-event failure; retry | Shared payment service records one admin-attributed refund and voids escrow; failure rolls back ledger with every other effect | Payment-event assertions and refund-trigger rollback |
+| A151-16 | Approve/reject a legacy dispute with no payment method | Preserve the stored payment snapshot without inventing a refund, refunded amount or settlement time | Legacy payment compatibility pair |
+| A151-17 | Direct fixed-amount voucher request includes a cap | 400 before persistence, with no partial voucher write | Fixed-cap validation regression |
+
+Run with the README Python 3.12 environment and dependencies:
+
+~~~powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_admin_workflow.py tests/test_admin_portal.py tests/test_return_decisions.py tests/test_return_refund.py tests/test_us19_categories_variants.py tests/test_database.py tests/test_ui_docs_contract.py -q
+python -m ruff check src tests/test_admin_workflow.py tests/test_admin_portal.py
+git diff --check
+~~~
+
+No UI or browser interaction is added by this backend task. Test execution results
+and AI assistance disclosure belong in the PR; they do not establish human review
+or story-wide acceptance.

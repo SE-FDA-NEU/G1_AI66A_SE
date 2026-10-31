@@ -546,3 +546,16 @@ Requirement: preserve server-owned purchase facts after catalog changes. Impleme
 existing checkout snapshot writes, historical readers, and nullable seller image responses.
 See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
 and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).
+
+## US21 admin backend workflow (#113, #151)
+
+The [assigned backend boundary and API contract](us21-admin-workflow.md) distinguish
+existing admin/account behavior from this task's category audit and dispute changes.
+
+| Assigned requirement | Implementation | Verification |
+|---|---|---|
+| Explicit active-admin guard and authenticated actor | Existing `auth.AdminUser`; category/account/dispute controllers derive identity from it | [A151-01-02](testing.md#task-151-admin-authorization-and-dispute-workflow) |
+| Validated category administration with durable audit | Shared hierarchy/audit service, category audit repository/model and admin audit read API; both existing mutation surfaces | A151-03-05 in the same matrix |
+| Account status history and prohibited-action checks | Existing account status transaction and `AccountAuditLog`; strict request fields and UTC audit response | A151-02, 06 in the same matrix |
+| Atomic dispute escalation and decision effects | Admin dispute service/repository, shared return settlement/restock helpers and existing order history | A151-07-13 in the same matrix |
+| Preserve legacy facts without invented history | Nullable dispute creation actor migration; audit table registered during initialization | A151-14 in the same matrix |
