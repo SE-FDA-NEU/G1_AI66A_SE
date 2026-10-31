@@ -576,6 +576,13 @@ def migrate_db(connection: Connection | None = None) -> None:
 
         if "return_disputes" in tables:
             columns = {c["name"] for c in inspector.get_columns("return_disputes")}
+            if "created_by_user_id" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE return_disputes ADD COLUMN created_by_user_id "
+                        "INTEGER REFERENCES users(id)"
+                    )
+                )
             if "return_request_id" not in columns:
                 connection.execute(
                     text("ALTER TABLE return_disputes ADD COLUMN return_request_id INTEGER")
