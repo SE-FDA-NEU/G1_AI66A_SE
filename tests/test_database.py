@@ -120,6 +120,26 @@ def test_legacy_database_migration_adds_password_hash(tmp_path: Path) -> None:
         assert seller[2] == "seller"
 
 
+def test_legacy_orders_migration_adds_nullable_payment_method_and_is_repeatable(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "legacy_orders.db"
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, total_amount INTEGER)")
+        connection.execute("INSERT INTO orders (id, total_amount) VALUES (1, 250000)")
+        connection.commit()
+
+    run_python(["-m", "src.database"], db_path)
+    run_python(["-m", "src.database"], db_path)
+    with closing(sqlite3.connect(db_path)) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(orders)")}
+        assert "payment_method" in columns
+        row = connection.execute(
+            "SELECT total_amount, payment_method FROM orders WHERE id=1"
+        ).fetchone()
+        assert row == (250000, None)
+
+
 def test_legacy_database_migration_adds_product_metadata_foreign_keys(tmp_path: Path) -> None:
     """
     Databases with pre-existing product_metadata lacking foreign keys are safely migrated and

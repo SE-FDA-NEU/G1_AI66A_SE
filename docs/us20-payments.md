@@ -3,11 +3,28 @@
 Story #112, tasks #148 (payment fields, state validation, escrow and settlement), #149
 (payment selector and status display) and #150 (payment and settlement tests).
 
-**Status: core implemented by #148 (section 13). Decisions D1–D5 were confirmed on
+**Status: core implemented by #148 (section 13) and payment choices/display implemented by #149. Decisions D1–D5 were confirmed on
 2026-10-31 ([PR #208 comment](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/208#issuecomment-6541285540)); D6 is still pending.** Originally **contract only.** It is written against `main` at
 `17638838a5eb1369a42df694c0d3b59a17c06d49` (after PR #171). Part of the state already
 exists there (section 1). Everything else is a proposal that the owners of #148–#150
-confirm or amend in their own pull requests.
+confirm or amend in their own pull requests. #149 implements only payment-method
+capture and buyer-facing display; it does not change payment-state defaults or
+settlement transitions owned by #148 and #150.
+
+### #149 implementation boundary
+
+The checkout UI sends one explicit `payment_method` value: `COD`, `VIETQR`,
+`WALLET` or `CARD`. `orders.payment_method` is nullable so legacy rows remain
+identifiable. For compatibility with older API clients and pending requests, the
+server records an omitted method as `COD`; this is the single documented default.
+The browser does not apply a second default because the selector is required.
+
+This task leaves the existing `payment_status` and `escrow_status` defaults and
+seller fulfilment transitions unchanged. A seller may continue to fulfil an order
+through the existing order-status workflow even when its payment status is not a
+recorded result; settlement/release authorization remains a separate #148 rule.
+The confirmation and order-details pages show an unpaid prepaid method as
+awaiting payment/demo result not recorded, and legacy rows as payment not recorded.
 
 Two kinds of rule appear below. **Binding** rules follow directly from the #112
 acceptance criteria and from code already on `main`: the five payment statuses, release
@@ -28,7 +45,7 @@ set of payment fields, and fixes the behaviours that conflict with the #112 crit
 
 | Today on `main` | Conflict with #112 | Contract |
 |---|---|---|
-| Every new order and seller order defaults to `payment_status = 'PAID'`, `escrow_status = 'HELD'`, whatever the method | AC1: the initial state is stored; a COD order has not been paid at checkout | Checkout writes the initial state explicitly (section 3); the model default becomes `UNPAID` |
+| Every new order and seller order defaults to `payment_status = 'PAID'`, `escrow_status = 'HELD'`, whatever the method | The state-transition change belongs to #148, not the #149 display slice | #149 preserves the existing defaults; #148 must change the model and checkout initialization together with affected cancellation, return and settlement tests |
 | No payment method is stored | AC1 | New `orders.payment_method` |
 | `sync_parent_order_state()` can set parent `payment_status = 'PARTIALLY_REFUNDED'` | AC2: only `UNPAID`, `PAID`, `REFUND_PENDING`, `REFUNDED`, `FAILED` are valid | A partial refund is shown by per-seller-order status and amounts; the parent stays `PAID` (section 2.2) |
 | Approving a return sets `payment_status = 'REFUNDED'` and `escrow_status = 'REFUNDED'` without checking that a payment was recorded | AC5: the refund state reflects money actually refunded | Refund only what was captured (section 6); the escrow becomes `VOIDED`. **#140:** an unpaid seller order keeps its payment status and gets `VOIDED`; any state other than `PAID`, `UNPAID` or `FAILED` is `409 ERR_INVALID_PAYMENT_STATE`. A paid one still uses escrow `REFUNDED`, like cancellation, until #148 renames it. The seller decision and the admin dispute decision (`POST /api/v1/admin/disputes/{id}/decision`) share `settle_return()` in `src/services/returns.py`, so both apply these rules |
@@ -103,23 +120,19 @@ otherwise `PARTIALLY_SETTLED`. **#140:** until #148 renames `REFUNDED`, a mix of
 
 Both checkout body shapes (manual delivery and saved address, US13) gain
 `payment_method`, one of the four methods; any other value is `422 ERR_VALIDATION` with
-`error.fields.payment_method`. Until the checkout UI sends a method (#149), a body
-without it is recorded as `COD`. That is the only method that needs nothing up front, and
-the current page already places orders without any payment step. After #149 merges, a
-new order without a method is rejected after the replay check, so pending older requests
-still replay; US16 section 5.4 handles a missing quote the same way. A body without the field
-hashes byte-for-byte as it does today (`test_legacy_hash_stays_compatible` stays
+`error.fields.payment_method`. The checkout UI sends a method, while the server
+compatibility boundary records a body without the field as `COD`; pending older requests
+still replay. That is the single documented default, and the current page places orders
+without any payment step. A body without the field hashes byte-for-byte as it does today
+(`test_legacy_hash_stays_compatible` stays
 unchanged); a body with it includes it in the hash.
 
-Inside the existing checkout transaction, after the seller orders exist:
+For #149, inside the existing checkout transaction:
 
-1. `orders.payment_method` is set; parent and seller orders start `UNPAID`, escrow
-   `HELD`.
-2. Each seller order stores `commission_rate_bps` and computes `commission_amount` and
-   `seller_net_amount` (section 4).
-3. A seller order whose `total_amount` is 0 is recorded `PAID` with source
-   `ZERO_TOTAL` and amount 0, whatever the method, because there is nothing to collect.
-4. Nothing is committed by the payment service; `checkout()` keeps its single commit.
+1. `orders.payment_method` is set; existing parent and seller payment/escrow defaults
+   are preserved.
+2. Payment-state transitions, commission and settlement changes are deferred to #148.
+3. The existing checkout transaction remains the sole commit boundary.
 
 Idempotent replay returns the stored payment fields and creates no new event.
 
@@ -483,4 +496,3 @@ US18 owner in #142), the seed rows with recorded payments that depend on them, t
 payment selector and labels (#149), further edge cases and analytics reconciliation (#150), and the meta-test that only `payments.py` writes payment fields. Return
 submission still sets `RETURN_REQUESTED` in `returns.py`, then calls
 `pause_settlement`.
-

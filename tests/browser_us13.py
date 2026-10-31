@@ -147,6 +147,8 @@ with tempfile.TemporaryDirectory(prefix="us13-demo-") as directory:
                 assert deselected.ok
                 page.reload()
                 expect(page.locator("#address-choice")).to_have_value("2")
+                expect(page.locator("#payment-methods")).to_be_visible()
+                page.screenshot(path=str(images / "mobile-payment-methods.png"), full_page=True)
                 expect(page.locator("#summary")).not_to_contain_text("Demo pending item")
                 # Buy using non-default original address.
                 page.locator("#address-choice").select_option("1")
@@ -161,7 +163,13 @@ with tempfile.TemporaryDirectory(prefix="us13-demo-") as directory:
                 ]
                 assert len(remaining) == 1 and remaining[0]["product_code"] == "P-DEMO-PENDING"
                 assert "Nguyễn Minh" in receipt_before and "12 Phố Chùa Láng" in receipt_before
-                assert json.loads(placed.value.post_data) == {"address_id": 1, "address_version": 2}
+                assert json.loads(placed.value.post_data) == {
+                    "address_id": 1,
+                    "address_version": 2,
+                    "payment_method": "COD",
+                }
+                expect(page.locator("#payment-summary")).to_contain_text("Cash on delivery")
+                page.screenshot(path=str(images / "mobile-payment-confirmation.png"), full_page=True)
                 page.goto("http://127.0.0.1:8135/checkout")
                 expect(page.locator("#address-list article")).to_have_count(2)
                 card = page.locator("#address-list article").filter(has_text="Nguyễn Minh")

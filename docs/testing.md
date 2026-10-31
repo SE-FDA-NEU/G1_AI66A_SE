@@ -156,6 +156,52 @@ The DOM suite runs in the existing CI page-script step. Native checks require an
 installed Chrome/Edge, or `BROWSER_PATH`; they need no npm dependency and use an
 isolated browser profile. Actual run results and AI disclosure belong in the PR.
 
+## Task #149: payment choices and order payment display
+
+The #149 boundary is method capture and display only. The server is the single
+compatibility default: an omitted method is recorded as `COD`; the browser sends
+the required selected value. Existing payment-state defaults and seller fulfilment
+transitions are not changed by this task.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Omitted method | Stores `COD` for compatibility | `tests/test_checkout.py` |
+| Unknown method | `422` field validation and no order writes | `tests/test_checkout.py` |
+| Legacy `NULL` method | Confirmation says payment method/status not recorded | `tests/checkout_ui.mjs` |
+| Unpaid VIETQR/WALLET/CARD | Shows awaiting/demo result not recorded, never Paid | `tests/checkout_ui.mjs` and shared `payment-display.js` |
+| Legacy orders migration | Adds nullable column, preserves data, and is repeatable | `tests/test_database.py` |
+
+Commands used for local verification:
+
+```powershell
+$env:DEBUG = 'false'
+python -m src.database
+python -m src.seed
+python -m pytest -q
+node tests/checkout_ui.mjs
+python -m ruff check src tests/test_checkout.py tests/test_database.py
+git diff --check
+```
+
+Observed results on 2026-10-30, after running the README database setup, were:
+
+- `python -m src.database`: completed successfully.
+- `python -m src.seed`: completed successfully; existing database reported `Added: 0 products`.
+- `python -m pytest -q`: **1007 passed, 2 skipped, 5 warnings** in 601.00 seconds.
+- `node tests/checkout_ui.mjs`: passed, including timeout/replay, legacy receipt,
+  unpaid demo-method and shared payment-display checks.
+- All ten CI-listed page-script commands passed, including
+  `node tests/checkout_ui.mjs` and `node tests/addresses_ui.mjs`.
+- Targeted Ruff on the touched Python modules/tests: all checks passed.
+- `git diff --check`: passed.
+
+`ruff check .` still reports eight pre-existing issues in
+`tests/generate_ui_evidence.py` and `tests/test_ui_styling.py`; CI treats lint as
+warning-only. GitHub CI, teammate review and screenshot capture are not claimed
+as complete by these local results. The optional browser screenshot command
+`python tests/browser_us13.py` could not run in this environment because the
+README dependency set does not install the optional `playwright` package; no
+screenshot is claimed from that failed command.
 
 ## Task #146: category and variant APIs
 
