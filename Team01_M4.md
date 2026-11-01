@@ -3,15 +3,15 @@
 ```
 Team:           Team 01 — Mini Marketplace (G1_AI66A_SE)
 Topic:          Mini Marketplace — Milestone 4: automated testing
-Members:        Nguyen Thuy Quynh, Nguyen Quang Minh, Nguyen Ho Nhat Minh, Le Duc Minh  (IDs: FILL IN)
+Members:        11247346 Nguyen Thuy Quynh, 11247324 Nguyen Quang Minh, 11247321 Nguyen Ho Nhat Minh, 11247320 Le Duc Minh  
 Product Owner:  @leducminh290506-eng
-Scrum Master:   @FILL-IN (Sprint 4, must differ from Sprint 3: @teddywristh)
+Scrum Master:   @MinhQuangQu
 
 Repository:     https://github.com/SE-FDA-NEU/G1_AI66A_SE
-Project board:  FILL IN
+Project board:  https://github.com/orgs/SE-FDA-NEU/projects/6
 Setup guide:    https://github.com/SE-FDA-NEU/G1_AI66A_SE/blob/main/docs/SETUP.md
 
-Submitted by:   FILL IN
+Submitted by:   Nguyen Quang Minh
 ```
 
 ## Page 2 — Project board screenshots
@@ -27,10 +27,10 @@ Submitted by:   FILL IN
 
 ## Testing (Milestone 4)
 
-Run everything: `python -m pytest -v` (setup in [SETUP.md](SETUP.md)). Run only the
+Run everything: `python -m pytest -v` (setup in [SETUP.md](docs/SETUP.md)). Run only the
 P0 test cases of section 2: `python -m pytest tests/test_m4_p0.py -v`.
 Per-task regression notes written earlier in the project are kept in
-[testing-task-notes.md](testing-task-notes.md).
+[testing-task-notes.md](docs/testing-task-notes.md).
 
 ### 1. What we test, and why
 
@@ -104,7 +104,7 @@ reconcile the acceptance criterion with it.
 
 ### 3. Automated tests
 
-All cases above are in [tests/test_m4_p0.py](../tests/test_m4_p0.py); the ID is in the
+All cases above are in [tests/test_m4_p0.py](tests/test_m4_p0.py); the ID is in the
 test name (`test_tc_us03_02_to_04_…`) and in the `# TC-…` comment of each parametrize
 row. Tests use a temporary SQLite file per test and the FastAPI `TestClient`
 (no server, no `marketplace.db`). Pure decision-table cases (TC-US08-05) call the
@@ -115,7 +115,7 @@ python -m pytest -v                        # whole suite
 python -m pytest tests/test_m4_p0.py -v    # the 45 M4 P0 cases
 ```
 
-Output of the M4 file: [docs/images/m4/pytest-m4.txt](images/m4/pytest-m4.txt)
+Output of the M4 file: [docs/images/m4/pytest-m4.txt](docs/images/m4/pytest-m4.txt)
 (45 passed). Existing suites (about 1 650 tests: checkout, cart service, pricing,
 rollback, concurrency, browser tests) continue to run in CI.
 
