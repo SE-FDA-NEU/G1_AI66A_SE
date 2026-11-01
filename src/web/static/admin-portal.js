@@ -727,6 +727,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (role) url += `role=${encodeURIComponent(role)}&`;
         if (statusVal) url += `status=${encodeURIComponent(statusVal)}&`;
 
+        elements.usersTbody.setAttribute('aria-busy', 'true');
         try {
             const res = await fetch(url, { headers: authHeaders() });
             if (!res.ok) throw new Error('Failed to load users');
@@ -741,6 +742,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             td.textContent = 'Failed to load user accounts.';
             tr.appendChild(td);
             elements.usersTbody.appendChild(tr);
+        } finally {
+            elements.usersTbody.setAttribute('aria-busy', 'false');
         }
     }
 
@@ -867,6 +870,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let url = '/api/v1/admin/disputes?';
         if (filterVal) url += `status=${encodeURIComponent(filterVal)}`;
 
+        elements.disputesTbody.setAttribute('aria-busy', 'true');
         try {
             const res = await fetch(url, { headers: authHeaders() });
             if (!res.ok) throw new Error('Failed to load disputes');
@@ -881,6 +885,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             td.textContent = 'Failed to load disputes.';
             tr.appendChild(td);
             elements.disputesTbody.appendChild(tr);
+        } finally {
+            elements.disputesTbody.setAttribute('aria-busy', 'false');
         }
     }
 

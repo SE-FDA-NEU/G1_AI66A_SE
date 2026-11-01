@@ -11,7 +11,7 @@
   --color-surface-subtle: #f8fafc;
   --color-text: #0f172a;
   --color-text-secondary: #334155;
-  --color-text-muted: #64748b;
+  --color-text-muted: #526074;
   --color-border: #e2e8f0;
   --color-border-input: #cbd5e1;
   --color-border-hover: #94a3b8;
@@ -26,12 +26,12 @@
   --color-accent-text: #1d4ed8;
 
   /* Status Colors */
-  --color-success: #059669;
+  --color-success: #047857;
   --color-success-bg: #ecfdf5;
   --color-success-border: #a7f3d0;
   --color-success-text: #065f46;
 
-  --color-warning: #d97706;
+  --color-warning: #b45309;
   --color-warning-bg: #fffbeb;
   --color-warning-border: #fde68a;
   --color-warning-text: #92400e;
@@ -778,4 +778,13 @@ table.table tbody tr:last-child td {
   .button {
     width: 100%;
   }
+}
+
+/* Native checkbox/radio are 18px; the whole label is the target, at least 2rem tall (WCAG 2.5.8). */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2rem;
 }

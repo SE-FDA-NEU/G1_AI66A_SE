@@ -8,7 +8,7 @@
   --ios-card-bg: #ffffff;
   --ios-text-primary: #111827;
   --ios-text-secondary: #4b5563;
-  --ios-text-muted: #6b7280;
+  --ios-text-muted: #4b5563;
   --ios-border: #e5e7eb;
   --ios-border-strong: #d1d5db;
   --ios-green: #16a34a;
@@ -84,7 +84,7 @@ body.ios-theme {
 }
 
 .ios-header-sep {
-  color: #cbd5e1;
+  color: #64748b;
   font-weight: 400;
 }
 

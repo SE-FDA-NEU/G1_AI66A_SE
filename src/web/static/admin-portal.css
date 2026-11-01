@@ -495,6 +495,12 @@ body {
     overflow-x: auto;
 }
 
+/* A scrollable region is a keyboard stop, so it must show where focus is. */
+.table-container:focus-visible {
+    outline: 2px solid var(--admin-primary);
+    outline-offset: 2px;
+}
+
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
 textarea:focus-visible, .form-feedback:focus {
     outline: 3px solid #1d4ed8;
