@@ -2,8 +2,6 @@
  * Mini Marketplace - Products, Catalog & Core Marketplace Stylesheet
  * US22 / US01 / US02 / US11: Modern catalog grid, discovery filters, product detail, and responsive layouts.
  */
-@import "base.css";
-
 /* Variables compatibility for existing inline / legacy references */
 :root {
   --color-text: #0f172a;

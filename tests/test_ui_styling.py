@@ -553,7 +553,7 @@ def test_screen_stylesheets_do_not_import_base_css() -> None:
 
 
 def test_admin_and_seller_templates_use_button_design_system_classes() -> None:
-    """Migrated templates use .button* without mixed legacy classes."""
+    """Migrated templates use the .button* convention without mixed legacy classes."""
     for screen_name in ("admin-portal.html", "seller-products.html", "seller-vouchers.html"):
         html = (ROOT / "src" / "web" / "pages" / screen_name).read_text(encoding="utf-8")
         assert not re.search(r'class="[^"]*\bbtn(?:-|[^"]*\bbtn)', html), screen_name

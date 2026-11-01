@@ -2,8 +2,6 @@
  * Mini Marketplace - Seller Shop Vouchers Stylesheet
  * US22 / US16: Shop voucher management, modal dialogs, and validation alerts.
  */
-@import "base.css";
-
 .seller-badge {
   background-color: var(--color-success);
 }

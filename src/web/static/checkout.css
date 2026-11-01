@@ -2,8 +2,6 @@
  * Mini Marketplace - Checkout & Order Confirmation Stylesheet
  * US22 / US04 / US13: Modern design, responsive layout, clear focus and form feedback states.
  */
-@import "base.css";
-
 /* Container Layout */
 main {
   max-width: 780px;

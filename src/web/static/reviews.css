@@ -2,8 +2,6 @@
  * Mini Marketplace - Reviews & Ratings Stylesheet
  * US22 / US15: Modern review cards, rating stars, seller replies, and responsive forms.
  */
-@import "base.css";
-
 .product-rating {
   color: var(--color-warning);
   font-weight: 700;

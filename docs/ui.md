@@ -9,6 +9,13 @@ section 3 is checked against the code by `tests/test_ui_docs_contract.py`.
 The P1 review and notification experience, including its shared navigation entry, is
 documented in [US15 review and notifications](us15-review-notifications.md).
 
+### Shared UI conventions
+
+Core screens load `base.css` once with an HTML `<link>`. Components use the
+`.button*` design-system classes; the older `.btn*` selectors remain CSS aliases
+for legacy screens but must not be added to new markup. JavaScript hooks use
+`data-*` attributes rather than presentation classes.
+
 ## 1. P0 stories and status
 
 | Story | Screen(s) | Route | Status | Issue |

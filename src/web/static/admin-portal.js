@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         cell.textContent = message;
         if (retry) {
             const button = document.createElement('button');
-            button.type = 'button'; button.textContent = 'Retry'; button.className = 'btn btn-secondary';
+            button.type = 'button'; button.textContent = 'Retry'; button.className = 'button button--secondary';
             button.addEventListener('click', retry); cell.append(' ', button);
         }
         row.append(cell); body.append(row);
@@ -327,7 +327,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Close Modals
-    document.querySelectorAll('.btn-cancel-modal').forEach(btn => {
+    document.querySelectorAll('[data-cancel-modal]').forEach(btn => {
         btn.addEventListener('click', () => {
             closeModal();
         });
@@ -403,7 +403,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const tdActions = document.createElement('td');
             const toggleBtn = document.createElement('button');
-            toggleBtn.className = p.is_active ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm';
+            toggleBtn.className = p.is_active ? 'button button--danger button--sm' : 'button button--sm';
             toggleBtn.textContent = p.is_active ? 'Deactivate' : 'Reactivate';
             toggleBtn.id = `catalog-toggle-${p.id}`;
             toggleBtn.setAttribute('aria-label', `${p.is_active ? 'Deactivate' : 'Reactivate'} product ${p.code}`);
@@ -468,13 +468,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const tdActions = document.createElement('td');
             const editBtn = document.createElement('button');
-            editBtn.className = 'btn btn-secondary btn-sm';
+            editBtn.className = 'button button--secondary button--sm';
             editBtn.textContent = 'Edit';
             editBtn.style.marginRight = '0.5rem';
             editBtn.addEventListener('click', () => openEditCategory(cat));
 
             const delBtn = document.createElement('button');
-            delBtn.className = 'btn btn-danger btn-sm';
+            delBtn.className = 'button button--danger button--sm';
             delBtn.textContent = 'Delete';
             editBtn.setAttribute('aria-label', `Edit category ${cat.name}`);
             delBtn.setAttribute('aria-label', `Delete category ${cat.name}`);
@@ -622,7 +622,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const tdActions = document.createElement('td');
             const toggleBtn = document.createElement('button');
-            toggleBtn.className = v.is_active ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
+            toggleBtn.className = v.is_active ? 'button button--secondary button--sm' : 'button button--sm';
             toggleBtn.textContent = v.is_active ? 'Deactivate' : 'Activate';
             toggleBtn.id = `voucher-toggle-${v.id}`;
             toggleBtn.setAttribute('aria-label', `${v.is_active ? 'Deactivate' : 'Activate'} voucher ${v.code}`);
@@ -796,7 +796,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const tdActions = document.createElement('td');
             const modBtn = document.createElement('button');
-            modBtn.className = 'btn btn-secondary btn-sm';
+            modBtn.className = 'button button--secondary button--sm';
             modBtn.textContent = 'Moderate';
             modBtn.addEventListener('click', () => openUserModeration(u));
             tdActions.appendChild(modBtn);
@@ -944,13 +944,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const tdActions = document.createElement('td');
             if (d.status === 'PENDING') {
                 const decideBtn = document.createElement('button');
-                decideBtn.className = 'btn btn-primary btn-sm';
+                decideBtn.className = 'button button--sm';
                 decideBtn.textContent = 'Adjudicate';
                 decideBtn.addEventListener('click', () => openDisputeModal(d));
                 tdActions.appendChild(decideBtn);
             } else {
                 const viewBtn = document.createElement('button');
-                viewBtn.className = 'btn btn-secondary btn-sm';
+                viewBtn.className = 'button button--secondary button--sm';
                 viewBtn.textContent = 'View Notes';
                 viewBtn.addEventListener('click', () => {
                     alert(`Dispute #${d.id} Resolution:\nAction: ${d.status}\nDecided by: ${d.decided_by_name || 'Admin'}\nNotes: ${d.decision_notes || 'None'}`);

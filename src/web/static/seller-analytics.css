@@ -2,8 +2,6 @@
  * Mini Marketplace - Seller Analytics Stylesheet
  * US22 / US18: Clean metrics dashboard, time-series visualization, responsive ranking tables.
  */
-@import "base.css";
-
 .analytics {
   max-width: 1200px;
   margin: 1.5rem auto;
