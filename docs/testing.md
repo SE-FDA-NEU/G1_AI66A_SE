@@ -436,7 +436,7 @@ notifications, an order and a cart line.
 |---|---|---|---|
 | R156-01 | Each page at 320, 375, 390, 768, 1024 and 1440 px | No page-level horizontal scroll (`scrollWidth <= innerWidth`) and no uncaught page error | Per-page/viewport matrix (78 cases) |
 | R156-02 | Visible text on flat backgrounds | Contrast >= 4.5:1, or 3:1 for text >= 24px (or >= 18.66px bold) | In-page luminance check |
-| R156-03 | First six Tab stops | Focus is on screen with an outline or box-shadow ring | Keyboard walk |
+| R156-03 | First six Tab stops | Focused element lies horizontally inside the viewport, overlaps it vertically (it may be taller than the viewport) and shows an outline or box-shadow ring | Keyboard walk plus four off-screen/tall regression cases |
 | R156-04 | Visible input, select, textarea | Has a label, `aria-label`, `aria-labelledby` or title | DOM check |
 | R156-05 | Buttons, checkboxes, radios | Target (or its label) at least 24 x 24 CSS px | Bounding-box check |
 
@@ -447,7 +447,7 @@ Pages: `/products`, `/products/:code`, `/login`, `/cart`, `/checkout`, `/orders`
 Defects found on `main` and fixed in CSS/markup only: success text (3.77:1), warning/rating
 text (3.19:1), muted order text (4.47:1), the order breadcrumb separator (1.47:1), the
 notification time (4.37:1), the "Seller Center" badge (2.54:1), and 18 px checkbox/radio
-labels below the 24 px target. Contrast tokens were darkened (`--color-success`,
+labels below the 24 px target. The stricter focus check then found the scrollable products table on `/seller/products` as a keyboard stop with no ring; it is now a labelled `region` with a visible focus outline. Contrast tokens were darkened (`--color-success`,
 `--color-warning`, `--ios-text-muted`); no layout or DOM contract changed.
 
 Run:

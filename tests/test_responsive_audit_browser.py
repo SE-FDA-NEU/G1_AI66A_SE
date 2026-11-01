@@ -225,7 +225,8 @@ FOCUS_JS = """
   const shadow = s.boxShadow !== 'none';
   const r = el.getBoundingClientRect();
   return {tag: el.tagName.toLowerCase() + (el.id ? '#' + el.id : ''), visibleRing: outline || shadow,
-          onScreen: r.width > 0 && r.height > 0};
+          onScreen: r.width > 0 && r.height > 0 && r.left >= 0 && r.right <= innerWidth
+                    && r.top < innerHeight && r.bottom > 0};
 }
 """
 
@@ -284,3 +285,26 @@ def test_page_is_usable_at_every_viewport(browser, world, role, path, width):
 
     assert errors == []
     assert problems == [], f"{path} @ {width}px:\n" + "\n".join(problems)
+
+
+@pytest.mark.parametrize(
+    ("style", "expected"),
+    [
+        ("position:fixed;left:-9999px;top:10px", False),  # parked off the left edge
+        ("position:fixed;left:10px;top:-9999px", False),  # above the viewport
+        ("position:fixed;right:-9999px;top:10px", False),  # beyond the right edge
+        ("position:fixed;left:10px;top:10px", True),
+        ("position:fixed;left:10px;top:10px;height:2000px", True),  # taller than the viewport
+    ],
+)
+def test_focus_check_requires_the_element_to_be_in_the_viewport(browser, style, expected):
+    page = browser.new_page(viewport={"width": 390, "height": 600})
+    try:
+        page.set_content(f'<button style="{style};outline:2px solid #000">Go</button>')
+        page.keyboard.press("Tab")
+
+        focus = page.evaluate(FOCUS_JS)
+
+        assert focus["onScreen"] is expected
+    finally:
+        page.close()
