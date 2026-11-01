@@ -14,10 +14,9 @@ Setup guide:    https://github.com/SE-FDA-NEU/G1_AI66A_SE/blob/main/docs/SETUP.m
 Submitted by:   Nguyen Quang Minh
 ```
 
-## Page 2 — Project board screenshots
+## Page 2 — Project board screenshot
 
-**Submission day (2026-11-02):** board `g1_ai66a_se` (SE-FDA-NEU). Todo 1, In Progress 0, In review 0, Done 105.
-
+![Project board](docs/images/m4/Project_Board_Current_2026-11-02.jpg)
 
 ## Page 3 — Output of `python -m pytest tests/test_m4_p0.py -v`
 
