@@ -175,22 +175,6 @@ def test_checkout_omitted_payment_method_uses_legacy_cod_compatibility(engine):
     with Session(engine) as session:
         assert session.get(Order, result.id).payment_method == "COD"
 
-def test_checkout_persists_selected_payment_method_and_receipt(engine):
-    add_product(engine, "P-100")
-    fill(engine)
-    result, created = place(engine, body={**BODY, "payment_method": "VIETQR"})
-    assert created
-    with Session(engine) as session:
-        stored = session.get(Order, result.id)
-        assert stored is not None and stored.payment_method == "VIETQR"
-        assert receipt(session, 2, result.id).payment_method == "VIETQR"
-def test_checkout_omitted_payment_method_uses_legacy_cod_compatibility(engine):
-    add_product(engine, "P-100")
-    fill(engine)
-    result, created = place(engine)
-    assert created
-    with Session(engine) as session:
-        assert session.get(Order, result.id).payment_method == "COD"
 
 
 @pytest.mark.parametrize(
