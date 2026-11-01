@@ -222,75 +222,197 @@ def test_link_buttons_in_core_templates_use_button_class() -> None:
 
 
 def test_control_aliases_preserve_native_sizing_and_textarea_min_height() -> None:
-    """Control aliases .input, .select, .textarea must integrate into native control rules.
+    """Control aliases .input, .select, .textarea must preserve the native control sizing contract.
 
-    - .textarea must preserve min-height: 96px on desktop and mobile instead of collapsing to 42px.
-    - .select and .input must expand to 44px on mobile for touch compliance.
-    - No isolated alias rule may override native controls with a duplicate declaration.
+    - Desktop contract:
+      * Single-line controls (input, select, .input, .select) have min-height:
+        var(--control-height).
+      * Multiline controls (textarea, .textarea) have min-height: 96px and resize: vertical.
+      * textareas must never receive min-height: var(--control-height) to prevent collapsing.
+    - Responsive mobile contract:
+      * Single-line controls expand to min-height: 44px and font-size: 16px (touch compliance).
+      * Multiline controls preserve min-height: 96px and font-size: 16px.
+    - In both desktop and mobile, native controls and their corresponding aliases must produce
+      identical sizing contracts in the CSS cascade.
     """
     css = BASE_CSS.read_text(encoding="utf-8")
 
-    # 1. Desktop base rule includes .input, .select, .textarea alongside native elements
-    base_rule_match = re.search(
-        r"input:not\(\[type\]\)[\s\S]*?textarea[\s\S]*?select[\s\S]*?\{[\s\S]*?min-height:\s*var\(--control-height\);[\s\S]*?\}",
+    # 1. Base control box model rule includes all controls and aliases
+    common_box_match = re.search(
+        r"input:not\(\[type\]\)[\s\S]*?textarea[\s\S]*?select[\s\S]*?\.input[\s\S]*?\.select[\s\S]*?\.textarea[\s\S]*?\{[\s\S]*?display:\s*block;[\s\S]*?width:\s*100%;[\s\S]*?\}",
         css,
     )
-    assert base_rule_match, "Base control rule with --control-height must exist"
-    base_selectors = base_rule_match.group(0).split("{")[0]
-    assert ".input" in base_selectors
-    assert ".select" in base_selectors
-    assert ".textarea" in base_selectors
+    assert common_box_match, (
+        "Base control box-model rule must include all native and alias selectors"
+    )
 
-    # 2. textarea and .textarea must share the 96px minimum height
-    ta_match = re.search(r"textarea,\s*\.textarea\s*\{[\s\S]*?min-height:\s*96px;[\s\S]*?\}", css)
-    assert ta_match, "textarea and .textarea must both specify min-height: 96px"
-
-    # 3. No duplicate isolated class rule resetting .textarea to var(--control-height)
-    for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", css):
+    # 2. Desktop single-line sizing rule specifies min-height: var(--control-height)
+    # and strictly excludes textarea and .textarea
+    single_line_selectors = None
+    for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", re.sub(r"@media[\s\S]*?\}\s*\}", "", css)):
         sel_text, body = m.group(1).strip(), m.group(2).strip()
-        if "min-height" in body:
-            selectors = [s.strip() for s in sel_text.split(",")]
-            # An isolated alias rule targets .textarea without native textarea
-            has_ta_alias = any(s == ".textarea" for s in selectors)
-            has_native_ta = any(s == "textarea" for s in selectors)
-            if has_ta_alias and not has_native_ta:
-                raise AssertionError(
-                    f"Found conflicting isolated .textarea rule: {sel_text} {{ {body} }}"
-                )
+        if "min-height: var(--control-height)" in body:
+            single_line_selectors = [s.strip() for s in sel_text.split(",")]
+            break
+    assert single_line_selectors, "Single-line control sizing rule with --control-height must exist"
+    assert ".input" in single_line_selectors
+    assert ".select" in single_line_selectors
+    assert "textarea" not in single_line_selectors, (
+        "textarea must NOT be in single-line control sizing rule"
+    )
+    assert ".textarea" not in single_line_selectors, (
+        ".textarea must NOT be in single-line control sizing rule"
+    )
 
-    # 4. Mobile media query includes .input and .select at 44px, and textarea / .textarea at 96px
+    # 3. Multiline sizing rule specifies min-height: 96px for textarea and .textarea
+    ta_match = re.search(
+        r"textarea,\s*\.textarea\s*\{[\s\S]*?min-height:\s*96px;[\s\S]*?resize:\s*vertical;[\s\S]*?\}",
+        css,
+    )
+    assert ta_match, "textarea and .textarea must share min-height: 96px and resize: vertical"
+
+    # 4. Mobile media query includes .input/.select at 44px, and textarea/.textarea at 96px
     media_match = re.search(r"@media\s*\(max-width:\s*640px\)\s*\{([\s\S]+?)\}\s*@media", css)
     assert media_match, "Mobile media query (max-width: 640px) must exist"
     mobile_css = media_match.group(1)
 
-    mobile_controls_match = re.search(
-        r"input:not\(\[type\]\)[\s\S]*?select[\s\S]*?\{[\s\S]*?min-height:\s*44px;[\s\S]*?\}",
-        mobile_css,
-    )
-    assert mobile_controls_match, "Mobile 44px min-height rule must exist"
-    mobile_sel_block = mobile_controls_match.group(0).split("{")[0]
-    assert ".input" in mobile_sel_block
-    assert ".select" in mobile_sel_block
+    mobile_controls_selectors = None
+    mobile_ta_selectors = None
+    for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", mobile_css):
+        sel_text, body = m.group(1).strip(), m.group(2).strip()
+        if "min-height: 44px" in body:
+            mobile_controls_selectors = [s.strip() for s in sel_text.split(",")]
+        elif "min-height: 96px" in body:
+            mobile_ta_selectors = [s.strip() for s in sel_text.split(",")]
 
-    mobile_ta_match = re.search(
-        r"textarea,\s*\.textarea\s*\{[\s\S]*?min-height:\s*96px;[\s\S]*?\}",
-        mobile_css,
+    assert mobile_controls_selectors, "Mobile 44px min-height rule must exist"
+    assert ".input" in mobile_controls_selectors
+    assert ".select" in mobile_controls_selectors
+    assert "textarea" not in mobile_controls_selectors
+    assert ".textarea" not in mobile_controls_selectors
+
+    assert mobile_ta_selectors, "Mobile textarea 96px min-height rule must exist"
+    assert "textarea" in mobile_ta_selectors
+    assert ".textarea" in mobile_ta_selectors
+
+    # 5. Verify CSS cascade sizing contract requirements for native vs alias controls
+    def evaluate_cascade_sizing(
+        tag: str, classes: set[str], input_type: str | None = "text", in_mobile: bool = False
+    ) -> dict[str, str]:
+        """Determine winning min-height and font-size declarations for a given element."""
+        declarations: dict[str, tuple[tuple[int, int, int], int, str]] = {}
+        rule_idx = 0
+
+        # Parse rules from desktop or mobile media block
+        css_to_parse = mobile_css if in_mobile else re.sub(r"@media[\s\S]*?\}\s*\}", "", css)
+        clean = re.sub(r"/\*[\s\S]*?\*/", "", css_to_parse)
+
+        for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", clean):
+            raw_selectors, body = m.group(1).strip(), m.group(2).strip()
+            if raw_selectors.startswith("@"):
+                continue
+            rule_idx += 1
+            for sel in (s.strip() for s in raw_selectors.split(",")):
+                sel_tag_match = re.match(r"^([a-z0-9_-]+)", sel)
+                if sel_tag_match and sel_tag_match.group(1) != tag:
+                    continue
+
+                if tag == "input":
+                    type_match = re.search(r'\[type="([^"]+)"\]', sel)
+                    if type_match:
+                        if type_match.group(1) != input_type:
+                            continue
+                    elif ":not([type])" in sel:
+                        if input_type is not None:
+                            continue
+
+                sel_classes = set(re.findall(r"\.([\w-]+)", sel))
+                if sel_classes and not sel_classes.issubset(classes):
+                    continue
+                if not sel_classes and not sel_tag_match:
+                    continue
+
+                class_attr_count = len(sel_classes) + (1 if "[" in sel or ":not" in sel else 0)
+                specificity = (0, class_attr_count, 1 if sel_tag_match else 0)
+                for decl in body.split(";"):
+                    if ":" in decl:
+                        prop, val = decl.split(":", 1)
+                        prop, val = prop.strip(), val.strip()
+                        if prop in ("min-height", "font-size"):
+                            cur = declarations.get(prop)
+                            is_better = cur is None or specificity > cur[0] or (
+                                specificity == cur[0] and rule_idx >= cur[1]
+                            )
+                            if is_better:
+                                declarations[prop] = (specificity, rule_idx, val)
+
+        return {k: v[2] for k, v in declarations.items()}
+
+    # Desktop contract assertions: native controls and aliases must produce identical sizing
+    native_input_desktop = evaluate_cascade_sizing(
+        "input", set(), input_type="text", in_mobile=False
     )
-    assert mobile_ta_match, "Mobile textarea and .textarea must preserve min-height: 96px"
+    untyped_input_desktop = evaluate_cascade_sizing(
+        "input", set(), input_type=None, in_mobile=False
+    )
+    alias_input_desktop = evaluate_cascade_sizing(
+        "input", {"input"}, input_type="text", in_mobile=False
+    )
+    assert native_input_desktop.get("min-height") == "var(--control-height)"
+    assert untyped_input_desktop.get("min-height") == "var(--control-height)"
+    assert alias_input_desktop.get("min-height") == native_input_desktop.get("min-height")
+
+    native_select_desktop = evaluate_cascade_sizing("select", set(), in_mobile=False)
+    alias_select_desktop = evaluate_cascade_sizing("select", {"select"}, in_mobile=False)
+    assert native_select_desktop.get("min-height") == "var(--control-height)"
+    assert alias_select_desktop.get("min-height") == native_select_desktop.get("min-height")
+
+    native_ta_desktop = evaluate_cascade_sizing("textarea", set(), in_mobile=False)
+    alias_ta_desktop = evaluate_cascade_sizing("textarea", {"textarea"}, in_mobile=False)
+    standalone_ta_desktop = evaluate_cascade_sizing("div", {"textarea"}, in_mobile=False)
+    assert native_ta_desktop.get("min-height") == "96px"
+    assert alias_ta_desktop.get("min-height") == "96px"
+    assert standalone_ta_desktop.get("min-height") == "96px"
+
+    # Mobile contract assertions: native controls and aliases must produce identical sizing
+    native_input_mobile = evaluate_cascade_sizing("input", set(), in_mobile=True)
+    alias_input_mobile = evaluate_cascade_sizing("input", {"input"}, in_mobile=True)
+    assert native_input_mobile.get("min-height") == "44px"
+    assert native_input_mobile.get("font-size") == "16px"
+    assert alias_input_mobile.get("min-height") == native_input_mobile.get("min-height")
+    assert alias_input_mobile.get("font-size") == native_input_mobile.get("font-size")
+
+    native_select_mobile = evaluate_cascade_sizing("select", set(), in_mobile=True)
+    alias_select_mobile = evaluate_cascade_sizing("select", {"select"}, in_mobile=True)
+    assert native_select_mobile.get("min-height") == "44px"
+    assert native_select_mobile.get("font-size") == "16px"
+    assert alias_select_mobile.get("min-height") == native_select_mobile.get("min-height")
+    assert alias_select_mobile.get("font-size") == native_select_mobile.get("font-size")
+
+    native_ta_mobile = evaluate_cascade_sizing("textarea", set(), in_mobile=True)
+    alias_ta_mobile = evaluate_cascade_sizing("textarea", {"textarea"}, in_mobile=True)
+    standalone_ta_mobile = evaluate_cascade_sizing("div", {"textarea"}, in_mobile=True)
+    assert native_ta_mobile.get("min-height") == "96px"
+    assert native_ta_mobile.get("font-size") == "16px"
+    assert alias_ta_mobile.get("min-height") == "96px"
+    assert alias_ta_mobile.get("font-size") == "16px"
+    assert standalone_ta_mobile.get("min-height") == "96px"
+    assert standalone_ta_mobile.get("font-size") == "16px"
 
 
 def test_semantic_badge_variants_resist_order_stylesheet_cascade_override() -> None:
     """Semantic badge variants must have higher specificity than the page-specific .badge rule.
 
-    When base.css and order.css are both loaded, .badge--success, .badge--warning,
-    .badge--danger, and .badge--info must retain their semantic foreground/background
-    and not be overridden by the order stylesheet's neutral .badge colors.
+    When base.css and order.css are both loaded, all supported variants (.badge--success,
+    .badge--warning, .badge--danger, and .badge--info) must retain their intended semantic
+    foreground and background colors, and must not be overridden by the order stylesheet's
+    neutral .badge colors (#475569 / #f1f5f9).
     """
     base_css = BASE_CSS.read_text(encoding="utf-8")
     order_css = ORDER_CSS.read_text(encoding="utf-8")
 
     # 1. Base stylesheet must declare compound selectors (.badge.badge--*) with
-    # specificity (0, 2, 0)
+    # specificity (0, 2, 0) for all supported variants
     for variant in ("neutral", "success", "warning", "danger", "info"):
         compound_selector = f".badge.badge--{variant}"
         assert compound_selector in base_css, (
@@ -303,7 +425,7 @@ def test_semantic_badge_variants_resist_order_stylesheet_cascade_override() -> N
     order_badge_block = order_badge_match.group(1)
     assert "!important" not in order_badge_block
 
-    # 3. Simulate the CSS cascade for an element: <span class="badge badge--success">
+    # 3. Simulate the CSS cascade for badge elements across both stylesheets
     def selector_matches_badge(sel: str, element_classes: set[str]) -> bool:
         sel = sel.strip()
         if "#" in sel:
@@ -363,27 +485,53 @@ def test_semantic_badge_variants_resist_order_stylesheet_cascade_override() -> N
                                     winning[prop] = (specificity, rule_index, val)
         return winning
 
-    success_decls = calculate_winning_declarations(
-        {"badge", "badge--success"}, ["color", "background", "background-color"]
-    )
-    assert success_decls["color"][2] == "var(--color-success-text)", (
-        f"badge--success color overridden: {success_decls['color']}"
-    )
-    success_bg = (success_decls.get("background") or success_decls.get("background-color"))[2]
-    assert success_bg == "var(--color-success-bg)", (
-        f"badge--success background overridden: {success_bg}"
-    )
+    # Verify ALL 4 supported semantic variants retain their intended colors
+    expected_variants = {
+        "success": ("var(--color-success-text)", "var(--color-success-bg)"),
+        "warning": ("var(--color-warning-text)", "var(--color-warning-bg)"),
+        "danger": ("var(--color-danger-text)", "var(--color-danger-bg)"),
+        "info": ("var(--color-info-text)", "var(--color-info-bg)"),
+    }
 
-    danger_decls = calculate_winning_declarations(
-        {"badge", "badge--danger"}, ["color", "background", "background-color"]
-    )
-    assert danger_decls["color"][2] == "var(--color-danger-text)"
-    danger_bg = (danger_decls.get("background") or danger_decls.get("background-color"))[2]
-    assert danger_bg == "var(--color-danger-bg)"
+    for variant_name, (expected_color, expected_bg) in expected_variants.items():
+        # Test compound class: <span class="badge badge--variant">
+        decls = calculate_winning_declarations(
+            {"badge", f"badge--{variant_name}"}, ["color", "background", "background-color"]
+        )
+        assert decls["color"][2] == expected_color, (
+            f"badge--{variant_name} color overridden: {decls['color']}"
+        )
+        bg = (decls.get("background") or decls.get("background-color"))[2]
+        assert bg == expected_bg, (
+            f"badge--{variant_name} background overridden: {bg}"
+        )
+        # Explicitly verify neutral colors did not win
+        assert decls["color"][2] != "#475569", (
+            f"badge--{variant_name} color must not be neutral #475569"
+        )
+        assert bg != "#f1f5f9", f"badge--{variant_name} background must not be neutral #f1f5f9"
 
+        # Test standalone class: <span class="badge--variant">
+        standalone_decls = calculate_winning_declarations(
+            {f"badge--{variant_name}"}, ["color", "background", "background-color"]
+        )
+        assert standalone_decls["color"][2] == expected_color
+        s_bg = (standalone_decls.get("background") or standalone_decls.get("background-color"))[2]
+        assert s_bg == expected_bg
 
+    # Neutral variant retains subtle tokens
     neutral_decls = calculate_winning_declarations(
+        {"badge", "badge--neutral"}, ["color", "background", "background-color"]
+    )
+    assert neutral_decls["color"][2] == "var(--color-text-secondary)"
+    neutral_bg = (
+        neutral_decls.get("background") or neutral_decls.get("background-color")
+    )[2]
+    assert neutral_bg == "var(--color-surface-subtle)"
+
+    # Default unstyled badge on order page gets neutral order.css styling
+    default_decls = calculate_winning_declarations(
         {"badge"}, ["color", "background-color"]
     )
-    assert neutral_decls["color"][2] == "#475569"
-    assert neutral_decls["background-color"][2] == "#f1f5f9"
+    assert default_decls["color"][2] == "#475569"
+    assert default_decls["background-color"][2] == "#f1f5f9"

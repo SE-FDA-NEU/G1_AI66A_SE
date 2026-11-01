@@ -606,13 +606,26 @@ class TestRevenueAnalytics:
         assert body["meta"]["period"] == "monthly"
         assert body["meta"]["group_by"] == "monthly"
         bucket = next(b for b in body["data"] if b["period_start"] == first_day.isoformat())
-        assert bucket["gross_order_value"] == 1_000_000
-        assert bucket["completed_revenue"] == 900_000
-        assert bucket["pending_escrow_revenue"] == 100_000
-        assert bucket["revenue"] == 900_000
-        assert bucket["orders"] == 2
-        assert bucket["items_sold"] == 8
-        assert bucket["cancellation_rate"] == 0.0
+        if today.day == 1:
+            # On the 1st of the month, yesterday's Order 2 (500k) belongs to the previous month;
+            # this month contains Order 1 (400k COMPLETED) and Order 3 (100k PENDING)
+            assert bucket["gross_order_value"] == 500_000
+            assert bucket["completed_revenue"] == 400_000
+            assert bucket["pending_escrow_revenue"] == 100_000
+            assert bucket["revenue"] == 400_000
+            assert bucket["orders"] == 1
+            assert bucket["items_sold"] == 3
+            assert bucket["cancellation_rate"] == 0.0
+        else:
+            # Yesterday Order 2: 500k COMPLETED, Today Order 1: 400k COMPLETED,
+            # Order 3: 100k PENDING
+            assert bucket["gross_order_value"] == 1_000_000
+            assert bucket["completed_revenue"] == 900_000
+            assert bucket["pending_escrow_revenue"] == 100_000
+            assert bucket["revenue"] == 900_000
+            assert bucket["orders"] == 2
+            assert bucket["items_sold"] == 8
+            assert bucket["cancellation_rate"] == 0.0
 
     def test_seller_isolation_multiseller_data(self, client: TestClient, us18_data):
         """Seller A must not see Seller B's orders and Seller B must not see Seller A's."""

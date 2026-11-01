@@ -344,7 +344,6 @@ select,
 .textarea {
   display: block;
   width: 100%;
-  min-height: var(--control-height);
   padding: 0.55rem 0.85rem;
   font-family: inherit;
   font-size: 0.95rem;
@@ -355,6 +354,21 @@ select,
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+
+input:not([type]),
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+input[type="date"],
+select,
+.input,
+.select {
+  min-height: var(--control-height);
 }
 
 textarea,

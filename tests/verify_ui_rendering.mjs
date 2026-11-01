@@ -223,24 +223,36 @@ try {
     "Danger button hover color must be white or var(--color-on-accent)"
   );
 
-  // Verify desktop control sizing for .input, .select, and .textarea aliases
-  console.log("Checking desktop control aliases (.input, .select, .textarea) sizing...");
+  // Verify desktop control sizing for native controls vs .input, .select, and .textarea aliases
+  console.log("Checking desktop control sizing contract (native vs .input, .select, .textarea aliases)...");
   const desktopControlAliases = await send("Runtime.evaluate", {
     expression: `(() => {
       const container = document.createElement("div");
       container.innerHTML = \`
+        <input id="native-input" value="test" />
         <input class="input" id="alias-input" value="test" />
+        <select id="native-select"><option>1</option></select>
         <select class="select" id="alias-select"><option>1</option></select>
+        <textarea id="native-textarea">sample</textarea>
         <textarea class="textarea" id="alias-textarea">sample</textarea>
+        <div class="textarea" id="alias-div-textarea">sample</div>
       \`;
       document.body.appendChild(container);
+      const natIn = document.getElementById("native-input");
       const inEl = document.getElementById("alias-input");
+      const natSel = document.getElementById("native-select");
       const selEl = document.getElementById("alias-select");
+      const natTa = document.getElementById("native-textarea");
       const taEl = document.getElementById("alias-textarea");
+      const divTaEl = document.getElementById("alias-div-textarea");
       const res = {
-        inputMinHeight: window.getComputedStyle(inEl).minHeight,
-        selectMinHeight: window.getComputedStyle(selEl).minHeight,
-        textareaMinHeight: window.getComputedStyle(taEl).minHeight,
+        nativeInputMinHeight: window.getComputedStyle(natIn).minHeight,
+        aliasInputMinHeight: window.getComputedStyle(inEl).minHeight,
+        nativeSelectMinHeight: window.getComputedStyle(natSel).minHeight,
+        aliasSelectMinHeight: window.getComputedStyle(selEl).minHeight,
+        nativeTextareaMinHeight: window.getComputedStyle(natTa).minHeight,
+        aliasTextareaMinHeight: window.getComputedStyle(taEl).minHeight,
+        aliasDivTextareaMinHeight: window.getComputedStyle(divTaEl).minHeight,
       };
       container.remove();
       return res;
@@ -248,10 +260,14 @@ try {
     returnByValue: true,
   });
   const dAliases = desktopControlAliases.result.value;
-  console.log("Desktop control alias metrics:", dAliases);
-  assert.equal(dAliases.inputMinHeight, "42px", ".input min-height must be 42px on desktop");
-  assert.equal(dAliases.selectMinHeight, "42px", ".select min-height must be 42px on desktop");
-  assert.equal(dAliases.textareaMinHeight, "96px", ".textarea min-height must preserve 96px on desktop (not collapse to 42px)");
+  console.log("Desktop control sizing contract metrics:", dAliases);
+  assert.equal(dAliases.nativeInputMinHeight, dAliases.aliasInputMinHeight, ".input alias must match native input sizing contract");
+  assert.equal(dAliases.aliasInputMinHeight, "42px", ".input min-height must be 42px on desktop");
+  assert.equal(dAliases.nativeSelectMinHeight, dAliases.aliasSelectMinHeight, ".select alias must match native select sizing contract");
+  assert.equal(dAliases.aliasSelectMinHeight, "42px", ".select min-height must be 42px on desktop");
+  assert.equal(dAliases.nativeTextareaMinHeight, "96px", "Native textarea must have 96px min-height on desktop");
+  assert.equal(dAliases.aliasTextareaMinHeight, "96px", "<textarea class='textarea'> must preserve 96px min-height");
+  assert.equal(dAliases.aliasDivTextareaMinHeight, "96px", ".textarea alias must preserve 96px min-height on desktop");
 
   // Screenshot desktop checkout
   const scDesktopCheckout = await send("Page.captureScreenshot", { format: "png" });
@@ -283,24 +299,40 @@ try {
   assert.equal(mMetrics.minHeight, "44px", "Mobile input min-height must be 44px");
   assert.equal(mMetrics.fontSize, "16px", "Mobile input font size must be 16px to prevent iOS auto-zoom");
 
-  // Verify mobile control aliases (.input, .select, .textarea)
-  console.log("Checking mobile control aliases (.input, .select, .textarea) sizing...");
+  // Verify mobile control sizing contract (native vs .input, .select, .textarea aliases)
+  console.log("Checking mobile control sizing contract (native vs .input, .select, .textarea aliases)...");
   const mobileControlAliases = await send("Runtime.evaluate", {
     expression: `(() => {
       const container = document.createElement("div");
       container.innerHTML = \`
+        <input id="native-m-input" value="test" />
         <input class="input" id="alias-m-input" value="test" />
+        <select id="native-m-select"><option>1</option></select>
         <select class="select" id="alias-m-select"><option>1</option></select>
+        <textarea id="native-m-textarea">sample</textarea>
         <textarea class="textarea" id="alias-m-textarea">sample</textarea>
+        <div class="textarea" id="alias-m-div-textarea">sample</div>
       \`;
       document.body.appendChild(container);
+      const natIn = document.getElementById("native-m-input");
       const inEl = document.getElementById("alias-m-input");
+      const natSel = document.getElementById("native-m-select");
       const selEl = document.getElementById("alias-m-select");
+      const natTa = document.getElementById("native-m-textarea");
       const taEl = document.getElementById("alias-m-textarea");
+      const divTaEl = document.getElementById("alias-m-div-textarea");
       const res = {
-        inputMinHeight: window.getComputedStyle(inEl).minHeight,
-        selectMinHeight: window.getComputedStyle(selEl).minHeight,
-        textareaMinHeight: window.getComputedStyle(taEl).minHeight,
+        nativeInputMinHeight: window.getComputedStyle(natIn).minHeight,
+        aliasInputMinHeight: window.getComputedStyle(inEl).minHeight,
+        nativeSelectMinHeight: window.getComputedStyle(natSel).minHeight,
+        aliasSelectMinHeight: window.getComputedStyle(selEl).minHeight,
+        nativeTextareaMinHeight: window.getComputedStyle(natTa).minHeight,
+        aliasTextareaMinHeight: window.getComputedStyle(taEl).minHeight,
+        aliasDivTextareaMinHeight: window.getComputedStyle(divTaEl).minHeight,
+        nativeInputFontSize: window.getComputedStyle(natIn).fontSize,
+        aliasInputFontSize: window.getComputedStyle(inEl).fontSize,
+        nativeTextareaFontSize: window.getComputedStyle(natTa).fontSize,
+        aliasTextareaFontSize: window.getComputedStyle(taEl).fontSize,
       };
       container.remove();
       return res;
@@ -308,10 +340,18 @@ try {
     returnByValue: true,
   });
   const mAliases = mobileControlAliases.result.value;
-  console.log("Mobile control alias metrics:", mAliases);
-  assert.equal(mAliases.inputMinHeight, "44px", ".input min-height must be 44px on mobile");
-  assert.equal(mAliases.selectMinHeight, "44px", ".select min-height must be 44px on mobile (overriding 42px)");
-  assert.equal(mAliases.textareaMinHeight, "96px", ".textarea min-height must preserve 96px on mobile");
+  console.log("Mobile control sizing contract metrics:", mAliases);
+  assert.equal(mAliases.nativeInputMinHeight, mAliases.aliasInputMinHeight, ".input alias must match native input 44px min-height on mobile");
+  assert.equal(mAliases.aliasInputMinHeight, "44px", ".input min-height must be 44px on mobile");
+  assert.equal(mAliases.nativeSelectMinHeight, mAliases.aliasSelectMinHeight, ".select alias must match native select 44px min-height on mobile");
+  assert.equal(mAliases.aliasSelectMinHeight, "44px", ".select min-height must be 44px on mobile");
+  assert.equal(mAliases.nativeTextareaMinHeight, "96px", "Native textarea must preserve 96px min-height on mobile");
+  assert.equal(mAliases.aliasTextareaMinHeight, "96px", "<textarea class='textarea'> must preserve 96px min-height on mobile");
+  assert.equal(mAliases.aliasDivTextareaMinHeight, "96px", ".textarea alias must preserve 96px min-height on mobile");
+  assert.equal(mAliases.nativeInputFontSize, "16px", "Native input font size must be 16px on mobile");
+  assert.equal(mAliases.aliasInputFontSize, "16px", ".input alias font size must be 16px on mobile");
+  assert.equal(mAliases.nativeTextareaFontSize, "16px", "Native textarea font size must be 16px on mobile");
+  assert.equal(mAliases.aliasTextareaFontSize, "16px", ".textarea alias font size must be 16px on mobile");
 
   const scMobileCheckout = await send("Page.captureScreenshot", { format: "png" });
   await writeFile(join(OUTPUT_DIR, "mobile-checkout.png"), Buffer.from(scMobileCheckout.data, "base64"));
