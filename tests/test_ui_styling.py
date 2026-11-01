@@ -13,6 +13,20 @@ CART_HTML = ROOT / "src" / "web" / "pages" / "cart.html"
 PRODUCT_DETAIL_HTML = ROOT / "src" / "web" / "pages" / "product-detail.html"
 ORDER_CSS = ROOT / "src" / "web" / "static" / "order.css"
 
+CORE_SCREENS = [
+    "products.html",
+    "product-detail.html",
+    "cart.html",
+    "checkout.html",
+    "order.html",
+    "seller-products.html",
+    "seller-product-new.html",
+    "seller-orders.html",
+    "seller-analytics.html",
+    "seller-vouchers.html",
+    "admin-portal.html",
+]
+
 
 class InputCollector(HTMLParser):
     """Collect all input elements with their attributes and locations."""
