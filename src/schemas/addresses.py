@@ -66,9 +66,9 @@ def delivery_validation_errors(errors: list[dict], body: object, checkout: bool)
     allowed = set(AddressCreate.model_fields) | {"version"}
     if checkout:
         allowed = (
-            {"address_id", "address_version"}
+            {"address_id", "address_version", "payment_method"}
             if branch.startswith("Saved")
-            else {"recipient_name", "phone_number", "delivery_address"}
+            else {"recipient_name", "phone_number", "delivery_address", "payment_method"}
         )
     for error in errors:
         loc = error.get("loc", ())

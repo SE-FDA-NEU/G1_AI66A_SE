@@ -15,6 +15,7 @@ from src.database import engine
 from src.models.account_audit_log import AccountAuditLog
 from src.models.cart_item import CartItem
 from src.models.category import Category
+from src.models.category_audit_log import CategoryAuditLog
 from src.models.notification import Notification
 from src.models.order import Order
 from src.models.order_history import OrderHistory
@@ -45,6 +46,7 @@ def portal_setup():
         session.exec(delete(CartItem))
 
         if adm_users:
+            session.exec(delete(CategoryAuditLog).where(CategoryAuditLog.admin_id.in_(adm_users)))
             adm_prods = session.exec(
                 select(Product.id).where(
                     Product.seller_id.in_(adm_users) | Product.code.like("ADM-%")
