@@ -246,6 +246,7 @@
         <div class="modal-dialog">
             <h3 id="modal-category-title">Add Category</h3>
             <form id="form-category">
+                <p class="field-hint">Fields marked * are required.</p>
                 <input type="hidden" id="category-id">
                 <div class="form-group">
                     <label for="category-name">Category Name *</label>
@@ -274,6 +275,7 @@
         <div class="modal-dialog">
             <h3 id="modal-voucher-title">Create Platform Voucher</h3>
             <form id="form-voucher">
+                <p class="field-hint">Fields marked * are required.</p>
                 <div class="form-group">
                     <label for="voucher-code">Voucher Code * (3-32 characters, uppercase)</label>
                     <input type="text" id="voucher-code" required minlength="3" maxlength="32" class="form-input" placeholder="e.g. PLATFORM10">
@@ -330,6 +332,7 @@
             <h3>Manage User Account Status</h3>
             <p id="modal-user-desc" class="subtitle"></p>
             <form id="form-user-status">
+                <p class="field-hint">Fields marked * are required.</p>
                 <input type="hidden" id="user-status-id">
                 <div class="form-group">
                     <label for="user-status-select">Account Status *</label>
@@ -358,6 +361,7 @@
             <h3>Adjudicate Return Dispute</h3>
             <div id="dispute-modal-summary" class="dispute-summary-card"></div>
             <form id="form-dispute-decision">
+                <p class="field-hint">Fields marked * are required.</p>
                 <input type="hidden" id="dispute-decision-id">
                 <div class="form-group">
                     <label for="dispute-action">Adjudication Action *</label>

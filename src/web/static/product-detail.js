@@ -527,10 +527,10 @@ function renderSellerVariant(variant) {
   const form = document.createElement("form");
   form.className = "variant-edit-form";
   const values = [
-    ["SKU", variant.sku, "text"],
-    ["Option name", variant.name, "text"],
-    ["Price (VND)", variant.price, "number"],
-    ["Physical stock", variant.stock_quantity, "number"],
+    ["SKU *", variant.sku, "text"],
+    ["Option name *", variant.name, "text"],
+    ["Price (VND) *", variant.price, "number"],
+    ["Physical stock *", variant.stock_quantity, "number"],
     ["Image URL", variant.image_url || "", "url"],
   ];
   const inputs = [];
@@ -823,7 +823,7 @@ function appendSellerReplyForm(card, review) {
   const form = document.createElement("form");
   form.className = "seller-reply-form";
   const label = document.createElement("label");
-  label.textContent = review.seller_reply ? "Update your reply" : "Reply to this review";
+  label.textContent = review.seller_reply ? "Update your reply *" : "Reply to this review *";
   const input = document.createElement("textarea");
   input.id = `seller-reply-${review.id}`;
   label.htmlFor = input.id;
