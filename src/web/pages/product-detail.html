@@ -35,6 +35,7 @@
         <select id="product-variant" hidden></select>
         <p id="product-stock" class="product-detail__stock"></p>
         <form id="add-to-cart-form" class="cart-form">
+          <p class="field-hint">Fields marked * are required.</p>
           <label for="product-quantity">Quantity *</label>
           <input id="product-quantity" type="number" min="1" value="1" required>
           <button id="add-to-cart" class="button" type="submit">Add to Cart</button>
@@ -44,6 +45,7 @@
     </section>
     <section id="variant-manager" class="review-form" aria-labelledby="variant-manager-heading" hidden>
       <h2 id="variant-manager-heading">Manage product options</h2>
+      <p class="field-hint">Fields marked * are required.</p>
       <p id="variant-manager-status" class="state__message" role="status" aria-live="polite"></p>
       <form id="variant-create-form">
         <label for="variant-sku">SKU *</label>
@@ -70,6 +72,7 @@
     </section>
     <section id="review-form-section" class="review-form" aria-labelledby="review-form-heading" hidden>
       <h2 id="review-form-heading">Review a purchase</h2>
+      <p class="field-hint">Fields marked * are required.</p>
       <p id="review-login-prompt" hidden>
         <a id="review-login-link" href="/login">Log in as the buyer who completed this purchase to review it.</a>
       </p>

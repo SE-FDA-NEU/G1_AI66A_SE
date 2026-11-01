@@ -57,6 +57,7 @@
   <div id="voucher-modal" class="modal-overlay" hidden>
     <div class="modal-dialog">
       <h2>Create shop voucher</h2>
+      <p class="field-hint">Fields marked * are required.</p>
       <form id="voucher-form">
         <div class="form-grid">
           <label>Code *
@@ -64,7 +65,7 @@
                    pattern="[A-Za-z0-9_-]+" autocomplete="off">
           </label>
           <label>Discount type *
-            <select id="discount-type" class="form-select">
+            <select id="discount-type" class="form-select" required>
               <option value="PERCENTAGE">Percentage</option>
               <option value="FIXED_AMOUNT">Fixed amount</option>
               <option value="FREE_SHIPPING">Free shipping</option>

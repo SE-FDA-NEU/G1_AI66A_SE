@@ -46,6 +46,41 @@ class InputCollector(HTMLParser):
             self.inputs.append(dict(attrs))
 
 
+class RequiredLabelCollector(HTMLParser):
+    """Collect labels and the controls they associate with."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.controls: dict[str, bool] = {}
+        self.labels: list[tuple[str, set[str]]] = []
+        self._active_labels: list[dict[str, object]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag in {"input", "select", "textarea"} and attributes.get("id"):
+            control_id = attributes["id"]
+            self.controls[control_id] = "required" in attributes
+            for label in self._active_labels:
+                label["control_ids"].add(control_id)  # type: ignore[union-attr]
+        if tag == "label":
+            self._active_labels.append(
+                {"text": [], "for": attributes.get("for"), "control_ids": set()}
+            )
+
+    def handle_data(self, data: str) -> None:
+        for label in self._active_labels:
+            label["text"].append(data)  # type: ignore[union-attr]
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != "label":
+            return
+        label = self._active_labels.pop()
+        control_ids = set(label["control_ids"])  # type: ignore[arg-type]
+        if label["for"]:
+            control_ids.add(label["for"])  # type: ignore[arg-type]
+        self.labels.append(("".join(label["text"]).strip(), control_ids))  # type: ignore[arg-type]
+
+
 def test_base_css_served_as_stylesheet(client: TestClient) -> None:
     """The base stylesheet is served directly with proper content-type."""
     response = client.get("/static/base.css")
@@ -101,7 +136,8 @@ def test_button_variant_hover_colors_retained() -> None:
 
     # Secondary hover
     sec_hover = re.search(
-        r"\.button--secondary:hover,\s*button\.button--secondary:hover,\s*\.button-secondary:hover\s*\{([^}]+)\}",
+        r"\.button--secondary:hover,\s*button\.button--secondary:hover,"
+        r"\s*\.button-secondary:hover\s*\{([^}]+)\}",
         css,
     )
     assert sec_hover, "Secondary button hover rule must exist"
@@ -156,7 +192,8 @@ def test_untyped_inputs_included_in_desktop_form_styles() -> None:
 
     # Locate the desktop form controls rule that uses the shared control token.
     match = re.search(
-        r"(input:not\(\[type\]\)[\s\S]*?\{[\s\S]*?min-height:\s*var\(--control-height\);[\s\S]*?\})",
+        r"(input:not\(\[type\]\)[\s\S]*?\{[\s\S]*?"
+        r"min-height:\s*var\(--control-height\);[\s\S]*?\})",
         css,
     )
     assert match, (
@@ -616,7 +653,7 @@ def test_admin_portal_css_has_responsive_breakpoints() -> None:
 
 
 def test_required_form_fields_marked_with_asterisk() -> None:
-    """Verify that mandatory form fields are marked with an asterisk across forms (#158)."""
+    """Verify that only required controls receive asterisks across forms (#158)."""
     # 1. Seller Product Creation form
     seller_html = SELLER_PRODUCT_NEW_HTML.read_text(encoding="utf-8")
     assert "Fields marked * are required." in seller_html
@@ -678,3 +715,29 @@ def test_required_form_fields_marked_with_asterisk() -> None:
     assert "Moderation Reason *" in admin_html
     assert "Adjudication Action *" in admin_html
     assert "Decision Notes *" in admin_html
+
+
+def test_asterisks_only_mark_required_controls_and_explanation_is_consistent() -> None:
+    """Every asterisk label must target required control and explain the convention."""
+    pages = (
+        SELLER_PRODUCT_NEW_HTML,
+        LOGIN_HTML,
+        ORDER_HTML,
+        PRODUCT_DETAIL_HTML,
+        SELLER_ANALYTICS_HTML,
+        CHECKOUT_HTML,
+        ADMIN_PORTAL_HTML,
+        SELLER_VOUCHERS_HTML,
+    )
+    for path in pages:
+        html = path.read_text(encoding="utf-8")
+        assert "Fields marked * are required." in html, path.name
+        parser = RequiredLabelCollector()
+        parser.feed(html)
+        for text, control_ids in parser.labels:
+            if "*" not in text:
+                continue
+            assert control_ids, f"{path.name}: label has no associated control: {text}"
+            assert all(parser.controls.get(control_id) for control_id in control_ids), (
+                f"{path.name}: asterisk label must target required controls: {text}"
+            )
