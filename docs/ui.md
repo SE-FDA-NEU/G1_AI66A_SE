@@ -13,8 +13,9 @@ documented in [US15 review and notifications](us15-review-notifications.md).
 
 Core screens load `base.css` once with an HTML `<link>`. Components use the
 `.button*` design-system classes; the older `.btn*` selectors remain CSS aliases
-for legacy screens but must not be added to new markup. JavaScript hooks use
-`data-*` attributes rather than presentation classes.
+for legacy screens but must not be added to new markup. Table-heavy screens keep
+tables inside horizontal scroll containers so narrow viewports do not overflow.
+JavaScript hooks use `data-*` attributes rather than presentation classes.
 
 ## 1. P0 stories and status
 

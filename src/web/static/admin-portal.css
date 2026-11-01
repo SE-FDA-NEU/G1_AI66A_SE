@@ -202,6 +202,7 @@ body {
 
 .admin-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
@@ -213,8 +214,6 @@ body {
   text-align: left;
   padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--admin-border);
-  position: sticky;
-  top: 0;
 }
 
 .admin-table td {
