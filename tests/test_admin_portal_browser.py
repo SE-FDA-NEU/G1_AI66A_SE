@@ -240,7 +240,8 @@ def test_admin_tables_scroll_without_page_overflow_on_mobile(site):
 
     for tab in ("catalog", "categories", "vouchers", "users", "disputes"):
         if tab != "catalog":
-            site.tab(tab)
+            page.locator(f'.nav-tab[data-tab="{tab}"]').click()
+        expect(page.locator(f"#view-{tab}")).to_have_class("tab-view active")
         layouts = page.locator(f"#view-{tab}.active .table-container").evaluate_all(
             """containers => containers.map(container => {
                 const table = container.querySelector("table");
