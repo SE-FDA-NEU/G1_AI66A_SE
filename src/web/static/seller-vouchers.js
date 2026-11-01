@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${voucher.used_count} / ${voucher.usage_limit === null ? '∞' : voucher.usage_limit}</td>
                 <td>${new Date(voucher.starts_at).toLocaleDateString()} - ${new Date(voucher.ends_at).toLocaleDateString()}</td>
                 <td><span class="badge ${voucher.is_active ? 'badge-active' : 'badge-inactive'}">${voucher.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td><button class="btn btn-secondary btn-sm toggle-voucher" type="button">${voucher.is_active ? 'Deactivate' : 'Activate'}</button></td>
+                <td><button class="button button--secondary button--sm toggle-voucher" type="button">${voucher.is_active ? 'Deactivate' : 'Activate'}</button></td>
             `;
             row.querySelector('.toggle-voucher').addEventListener('click', () => toggle(voucher));
             body.appendChild(row);

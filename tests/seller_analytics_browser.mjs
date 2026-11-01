@@ -95,6 +95,15 @@ try {
     await evaluate('document.getElementById("analytics-from").value = "2026-10-01"; document.getElementById("analytics-to").value = "2026-10-30"; document.getElementById("analytics-filters").requestSubmit()');
     await waitFor('!document.getElementById("analytics-report").hidden && document.getElementById("analytics-applied-range").textContent.startsWith("2026-10-01")');
     assert.equal(await evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), true, `No page overflow at ${width}`);
+    const tableLayout = await evaluate(`(() => {
+      const container = document.querySelector(".analytics-table-scroll");
+      const table = container?.querySelector("table");
+      return container && table ? {
+        overflowX: getComputedStyle(container).overflowX,
+        scrollable: table.scrollWidth >= container.clientWidth,
+      } : null;
+    })()`);
+    assert.deepEqual(tableLayout, {overflowX: "auto", scrollable: true}, `Ranking table must scroll at ${width}px`);
     assert.equal(await evaluate('document.getElementById("metric-cancellation_rate").textContent'), "12.5%");
     assert.equal(await evaluate('document.querySelector("#analytics-chart svg").getAttribute("role")'), "img");
     assert.equal(await evaluate('document.querySelector("#analytics-ranking-body tr").children[2].textContent'), "9");

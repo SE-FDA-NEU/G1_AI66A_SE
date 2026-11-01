@@ -600,7 +600,6 @@ existing admin/account behavior from this task's category audit and dispute chan
 | Account status history and prohibited-action checks | Existing account status transaction and `AccountAuditLog`; strict request fields and UTC audit response | A151-02, 06 in the same matrix |
 | Atomic dispute escalation and decision effects | Admin dispute service/repository, shared return settlement/restock helpers and existing order history | A151-07-13 in the same matrix |
 | Preserve legacy facts without invented history | Nullable dispute creation actor migration; audit table registered during initialization | A151-14 in the same matrix |
-
 ## US21 admin route registry and access rules (#113, #153)
 
 Every admin route implemented on `main` after #151, with its access rule and audit
@@ -643,3 +642,30 @@ Known gaps recorded rather than hidden: platform voucher create/update and produ
 moderation write no audit record, so "who changed this voucher/product" cannot be answered
 from the database. Adding that history needs its own task; this one only tests and
 documents current behavior.
+
+## US22 shared design tokens and components (#114, #154)
+
+Runtime: **Implemented as a shared styling slice.** The base stylesheet defines
+the reusable visual tokens and semantic component primitives described in
+[the design contract](design.md#us22-shared-web-design-tokens-and-components-114-154).
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Friendly palette and semantic feedback states | `src/web/static/base.css`: color, success/warning/danger/info and disabled tokens | `tests/test_ui_styling.py::test_shared_design_tokens_cover_required_categories` |
+| Typography, spacing, borders, shadows, radii and focus | Shared `:root` tokens consumed by base controls and components | Same styling-contract test; `git diff --check` |
+| Reusable buttons and inputs | Existing `.button`/native controls plus `.input`, `.select`, `.textarea` aliases | Existing button/input regressions in `tests/test_ui_styling.py` |
+| Cards, tables, badges and alerts | `.card`, `.table-wrap`/`table.table`, `.badge--*` and `.alert--*` primitives | `tests/test_ui_styling.py::test_shared_components_have_semantic_variants` |
+
+Exclusions: page-specific visual redesign, new frontend dependencies, and
+backend/API behavior. Browser screenshots and human review remain delivery
+evidence, not claims made by this local implementation.
+
+## Order detail date/time and recorded total (#159)
+
+The order detail page displays the persisted creation date/time and grand total,
+distinguishing recorded price components where available. The existing receipt API
+enforces buyer ownership. Browser coverage verifies recorded prices, zero totals,
+legacy fallback, reload/retry behavior, responsive layouts and ownership denial.
+
+Exclusions: payment selection/display, pricing changes, new API fields, migrations,
+third-party map rendering and seller-dashboard changes.

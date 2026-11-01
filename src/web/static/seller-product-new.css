@@ -2,8 +2,6 @@
  * Mini Marketplace - Seller Product Creation Form Stylesheet
  * US22 / US06: Form usability, clear validation feedback, accessible focus rings, and responsive layout.
  */
-@import "base.css";
-
 .seller-product {
   max-width: 800px;
   margin: 0 auto;

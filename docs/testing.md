@@ -424,6 +424,54 @@ Audit for platform vouchers and product moderation does not exist; it is listed 
 in the traceability table, not tested as if present. CI, review and a clean-clone run
 need separate evidence.
 
+## Task #154: shared CSS design tokens and components
+
+Expected results come from US22/#114 and the shared styling contract in
+`docs/design.md`.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Required token categories | Palette and semantic feedback, typography, spacing, borders, shadows, radii and focus tokens are declared in `base.css` | `test_shared_design_tokens_cover_required_categories` |
+| Shared component primitives | Buttons/inputs retain existing behavior and cards, tables, badges and alerts expose reusable selectors | `test_shared_components_have_semantic_variants` and existing UI styling tests |
+| Control sizing contract | Single-line controls (.input, .select) have 42px desktop / 44px mobile min-height; multiline controls (textarea, .textarea) preserve 96px min-height without collapsing | `test_control_aliases_preserve_native_sizing_and_textarea_min_height` |
+| Badge cascade isolation | Semantic variants (.badge--success, --warning, --danger, --info) preserve color/background when order.css is loaded | `test_semantic_badge_variants_resist_order_stylesheet_cascade_override` |
+| Accessibility regressions | Link buttons retain contrast on hover/active; controls retain desktop/mobile sizing and visible focus | Existing tests in `tests/test_ui_styling.py` |
+
+```powershell
+python -m pytest tests/test_ui_styling.py -q
+python -m ruff check tests/test_ui_styling.py
+git diff --check
+```
+
+This slice adds no new browser behavior or dependency. Visual review at the
+existing responsive breakpoints is still separate from these automated checks.
+
+## Issue #159: recorded order date and total
+
+`tests/test_order_summary_browser.py` executes the production order page in
+Chromium/Chrome, routes requests through real FastAPI handlers, and uses fresh
+SQLite files. Third-party map resources are blocked; map rendering is outside this
+fix. Prices and timestamps below are independent expected purchase facts.
+
+| Case | Expected result |
+|---|---|
+| Two shops, vouchers, catalog edited after purchase; 390/768/1280 px; reload | Stored 2026-01-02 15:04 UTC displays as 22:04 GMT+7; grand total is 433,000 VND with no viewport overflow |
+| Real zero-total voucher checkout | Grand total is 0 VND and zero discounts remain 0 |
+| Switch discounted order and legacy-pricing order | Stored totals and breakdowns reload correctly; unavailable legacy explanation is visible |
+| Detail read fails, then Retry succeeds | Summary stays hidden on failure; Retry displays the receipt |
+| Another authenticated buyer opens the order URL | API denies access; no summary or item details are shown |
+
+Run with Python 3.12, README dependencies, Playwright, and installed Chrome:
+
+```powershell
+python -m pytest tests/test_order_summary_browser.py -q
+python -m ruff check tests/test_order_summary_browser.py
+node --check src/web/static/order.js
+git diff --check
+```
+
+Set `UPDATE_ORDER_SUMMARY_SCREENSHOTS=1` to regenerate deterministic screenshots.
+
 ## Task #156: responsive, keyboard and contrast audit
 
 Expected behavior comes from #156, parent #114, the plan's viewport matrix and WCAG 2.2 AA.
@@ -447,7 +495,7 @@ Pages: `/products`, `/products/:code`, `/login`, `/cart`, `/checkout`, `/orders`
 Defects found on `main` and fixed in CSS/markup only: success text (3.77:1), warning/rating
 text (3.19:1), muted order text (4.47:1), the order breadcrumb separator (1.47:1), the
 notification time (4.37:1), the "Seller Center" badge (2.54:1), and 18 px checkbox/radio
-labels below the 24 px target. The stricter focus check then found the scrollable products table on `/seller/products` as a keyboard stop with no ring; it is now a labelled `region` with a visible focus outline. Contrast tokens were darkened (`--color-success`,
+labels below the 24 px target. The stricter focus check then found the scrollable products table on `/seller/products` as a keyboard stop with no ring; it is now a labelled `region` with a visible focus outline. Contrast tokens were darkened (`--color-text-muted` after the #154/#155 merge, where table headers measured 4.34:1, `--color-success`,
 `--color-warning`, `--ios-text-muted`); no layout or DOM contract changed.
 
 Run:

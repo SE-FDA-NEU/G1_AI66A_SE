@@ -2,8 +2,6 @@
  * Mini Marketplace - In-app Notifications Stylesheet
  * US22 / US15: Modern notification cards, unread indicators, and responsive touch controls.
  */
-@import "base.css";
-
 .notifications-list {
   display: grid;
   gap: 1rem;

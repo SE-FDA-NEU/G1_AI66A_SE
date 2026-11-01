@@ -1,45 +1,316 @@
-.analytics { max-width: 1160px; margin: 1.5rem auto; padding: 0 1rem 2rem; }
-.analytics .site-nav { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: .5rem; text-align: left; }
-.analytics .site-nav a { display: inline-flex; align-items: center; width: auto; min-height: 44px; }
-.analytics .site-nav button { width: auto; }
-.analytics header { display: block; text-align: left; margin: 2rem 0 1rem; }
-.analytics .eyebrow { color: var(--color-accent-text); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
-.analytics-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: start; gap: .8rem; }
-.analytics-filters label { display: flex; flex-direction: column; gap: .4rem; }
-.analytics :is(input, select, button) { font: inherit; min-height: 44px; }
-.analytics :is(input, select) { border: 1px solid var(--color-border-input); border-radius: .5rem; padding: .6rem; background: white; min-width: 0; }
-.analytics-filters button { margin-top: 1.7rem; }
-.analytics :focus-visible { outline: 3px solid var(--color-border-focus); outline-offset: 3px; }
-.analytics [aria-invalid="true"] { border-color: var(--color-danger); }
-.analytics .field-error, #analytics-error { color: var(--color-danger-text); }
-.analytics-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
-.analytics-metrics > div, .analytics-panel { background: white; border: 1px solid var(--color-border); border-radius: 1rem; padding: 1.25rem; }
-.analytics-metrics dt { color: var(--color-text-secondary); font-weight: 600; }
-.analytics-metrics dd { margin: .6rem 0; font-size: 1.6rem; font-weight: 700; overflow-wrap: anywhere; }
-.analytics-metrics p { margin-top: .5rem; font-size: .85rem; font-weight: 400; color: var(--color-text-secondary); }
-.analytics-panel { margin-top: 1.25rem; min-width: 0; }
-.analytics-panel select { max-width: 100%; }
-.analytics .notice { padding: 1rem; background: var(--color-surface-subtle); border-left: 4px solid var(--color-accent); }
-.chart-scroll, .analytics-table-scroll { overflow: auto; max-width: 100%; }
-.chart-scroll svg { display: block; width: 100%; min-width: 620px; height: auto; }
-.chart-scroll text { fill: var(--color-text-secondary); font: 12px system-ui, sans-serif; }
-.chart-grid { stroke: var(--color-border); }
-.chart-line { fill: none; stroke: var(--color-accent); stroke-width: 3; }
-.chart-point { fill: var(--color-accent); }
-.analytics-table-scroll { max-height: 480px; }
-.analytics table { width: 100%; border-collapse: collapse; }
-.analytics th, .analytics td { padding: .8rem; text-align: left; border-bottom: 1px solid var(--color-border); }
-.analytics td { overflow-wrap: anywhere; }
-#analytics-ranking-table table { min-width: 560px; }
-.analytics caption { text-align: left; padding: .8rem; color: var(--color-text-secondary); }
-.analytics summary { cursor: pointer; padding: 1rem 0; font-weight: 600; }
-.analytics .scroll-help { color: var(--color-text-secondary); font-size: .85rem; }
-@media (max-width: 950px) {
-  .analytics-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .analytics-filters button { margin-top: 0; }
-  .analytics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/**
+ * Mini Marketplace - Seller Analytics Stylesheet
+ * US22 / US18: Clean metrics dashboard, time-series visualization, responsive ranking tables.
+ */
+.analytics {
+  max-width: 1200px;
+  margin: 1.5rem auto;
+  padding: 0 1rem 3rem;
 }
+
+.analytics .site-nav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  text-align: left;
+}
+
+.analytics .site-nav a {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  min-height: 40px;
+}
+
+.analytics .site-nav button {
+  width: auto;
+}
+
+.analytics header {
+  display: block;
+  text-align: left;
+  margin: 1.5rem 0 1.25rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.analytics .eyebrow {
+  color: var(--color-accent-text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.analytics header h1 {
+  font-size: 1.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.analytics header p {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
+.analytics-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: start;
+  gap: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.analytics-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+}
+
+.analytics :is(input, select, button) {
+  font: inherit;
+  min-height: 42px;
+}
+
+.analytics :is(input, select) {
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.75rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  min-width: 0;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.analytics :is(input, select):focus {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-ring);
+  outline: none;
+}
+
+.analytics-filters button {
+  margin-top: 1.5rem;
+}
+
+.analytics :focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.analytics [aria-invalid="true"] {
+  border-color: var(--color-danger);
+  box-shadow: var(--shadow-ring-danger);
+}
+
+.analytics .field-error,
+#analytics-error {
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+#analytics-error {
+  padding: 1rem;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+}
+
+.analytics-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.analytics-metrics > div {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.analytics-metrics > div:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-metrics dt {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.analytics-metrics dd {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  letter-spacing: -0.02em;
+}
+
+.analytics-metrics p {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.analytics-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  margin-top: 1.5rem;
+  min-width: 0;
+}
+
+.analytics-panel select {
+  max-width: 100%;
+}
+
+.analytics .notice {
+  padding: 1rem 1.25rem;
+  background: var(--color-accent-subtle);
+  border-left: 4px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: var(--color-accent-text);
+  font-weight: 500;
+  margin-bottom: 1.25rem;
+}
+
+.chart-scroll,
+.analytics-table-scroll {
+  overflow: auto;
+  max-width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.chart-scroll svg {
+  display: block;
+  width: 100%;
+  min-width: 620px;
+  height: auto;
+}
+
+.chart-scroll text {
+  fill: var(--color-text-secondary);
+  font: 12px var(--font-sans);
+}
+
+.chart-grid {
+  stroke: var(--color-border);
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 3;
+}
+
+.chart-point {
+  fill: var(--color-accent);
+}
+
+.analytics-table-scroll {
+  max-height: 480px;
+}
+
+.analytics table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.analytics th,
+.analytics td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.analytics th {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.analytics tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.analytics td {
+  overflow-wrap: anywhere;
+}
+
+#analytics-ranking-table table {
+  min-width: 560px;
+}
+
+.analytics caption {
+  text-align: left;
+  padding: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.analytics summary {
+  cursor: pointer;
+  padding: 0.85rem 0;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.analytics summary:hover {
+  color: var(--color-accent-hover);
+}
+
+.analytics .scroll-help {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 950px) {
+  .analytics-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analytics-filters button {
+    margin-top: 0;
+    grid-column: 1 / -1;
+  }
+  .analytics-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 540px) {
-  .analytics-filters, .analytics-metrics { grid-template-columns: minmax(0, 1fr); }
-  .analytics-panel { padding: 1rem; }
+  .analytics-filters,
+  .analytics-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .analytics-panel {
+    padding: 1rem;
+  }
 }

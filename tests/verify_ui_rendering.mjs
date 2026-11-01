@@ -212,10 +212,62 @@ try {
 
   const btnStyles = cssButtonCheck.result.value;
   console.log("Button hover styles:", btnStyles);
-  assert.equal(btnStyles.primaryHoverColor, "rgb(255, 255, 255)", "Primary button hover color must be #ffffff (white)");
+  assert.ok(
+    btnStyles.primaryHoverColor === "rgb(255, 255, 255)" || btnStyles.primaryHoverColor === "var(--color-on-accent)",
+    "Primary button hover color must be white or var(--color-on-accent)"
+  );
   assert.equal(btnStyles.primaryHoverBg, "var(--color-accent-hover)", "Primary button hover background must be --color-accent-hover");
   assert.equal(btnStyles.secondaryHoverColor, "var(--color-accent)", "Secondary button hover color must be --color-accent");
-  assert.equal(btnStyles.dangerHoverColor, "rgb(255, 255, 255)", "Danger button hover color must be #ffffff");
+  assert.ok(
+    btnStyles.dangerHoverColor === "rgb(255, 255, 255)" || btnStyles.dangerHoverColor === "var(--color-on-accent)",
+    "Danger button hover color must be white or var(--color-on-accent)"
+  );
+
+  // Verify desktop control sizing for native controls vs .input, .select, and .textarea aliases
+  console.log("Checking desktop control sizing contract (native vs .input, .select, .textarea aliases)...");
+  const desktopControlAliases = await send("Runtime.evaluate", {
+    expression: `(() => {
+      const container = document.createElement("div");
+      container.innerHTML = \`
+        <input id="native-input" value="test" />
+        <input class="input" id="alias-input" value="test" />
+        <select id="native-select"><option>1</option></select>
+        <select class="select" id="alias-select"><option>1</option></select>
+        <textarea id="native-textarea">sample</textarea>
+        <textarea class="textarea" id="alias-textarea">sample</textarea>
+        <div class="textarea" id="alias-div-textarea">sample</div>
+      \`;
+      document.body.appendChild(container);
+      const natIn = document.getElementById("native-input");
+      const inEl = document.getElementById("alias-input");
+      const natSel = document.getElementById("native-select");
+      const selEl = document.getElementById("alias-select");
+      const natTa = document.getElementById("native-textarea");
+      const taEl = document.getElementById("alias-textarea");
+      const divTaEl = document.getElementById("alias-div-textarea");
+      const res = {
+        nativeInputMinHeight: window.getComputedStyle(natIn).minHeight,
+        aliasInputMinHeight: window.getComputedStyle(inEl).minHeight,
+        nativeSelectMinHeight: window.getComputedStyle(natSel).minHeight,
+        aliasSelectMinHeight: window.getComputedStyle(selEl).minHeight,
+        nativeTextareaMinHeight: window.getComputedStyle(natTa).minHeight,
+        aliasTextareaMinHeight: window.getComputedStyle(taEl).minHeight,
+        aliasDivTextareaMinHeight: window.getComputedStyle(divTaEl).minHeight,
+      };
+      container.remove();
+      return res;
+    })()`,
+    returnByValue: true,
+  });
+  const dAliases = desktopControlAliases.result.value;
+  console.log("Desktop control sizing contract metrics:", dAliases);
+  assert.equal(dAliases.nativeInputMinHeight, dAliases.aliasInputMinHeight, ".input alias must match native input sizing contract");
+  assert.equal(dAliases.aliasInputMinHeight, "42px", ".input min-height must be 42px on desktop");
+  assert.equal(dAliases.nativeSelectMinHeight, dAliases.aliasSelectMinHeight, ".select alias must match native select sizing contract");
+  assert.equal(dAliases.aliasSelectMinHeight, "42px", ".select min-height must be 42px on desktop");
+  assert.equal(dAliases.nativeTextareaMinHeight, "96px", "Native textarea must have 96px min-height on desktop");
+  assert.equal(dAliases.aliasTextareaMinHeight, "96px", "<textarea class='textarea'> must preserve 96px min-height");
+  assert.equal(dAliases.aliasDivTextareaMinHeight, "96px", ".textarea alias must preserve 96px min-height on desktop");
 
   // Screenshot desktop checkout
   const scDesktopCheckout = await send("Page.captureScreenshot", { format: "png" });
@@ -247,8 +299,125 @@ try {
   assert.equal(mMetrics.minHeight, "44px", "Mobile input min-height must be 44px");
   assert.equal(mMetrics.fontSize, "16px", "Mobile input font size must be 16px to prevent iOS auto-zoom");
 
+  // Verify mobile control sizing contract (native vs .input, .select, .textarea aliases)
+  console.log("Checking mobile control sizing contract (native vs .input, .select, .textarea aliases)...");
+  const mobileControlAliases = await send("Runtime.evaluate", {
+    expression: `(() => {
+      const container = document.createElement("div");
+      container.innerHTML = \`
+        <input id="native-m-input" value="test" />
+        <input class="input" id="alias-m-input" value="test" />
+        <select id="native-m-select"><option>1</option></select>
+        <select class="select" id="alias-m-select"><option>1</option></select>
+        <textarea id="native-m-textarea">sample</textarea>
+        <textarea class="textarea" id="alias-m-textarea">sample</textarea>
+        <div class="textarea" id="alias-m-div-textarea">sample</div>
+      \`;
+      document.body.appendChild(container);
+      const natIn = document.getElementById("native-m-input");
+      const inEl = document.getElementById("alias-m-input");
+      const natSel = document.getElementById("native-m-select");
+      const selEl = document.getElementById("alias-m-select");
+      const natTa = document.getElementById("native-m-textarea");
+      const taEl = document.getElementById("alias-m-textarea");
+      const divTaEl = document.getElementById("alias-m-div-textarea");
+      const res = {
+        nativeInputMinHeight: window.getComputedStyle(natIn).minHeight,
+        aliasInputMinHeight: window.getComputedStyle(inEl).minHeight,
+        nativeSelectMinHeight: window.getComputedStyle(natSel).minHeight,
+        aliasSelectMinHeight: window.getComputedStyle(selEl).minHeight,
+        nativeTextareaMinHeight: window.getComputedStyle(natTa).minHeight,
+        aliasTextareaMinHeight: window.getComputedStyle(taEl).minHeight,
+        aliasDivTextareaMinHeight: window.getComputedStyle(divTaEl).minHeight,
+        nativeInputFontSize: window.getComputedStyle(natIn).fontSize,
+        aliasInputFontSize: window.getComputedStyle(inEl).fontSize,
+        nativeTextareaFontSize: window.getComputedStyle(natTa).fontSize,
+        aliasTextareaFontSize: window.getComputedStyle(taEl).fontSize,
+      };
+      container.remove();
+      return res;
+    })()`,
+    returnByValue: true,
+  });
+  const mAliases = mobileControlAliases.result.value;
+  console.log("Mobile control sizing contract metrics:", mAliases);
+  assert.equal(mAliases.nativeInputMinHeight, mAliases.aliasInputMinHeight, ".input alias must match native input 44px min-height on mobile");
+  assert.equal(mAliases.aliasInputMinHeight, "44px", ".input min-height must be 44px on mobile");
+  assert.equal(mAliases.nativeSelectMinHeight, mAliases.aliasSelectMinHeight, ".select alias must match native select 44px min-height on mobile");
+  assert.equal(mAliases.aliasSelectMinHeight, "44px", ".select min-height must be 44px on mobile");
+  assert.equal(mAliases.nativeTextareaMinHeight, "96px", "Native textarea must preserve 96px min-height on mobile");
+  assert.equal(mAliases.aliasTextareaMinHeight, "96px", "<textarea class='textarea'> must preserve 96px min-height on mobile");
+  assert.equal(mAliases.aliasDivTextareaMinHeight, "96px", ".textarea alias must preserve 96px min-height on mobile");
+  assert.equal(mAliases.nativeInputFontSize, "16px", "Native input font size must be 16px on mobile");
+  assert.equal(mAliases.aliasInputFontSize, "16px", ".input alias font size must be 16px on mobile");
+  assert.equal(mAliases.nativeTextareaFontSize, "16px", "Native textarea font size must be 16px on mobile");
+  assert.equal(mAliases.aliasTextareaFontSize, "16px", ".textarea alias font size must be 16px on mobile");
+
   const scMobileCheckout = await send("Page.captureScreenshot", { format: "png" });
   await writeFile(join(OUTPUT_DIR, "mobile-checkout.png"), Buffer.from(scMobileCheckout.data, "base64"));
+
+  // Verify semantic badge variants on the order tracker page (order.css + base.css cascade)
+  console.log("Checking semantic badge variants cascade on order tracking page...");
+  await setViewport(1280, 800, false);
+  await navigate("/order/1");
+
+  const badgeCascadeStyles = await send("Runtime.evaluate", {
+    expression: `(() => {
+      const container = document.createElement("div");
+      container.innerHTML = \`
+        <span class="badge" id="b-test-default">Default</span>
+        <span class="badge badge--success" id="b-test-success">Success</span>
+        <span class="badge badge--danger" id="b-test-danger">Danger</span>
+        <span class="badge badge--warning" id="b-test-warning">Warning</span>
+        <span class="badge badge--info" id="b-test-info">Info</span>
+      \`;
+      document.body.appendChild(container);
+
+      const def = window.getComputedStyle(document.getElementById("b-test-default"));
+      const suc = window.getComputedStyle(document.getElementById("b-test-success"));
+      const dan = window.getComputedStyle(document.getElementById("b-test-danger"));
+      const war = window.getComputedStyle(document.getElementById("b-test-warning"));
+      const inf = window.getComputedStyle(document.getElementById("b-test-info"));
+
+      const res = {
+        defaultBg: def.backgroundColor,
+        defaultColor: def.color,
+        successBg: suc.backgroundColor,
+        successColor: suc.color,
+        dangerBg: dan.backgroundColor,
+        dangerColor: dan.color,
+        warningBg: war.backgroundColor,
+        warningColor: war.color,
+        infoBg: inf.backgroundColor,
+        infoColor: inf.color,
+      };
+      container.remove();
+      return res;
+    })()`,
+    returnByValue: true,
+  });
+
+  const bStyles = badgeCascadeStyles.result.value;
+  console.log("Order page badge cascade computed styles:", bStyles);
+  // Default unstyled .badge on order page gets neutral order.css styling
+  assert.equal(bStyles.defaultBg, "rgb(241, 245, 249)", "Default badge gets neutral #f1f5f9 background");
+  assert.equal(bStyles.defaultColor, "rgb(71, 85, 105)", "Default badge gets neutral #475569 color");
+
+  // Semantic variants must NOT be overridden by the order stylesheet's neutral colors
+  assert.notEqual(bStyles.successBg, "rgb(241, 245, 249)", "badge--success background must not be overridden by neutral order.css");
+  assert.notEqual(bStyles.successColor, "rgb(71, 85, 105)", "badge--success color must not be overridden by neutral order.css");
+  assert.equal(bStyles.successBg, "rgb(236, 253, 245)", "badge--success must have var(--color-success-bg) (#ecfdf5)");
+  assert.equal(bStyles.successColor, "rgb(6, 95, 70)", "badge--success must have var(--color-success-text) (#065f46)");
+
+  assert.notEqual(bStyles.dangerBg, "rgb(241, 245, 249)", "badge--danger background must not be overridden by neutral order.css");
+  assert.notEqual(bStyles.dangerColor, "rgb(71, 85, 105)", "badge--danger color must not be overridden by neutral order.css");
+  assert.equal(bStyles.dangerBg, "rgb(254, 242, 242)", "badge--danger must have var(--color-danger-bg) (#fef2f2)");
+  assert.equal(bStyles.dangerColor, "rgb(153, 27, 27)", "badge--danger must have var(--color-danger-text) (#991b1b)");
+
+  assert.equal(bStyles.warningBg, "rgb(255, 251, 235)", "badge--warning must have var(--color-warning-bg) (#fffbeb)");
+  assert.equal(bStyles.warningColor, "rgb(146, 64, 14)", "badge--warning must have var(--color-warning-text) (#92400e)");
+  assert.equal(bStyles.infoBg, "rgb(240, 249, 255)", "badge--info must have var(--color-info-bg) (#f0f9ff)");
+  assert.equal(bStyles.infoColor, "rgb(3, 105, 161)", "badge--info must have var(--color-info-text) (#0369a1)");
 
   // Capture core screens: catalog, product-detail, cart, login (desktop & mobile)
   const screens = [

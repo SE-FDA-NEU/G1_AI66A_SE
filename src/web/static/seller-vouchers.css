@@ -1,52 +1,62 @@
+/**
+ * Mini Marketplace - Seller Shop Vouchers Stylesheet
+ * US22 / US16: Shop voucher management, modal dialogs, and validation alerts.
+ */
 .seller-badge {
-    background-color: #047857;
+  background-color: var(--color-success);
 }
 
 .seller-voucher-content {
-    min-height: auto;
+  min-height: auto;
 }
 
 .voucher-alert {
-    margin: 0 0 1rem;
-    padding: 0.75rem 1rem;
-    border-radius: 6px;
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .voucher-alert-error {
-    color: #991b1b;
-    background: #fee2e2;
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
 }
 
 .voucher-alert-success {
-    color: #166534;
-    background: #dcfce7;
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
 }
 
 .modal-overlay[hidden] {
-    display: none;
+  display: none;
 }
 
 .form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
 }
 
 .form-grid label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    color: var(--admin-text-main);
-    font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.88rem;
 }
 
 .form-grid small {
-    color: var(--admin-text-muted);
-    font-weight: 400;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: 0.82rem;
 }
 
 @media (max-width: 700px) {
-    .form-grid {
-        grid-template-columns: 1fr;
-    }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }

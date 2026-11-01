@@ -1446,3 +1446,15 @@ actor even after legacy category deletion. `return_disputes.created_by_user_id`
 records new escalation actors and remains null for unknown legacy actors. See the
 [US21 backend contract](us21-admin-workflow.md) for API/migration behavior and the
 [verification matrix](testing.md#task-151-admin-authorization-and-dispute-workflow).
+
+## US22 shared web design tokens and components (#114, #154)
+
+The browser UI uses `src/web/static/base.css` as its shared styling contract.
+The `:root` block owns the palette, semantic feedback colors, typography,
+spacing scale, border widths, shadows, radii, control heights and focus tokens.
+Shared buttons, form controls, cards, table wrappers, badges and alerts consume
+those variables. Components expose semantic variants such as `.badge--success`
+and `.alert--danger`; page-specific styles may refine layout without redefining
+the semantic colors. This task is styling-only: it does not change page data
+contracts, payment behavior or backend validation.
+
