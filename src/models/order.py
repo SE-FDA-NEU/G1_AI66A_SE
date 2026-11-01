@@ -34,6 +34,9 @@ class Order(SQLModel, table=True):
 
     payment_status: str = Field(default="UNPAID", max_length=30)
 
+    # Nullable for orders created before payment tracking was introduced.
+    payment_method: str | None = Field(default=None, max_length=10)
+
     escrow_status: str = Field(default="HELD", max_length=30)
 
     recipient_name: str = Field(max_length=100)

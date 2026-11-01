@@ -315,6 +315,12 @@ button.button--danger:active {
   text-decoration: none;
 }
 
+.button--sm {
+  min-height: 36px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+}
+
 /* Form Controls & Usability */
 form {
   position: relative;

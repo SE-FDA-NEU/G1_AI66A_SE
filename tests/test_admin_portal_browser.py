@@ -234,6 +234,32 @@ def test_category_crud_and_keyboard_modal_use_real_persistence(site):
         assert session.get(Category, category_id) is None
 
 
+def test_admin_tables_scroll_without_page_overflow_on_mobile(site):
+    page = site.page
+    page.set_viewport_size({"width": 390, "height": 900})
+
+    for tab in ("catalog", "categories", "vouchers", "users", "disputes"):
+        if tab != "catalog":
+            site.tab(tab)
+        layouts = page.locator(f"#view-{tab}.active .table-container").evaluate_all(
+            """containers => containers.map(container => {
+                const table = container.querySelector("table");
+                const styles = getComputedStyle(container);
+                return {
+                    overflowX: styles.overflowX,
+                    tableOverflows: table.scrollWidth > container.clientWidth,
+                };
+            })"""
+        )
+        assert layouts, f"{tab} must render a table container"
+        assert all(layout["overflowX"] == "auto" for layout in layouts)
+        assert all(layout["tableOverflows"] for layout in layouts)
+
+    assert page.evaluate(
+        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+    )
+
+
 @pytest.mark.parametrize(
     ("kind", "amount", "cap"),
     [

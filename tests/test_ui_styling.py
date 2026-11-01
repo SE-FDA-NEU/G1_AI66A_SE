@@ -13,6 +13,20 @@ CART_HTML = ROOT / "src" / "web" / "pages" / "cart.html"
 PRODUCT_DETAIL_HTML = ROOT / "src" / "web" / "pages" / "product-detail.html"
 ORDER_CSS = ROOT / "src" / "web" / "static" / "order.css"
 
+CORE_SCREENS = [
+    "products.html",
+    "product-detail.html",
+    "cart.html",
+    "checkout.html",
+    "order.html",
+    "seller-products.html",
+    "seller-product-new.html",
+    "seller-orders.html",
+    "seller-analytics.html",
+    "seller-vouchers.html",
+    "admin-portal.html",
+]
+
 
 class InputCollector(HTMLParser):
     """Collect all input elements with their attributes and locations."""
@@ -535,3 +549,61 @@ def test_semantic_badge_variants_resist_order_stylesheet_cascade_override() -> N
     )
     assert default_decls["color"][2] == "#475569"
     assert default_decls["background-color"][2] == "#f1f5f9"
+
+
+def test_all_core_screens_include_base_design_system_stylesheet() -> None:
+    """All core marketplace screens must include base.css for shared design tokens."""
+    for screen_name in CORE_SCREENS:
+        path = ROOT / "src" / "web" / "pages" / screen_name
+        assert path.exists(), f"Core screen {screen_name} must exist"
+        html = path.read_text(encoding="utf-8")
+        assert "/static/base.css" in html, f"{screen_name} must link /static/base.css"
+
+
+def test_screen_stylesheets_do_not_import_base_css() -> None:
+    """Pages load base.css once through HTML links, not render-blocking CSS imports."""
+    for path in (ROOT / "src" / "web" / "static").glob("*.css"):
+        assert '@import "base.css"' not in path.read_text(encoding="utf-8"), path.name
+
+
+def test_admin_and_seller_templates_use_button_design_system_classes() -> None:
+    """Migrated templates use the .button* convention without mixed legacy classes."""
+    for screen_name in ("admin-portal.html", "seller-products.html", "seller-vouchers.html"):
+        html = (ROOT / "src" / "web" / "pages" / screen_name).read_text(encoding="utf-8")
+        assert not re.search(r'class="[^"]*\bbtn(?:-|[^"]*\bbtn)', html), screen_name
+
+
+def test_all_core_screens_have_responsive_viewport_meta() -> None:
+    """All core marketplace screens must declare a responsive viewport."""
+    for screen_name in CORE_SCREENS:
+        html = (ROOT / "src" / "web" / "pages" / screen_name).read_text(encoding="utf-8")
+        assert '<meta name="viewport"' in html, f"{screen_name} must have viewport meta tag"
+        assert "width=device-width" in html, f"{screen_name} must set width=device-width"
+
+
+def test_table_screens_have_horizontal_scroll_containers() -> None:
+    """Complex tables must be wrapped in horizontal scroll containers."""
+    for screen_name in (
+        "seller-products.html",
+        "seller-vouchers.html",
+        "admin-portal.html",
+        "seller-analytics.html",
+    ):
+        html = (ROOT / "src" / "web" / "pages" / screen_name).read_text(encoding="utf-8")
+        assert "table-container" in html or "table-scroll" in html, (
+            f"{screen_name} must wrap table in a scrollable container"
+        )
+
+
+def test_seller_analytics_css_has_responsive_breakpoints() -> None:
+    """Seller analytics must provide tablet and mobile breakpoints."""
+    css = (ROOT / "src" / "web" / "static" / "seller-analytics.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 950px)" in css
+    assert "@media (max-width: 540px)" in css
+
+
+def test_admin_portal_css_has_responsive_breakpoints() -> None:
+    """Admin portal must provide responsive breakpoints for small screens."""
+    css = (ROOT / "src" / "web" / "static" / "admin-portal.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 840px)" in css
+    assert "portal-layout" in css

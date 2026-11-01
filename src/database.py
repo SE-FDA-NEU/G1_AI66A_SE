@@ -315,6 +315,10 @@ def migrate_db(connection: Connection | None = None) -> None:
                 connection.execute(
                     text("ALTER TABLE orders ADD COLUMN payment_status VARCHAR(30) DEFAULT 'PAID'")
                 )
+            if "payment_method" not in columns:
+                connection.execute(
+                    text("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(10)")
+                )
             if "escrow_status" not in columns:
                 connection.execute(
                     text("ALTER TABLE orders ADD COLUMN escrow_status VARCHAR(30) DEFAULT 'HELD'")
@@ -322,9 +326,6 @@ def migrate_db(connection: Connection | None = None) -> None:
             for name in ("tracking_number",):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} VARCHAR(100)"))
-            if "payment_method" not in columns:
-                # NULL marks a legacy order placed before payment tracking (US20 section 10).
-                connection.execute(text("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(10)"))
             for name in ("shipped_at", "delivered_at", "completed_at"):
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE orders ADD COLUMN {name} DATETIME"))

@@ -2,8 +2,6 @@
  * Mini Marketplace - Seller Orders Management Stylesheet
  * US22 / US08: Responsive order cards, filtering controls, clear status badges, and action states.
  */
-@import "base.css";
-
 /* Dashboard Layout */
 .orders {
   max-width: 1100px;

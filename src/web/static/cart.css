@@ -3,8 +3,6 @@
  * US22 / US03 / US12: Shopping cart styling, shop grouping, multi-item selection,
  * line item controls, and responsive order summary.
  */
-@import "base.css";
-
 .cart {
   max-width: 980px;
   margin: 0 auto;
