@@ -423,3 +423,44 @@ git diff --check
 Audit for platform vouchers and product moderation does not exist; it is listed as a gap
 in the traceability table, not tested as if present. CI, review and a clean-clone run
 need separate evidence.
+
+## Task #156: responsive, keyboard and contrast audit
+
+Expected behavior comes from #156, parent #114, the plan's viewport matrix and WCAG 2.2 AA.
+`tests/test_responsive_audit_browser.py` loads 13 pages in headless Chromium against the
+production FastAPI handlers and an isolated SQLite file, with deliberately awkward data:
+very long product, seller, recipient and address text, a 10-digit price, six long
+notifications, an order and a cart line.
+
+| ID | Partition / action | Expected result | Verification |
+|---|---|---|---|
+| R156-01 | Each page at 320, 375, 390, 768, 1024 and 1440 px | No page-level horizontal scroll (`scrollWidth <= innerWidth`) and no uncaught page error | Per-page/viewport matrix (78 cases) |
+| R156-02 | Visible text on flat backgrounds | Contrast >= 4.5:1, or 3:1 for text >= 24px (or >= 18.66px bold) | In-page luminance check |
+| R156-03 | First six Tab stops | Focus is on screen with an outline or box-shadow ring | Keyboard walk |
+| R156-04 | Visible input, select, textarea | Has a label, `aria-label`, `aria-labelledby` or title | DOM check |
+| R156-05 | Buttons, checkboxes, radios | Target (or its label) at least 24 x 24 CSS px | Bounding-box check |
+
+Pages: `/products`, `/products/:code`, `/login`, `/cart`, `/checkout`, `/orders`,
+`/notifications`, `/seller/orders`, `/seller/products`, `/seller/products/new`,
+`/seller/vouchers`, `/seller/analytics`, `/admin`.
+
+Defects found on `main` and fixed in CSS/markup only: success text (3.77:1), warning/rating
+text (3.19:1), muted order text (4.47:1), the order breadcrumb separator (1.47:1), the
+notification time (4.37:1), the "Seller Center" badge (2.54:1), and 18 px checkbox/radio
+labels below the 24 px target. Contrast tokens were darkened (`--color-success`,
+`--color-warning`, `--ios-text-muted`); no layout or DOM contract changed.
+
+Run:
+
+~~~powershell
+$env:DEBUG = 'false'
+pip install playwright   # uses an installed Chrome/Chromium; set BROWSER_PATH to override
+python -m pytest tests/test_responsive_audit_browser.py -q
+~~~
+
+Limits, stated so a pass is not over-read: contrast is skipped for gradient or image
+backgrounds and hover/disabled states; focus checks cover the first six Tab stops only;
+modals, error summaries, loading and empty states are not driven here; `/checkout` has no
+saved address and `/seller/analytics` has no sales data in this fixture; this is Chromium
+only. Manual browser QA with evidence, and a rerun after the shared design tokens
+(#154/#155) merge, are still required and are not claimed by this task.
