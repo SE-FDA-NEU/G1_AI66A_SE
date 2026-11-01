@@ -547,6 +547,22 @@ existing checkout snapshot writes, historical readers, and nullable seller image
 See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
 and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).
 
+## Phone number consistency (#157)
+
+Runtime: **Implemented.** Delivery validation now uses one server-side
+normalization rule for manual checkout and saved addresses: trim outer input and
+collapse repeated ASCII spaces, while preserving the complete digit sequence and
+the supported separator style. The browser applies the same normalization before
+submission and presents the agreed field-level error before a request is sent.
+
+| Requirement | Implementation | Verification |
+|---|---|---|
+| Supported digits/separators and 7–15 digit boundary | `src/schemas/delivery.py::valid_phone` | Existing address validation partitions plus checkout validation tests |
+| Consistent storage for checkout and address book | Shared Pydantic validator and `checkout.js` normalization | `test_address_phone_normalizes_outer_and_repeated_spaces_without_changing_digits`, `test_checkout_normalizes_phone_before_persisting` |
+| Clear client-side field feedback | Shared checkout/address form validation and `aria-invalid`/field error rendering | `tests/addresses_ui.mjs`, `tests/checkout_ui.mjs` |
+
+Exclusions: country-code conversion, provider verification, and changing legacy
+order snapshots. Existing saved/order history values remain historical facts.
 ## Order detail date/time and recorded total (#159)
 
 Requirement: display the selected buyer order's creation date/time and persisted

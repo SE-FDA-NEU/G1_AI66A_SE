@@ -18,6 +18,7 @@ from src.models.product_variant import ProductVariant
 from src.models.seller_order import SellerOrder
 from src.models.voucher import Voucher
 from src.models.voucher_usage import VoucherUsage
+from src.schemas.delivery import normalize_phone
 from src.schemas.order_history import order_timestamp_utc
 from src.schemas.orders import (
     AppliedVoucher,
@@ -210,7 +211,9 @@ def resolve_delivery_snapshot(
     session: Session, buyer_id: int, body: CheckoutInput
 ) -> DeliverySnapshot:
     if isinstance(body, CheckoutRequest):
-        return DeliverySnapshot(**body.model_dump())
+        data = body.model_dump()
+        data["phone_number"] = normalize_phone(data["phone_number"])
+        return DeliverySnapshot(**data)
     try:
         address = owned_address(session, buyer_id, body.address_id, body.address_version)
     except AddressError as exc:
@@ -274,6 +277,32 @@ def apply_quoted_price(
             raise QuoteError(exc.code, exc.message, exc.status_code, field=field) from exc
 
 
+def _matches_idempotency(existing: Order, body: CheckoutInput, fingerprint: str) -> bool:
+    if existing.request_hash == fingerprint:
+        return True
+    if isinstance(body, CheckoutRequest):
+        # Backward compatibility for pre-change orders created with unnormalized phone numbers
+        # without rewriting historical snapshots.
+        alt_existing = body.model_copy(update={"phone_number": existing.phone_number})
+        if (
+            hashlib.sha256(
+                alt_existing.model_dump_json(exclude_unset=True).encode()
+            ).hexdigest()
+            == existing.request_hash
+        ):
+            return True
+        norm_phone = normalize_phone(body.phone_number)
+        alt_norm = body.model_copy(update={"phone_number": norm_phone})
+        if (
+            hashlib.sha256(
+                alt_norm.model_dump_json(exclude_unset=True).encode()
+            ).hexdigest()
+            == existing.request_hash
+        ):
+            return True
+    return False
+
+
 def checkout(
     session: Session, buyer_id: int, body: CheckoutInput, key: str
 ) -> tuple[OrderData, bool]:
@@ -284,7 +313,9 @@ def checkout(
         try:
             existing = session.exec(select(Order).where(Order.request_key == key)).first()
             if existing:
-                if existing.buyer_id != buyer_id or existing.request_hash != fingerprint:
+                if existing.buyer_id != buyer_id or not _matches_idempotency(
+                    existing, body, fingerprint
+                ):
                     raise CheckoutError(
                         "ERR_IDEMPOTENCY_CONFLICT", "Key was used for another request."
                     )
@@ -299,7 +330,9 @@ def checkout(
                 session.rollback()
                 existing = session.exec(select(Order).where(Order.request_key == key)).first()
                 if existing is not None:
-                    if existing.buyer_id != buyer_id or existing.request_hash != fingerprint:
+                    if existing.buyer_id != buyer_id or not _matches_idempotency(
+                        existing, body, fingerprint
+                    ):
                         raise CheckoutError(
                             "ERR_IDEMPOTENCY_CONFLICT", "Key was used for another request."
                         )

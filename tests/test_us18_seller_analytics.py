@@ -607,8 +607,8 @@ class TestRevenueAnalytics:
         assert body["meta"]["group_by"] == "monthly"
         bucket = next(b for b in body["data"] if b["period_start"] == first_day.isoformat())
         if today.day == 1:
-            # On the 1st of the month, yesterday's Order 2 (500k) belongs to the previous month;
-            # this month contains Order 1 (400k COMPLETED) and Order 3 (100k PENDING)
+            # On the 1st of the month, yesterday falls into the preceding month,
+            # so the current month bucket only includes Order 1 (COMPLETED) and Order 3 (PENDING).
             assert bucket["gross_order_value"] == 500_000
             assert bucket["completed_revenue"] == 400_000
             assert bucket["pending_escrow_revenue"] == 100_000
@@ -617,8 +617,6 @@ class TestRevenueAnalytics:
             assert bucket["items_sold"] == 3
             assert bucket["cancellation_rate"] == 0.0
         else:
-            # Yesterday Order 2: 500k COMPLETED, Today Order 1: 400k COMPLETED,
-            # Order 3: 100k PENDING
             assert bucket["gross_order_value"] == 1_000_000
             assert bucket["completed_revenue"] == 900_000
             assert bucket["pending_escrow_revenue"] == 100_000

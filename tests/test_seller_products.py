@@ -451,8 +451,8 @@ def test_other_routes_keep_their_validation_error_shape(api, engine):
             "message": "Please correct the highlighted fields.",
             "fields": {
                 "phone_number": [
-                    "Phone number must contain 7 to 15 digits; "
-                    "use only +, spaces, (), or - as separators."
+                    "Phone number must contain 7 to 15 digits. "
+                    "Use only +, spaces, (), or - as separators."
                 ]
             },
         }

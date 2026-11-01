@@ -371,7 +371,7 @@ page writes itself is listed with the error code that leads to it.
 | `400 ERR_INVALID_QUANTITY` (checked in the page first) | BR2 | `Enter a whole number of at least 1.` | Cart | `test_add_refuses_an_invalid_quantity` |
 | `403 ERR_BUYER_REQUIRED` | BR3 | `The cart is for buyer accounts. Log in with a buyer account to shop.` | Cart | `test_seller_has_no_cart` |
 | `409 ERR_STOCK_EXCEEDED` | BR8 | `Item {name} has insufficient stock or changed.` | Checkout | `test_stale_product_version_aborts_checkout` |
-| `422 ERR_VALIDATION` (checked in the page first) | — | `Phone number must contain 7 to 15 digits.` | Checkout | `test_api_validation_does_not_write` |
+| `422 ERR_VALIDATION` (checked in the page first) | — | `Phone number must contain 7 to 15 digits. Use only +, spaces, (), or - as separators.` | Checkout | `test_api_validation_does_not_write` |
 | `400 ERR_EMPTY_CART` | — | `Your cart is empty.` | Checkout | `test_auth_empty_cart_key_and_pages` |
 | `404 ERR_ORDER_NOT_FOUND` | BR4 | `We could not find this order in your account. Check the order link, or continue shopping.` | Order confirmation | `test_api_create_replay_and_ownership` |
 | `422 ERR_VALIDATION` (`error.fields.price`) | BR9 | `Price must be greater than 0 ₫.` | Seller product form | `test_invalid_field_is_reported_beside_that_field_and_nothing_is_written` |
