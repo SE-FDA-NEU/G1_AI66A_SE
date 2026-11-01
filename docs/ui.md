@@ -434,3 +434,11 @@ and uncertain submissions require a status read before another attempt.
 See the [buyer UI contract and screenshots](us17-buyer-returns.md) and
 [test matrix](testing.md#task-139-buyer-return-request-ui). Existing seller/admin
 decisions and backend refund/restock rules are unchanged.
+
+### US21 admin catalog and voucher screens (#152)
+
+The existing platform portal now confirms high-impact catalog/category/voucher
+actions, validates forms, retains failed input and announces saving/error/success
+states. Dialogs support keyboard focus and mobile layouts contain wide tables.
+See the [UI contract and real-browser screenshots](us21-admin-ui.md) and
+[verification matrix](testing.md#task-152-admin-catalog-and-voucher-screens).

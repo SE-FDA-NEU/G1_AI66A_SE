@@ -20,6 +20,14 @@ const formatMetricDate = (isoStr) => {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
+const formatOrderDate = (isoStr) => {
+  if (!isoStr || Number.isNaN(new Date(isoStr).getTime())) return "Date unavailable";
+  return new Intl.DateTimeFormat("en-GB", {
+    year: "numeric", month: "short", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  }).format(new Date(isoStr));
+};
+
 const statusNames = {
   PENDING: "Order Placed",
   CONFIRMED: "In Production",
@@ -64,6 +72,8 @@ const elements = {
   itemsCard: document.getElementById("items-card"),
   itemsList: document.getElementById("items-list"),
   orderTotal: document.getElementById("order-total"),
+  priceBreakdown: document.getElementById("order-price-breakdown"),
+  breakdownUnavailable: document.getElementById("order-breakdown-unavailable"),
   retryBtn: document.getElementById("retry-btn"),
   trackingInfo: document.getElementById("tracking-info"),
   trackingNumberVal: document.getElementById("tracking-number-val"),
@@ -83,6 +93,7 @@ const elements = {
   orderSwitcherWrap: document.getElementById("order-switcher-wrap"),
   orderSelect: document.getElementById("order-select"),
   // Badges & Escrow
+  badgePaymentMethod: document.getElementById("badge-payment-method"),
   badgePaymentStatus: document.getElementById("badge-payment-status"),
   badgeEscrowStatus: document.getElementById("badge-escrow-status"),
   escrowNotice: document.getElementById("escrow-paused-notice"),
@@ -320,6 +331,36 @@ function updateActions(order) {
 
 let pollTimer = null;
 
+function renderPriceBreakdown(order) {
+  if (!elements.priceBreakdown || !elements.breakdownUnavailable) return;
+  const columns = [
+    {field: "subtotal", id: "order-subtotal", sign: 1},
+    {field: "shop_discount", id: "order-shop-discount", sign: -1},
+    {field: "platform_discount", id: "order-platform-discount", sign: -1},
+    {field: "shipping_fee", id: "order-shipping-fee", sign: 1},
+    {field: "shipping_discount", id: "order-shipping-discount", sign: -1},
+  ];
+  const children = order.sub_orders || [];
+  // Legacy defaults and seller-scoped partial receipts cannot explain a full order total.
+  const complete = children.length > 0 && children.every(child =>
+    child.pricing_policy_version && child.pricing_policy_version !== "LEGACY" &&
+    [...columns.map(column => column.field), "total_amount"].every(field =>
+      Number.isSafeInteger(child[field]) && child[field] >= 0)
+  );
+  const totals = columns.map(column =>
+    children.reduce((sum, child) => sum + child[column.field], 0));
+  const reconciles = complete &&
+    children.reduce((sum, child) => sum + child.total_amount, 0) === order.total_amount &&
+    totals.reduce((sum, amount, index) => sum + amount * columns[index].sign, 0) === order.total_amount;
+  elements.priceBreakdown.hidden = !reconciles;
+  elements.breakdownUnavailable.hidden = reconciles;
+  columns.forEach((column, index) => {
+    const amount = totals[index];
+    document.getElementById(column.id).textContent = reconciles ?
+      money(amount === 0 ? 0 : amount * column.sign) : "";
+  });
+}
+
 function startPolling(orderId) {
   if (pollTimer) clearInterval(pollTimer);
   if (!orderId) return;
@@ -336,7 +377,9 @@ function startPolling(orderId) {
           !currentOrder ||
           currentOrder.status !== updated.status ||
           JSON.stringify(currentOrder.sub_orders) !== JSON.stringify(updated.sub_orders) ||
-          currentOrder.tracking_number !== updated.tracking_number
+          currentOrder.tracking_number !== updated.tracking_number ||
+          currentOrder.payment_method !== updated.payment_method ||
+          currentOrder.payment_status !== updated.payment_status
         ) {
           renderOrder(updated);
         }
@@ -362,9 +405,14 @@ function renderOrder(order) {
     elements.liveIndicator.hidden = ["COMPLETED", "CANCELLED"].includes(order.status);
   }
 
-  // Populate 4-column summary metric bar (exact reference image layout)
+  // Display purchase facts from the receipt, independently of today's product prices.
   if (elements.summaryMetricsBar) elements.summaryMetricsBar.hidden = false;
-  if (elements.orderPlacedVal) elements.orderPlacedVal.textContent = formatMetricDate(order.created_at);
+  if (elements.orderPlacedVal) {
+    const placed = formatOrderDate(order.created_at);
+    elements.orderPlacedVal.textContent = placed;
+    if (placed === "Date unavailable") elements.orderPlacedVal.removeAttribute("datetime");
+    else elements.orderPlacedVal.setAttribute("datetime", order.created_at);
+  }
   if (elements.orderTotalVal) elements.orderTotalVal.textContent = money(order.total_amount);
   if (elements.orderShipToVal) elements.orderShipToVal.textContent = order.recipient_name || "—";
   if (elements.orderIdVal) elements.orderIdVal.textContent = `#${order.id}`;
@@ -399,6 +447,7 @@ function renderOrder(order) {
   elements.phoneNumber.textContent = order.phone_number;
   elements.deliveryAddress.textContent = order.delivery_address;
   elements.orderTotal.textContent = money(order.total_amount);
+  renderPriceBreakdown(order);
 
   // Map destination pin label
   if (elements.mapTargetLabel && order.delivery_address) {
@@ -485,18 +534,7 @@ function renderOrder(order) {
   table.appendChild(tbody);
   elements.itemsList.replaceChildren(table);
 
-  // Payment and Escrow badges
-  if (elements.badgePaymentStatus) {
-    elements.badgePaymentStatus.hidden = false;
-    // Legacy orders have no recorded payment; never present the old PAID default (US20 §10).
-    elements.badgePaymentStatus.textContent = order.payment_status ?
-      "Payment: " + order.payment_status :
-      "Payment not recorded (order placed before payment tracking)";
-    elements.badgePaymentStatus.className = "badge " + (
-      order.payment_status === "REFUNDED" ? "badge-purple" :
-      order.payment_status === "PAID" ? "badge-success" : "badge-info"
-    );
-  }
+  PaymentDisplay.renderBadges(order, elements.badgePaymentMethod, elements.badgePaymentStatus);
   if (elements.badgeEscrowStatus) {
     elements.badgeEscrowStatus.hidden = false;
     elements.badgeEscrowStatus.textContent = "Escrow: " + (order.escrow_status || "HELD");

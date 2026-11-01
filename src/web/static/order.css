@@ -229,6 +229,8 @@ body.ios-theme {
   align-items: center;
   text-align: center;
   position: relative;
+  min-width: 0;
+  padding: 0 0.5rem;
 }
 
 .metric-col:not(:last-child)::after {
@@ -254,7 +256,8 @@ body.ios-theme {
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--ios-text-primary);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ==========================================================================
@@ -748,6 +751,26 @@ body.ios-theme {
   gap: 1.25rem;
   padding: 1rem 1rem 0 1rem;
   border-top: 1px solid var(--ios-border);
+  flex-wrap: wrap;
+}
+
+.price-breakdown {
+  max-width: 30rem;
+  margin: 1rem 0 1rem auto;
+  font-size: 0.95rem;
+}
+
+.price-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+}
+
+.price-breakdown dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .total-label {

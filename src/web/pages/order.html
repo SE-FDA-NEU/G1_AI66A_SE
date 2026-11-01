@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/order.css">
   <link rel="stylesheet" href="/static/buyer-returns.css">
   <script src="/static/buyer-returns.js" defer></script>
+  <script src="/static/payment-display.js" defer></script>
   <script src="/static/order.js" defer></script>
 </head>
 <body class="ios-theme">
@@ -51,6 +52,7 @@
           <span class="live-dot"></span> Live updating
         </span>
         <span id="order-status-badge" class="badge">Loading...</span>
+        <span id="badge-payment-method" class="badge" hidden></span>
         <span id="badge-payment-status" class="badge" hidden></span>
         <span id="badge-escrow-status" class="badge" hidden></span>
       </div>
@@ -61,14 +63,13 @@
     <div id="status-message" role="status" class="ios-alert ios-alert--info" hidden></div>
     <div id="error-message" role="alert" class="ios-alert ios-alert--error" hidden></div>
 
-    <!-- 4-Column Key Metric Summary Bar (Exact from reference image) -->
-    <section id="summary-metrics-bar" class="metrics-bar" hidden>
+    <section id="summary-metrics-bar" class="metrics-bar" aria-label="Order summary" hidden>
       <div class="metric-col">
-        <span class="metric-label">ORDER PLACED</span>
-        <span id="order-placed-val" class="metric-val">—</span>
+        <span class="metric-label">ORDER DATE / TIME</span>
+        <time id="order-placed-val" class="metric-val">—</time>
       </div>
       <div class="metric-col">
-        <span class="metric-label">TOTAL</span>
+        <span class="metric-label">GRAND TOTAL</span>
         <span id="order-total-val" class="metric-val">—</span>
       </div>
       <div class="metric-col">
@@ -251,8 +252,18 @@
         <h3 class="section-subheading">ITEMS IN THIS ORDER</h3>
       </div>
       <div id="items-list" class="items-table-wrapper"></div>
+      <dl id="order-price-breakdown" class="price-breakdown" aria-label="Recorded price breakdown" hidden>
+        <div><dt>Item subtotal</dt><dd id="order-subtotal"></dd></div>
+        <div><dt>Shop discounts</dt><dd id="order-shop-discount"></dd></div>
+        <div><dt>Platform discount</dt><dd id="order-platform-discount"></dd></div>
+        <div><dt>Shipping fees</dt><dd id="order-shipping-fee"></dd></div>
+        <div><dt>Shipping discount</dt><dd id="order-shipping-discount"></dd></div>
+      </dl>
+      <p id="order-breakdown-unavailable" class="text-muted" hidden>
+        Detailed pricing is unavailable for this order. Grand total is the recorded order total.
+      </p>
       <div class="total-row">
-        <span class="total-label">Total Amount:</span>
+        <span class="total-label">Grand total:</span>
         <span id="order-total" class="total-price"></span>
       </div>
     </section>

@@ -478,14 +478,16 @@ Local calculation completion does not establish story-wide acceptance or CI/revi
 
 ## US20 contract (#112, #148–#150)
 
-Runtime: **Partial.** `payment_status` and `escrow_status` exist since PR #170. Methods,
-recorded results and settlement are not implemented. Contract proposed in
-[docs/us20-payments.md](us20-payments.md); each task PR confirms or amends its part.
+Runtime: **Partial.** `payment_status` and `escrow_status` remain the existing
+state fields. #149 adds `orders.payment_method`, the required checkout selector,
+and method/status display on confirmation and order details. Real payment results,
+state transitions and settlement remain deferred to #148 and #150. Contract and
+scope boundary: [docs/us20-payments.md](us20-payments.md).
 
 | Task | Contract section | Evidence required before closing |
 |---|---|---|
 | #148 payment fields, validation, escrow and settlement | 1–7, 9, 10 | Transition matrix; event deduplication; release guard on every completion path; refund once; migration fresh, from `17638838` and rerun |
-| #149 payment selector and status display | 2.1, 3, 8 | Method stored and shown; demo methods labelled; no success shown before a recorded result; seller-scoped settlement fields |
+| #149 payment selector and status display | 2.1, 3, 8 | `payment_method` migration and checkout contract; confirmation/order display; legacy/null and unpaid-demo states; `tests/test_checkout.py`, `tests/test_database.py`, `tests/checkout_ui.mjs`; settlement remains out of scope |
 | #150 payment and settlement tests | 4, 6, 8, 10, 11 | Section 11 matrix and criteria R1–R6 and L; section 6.2 pairs in both orders and concurrently; invariants I1–I8 after every step; reconciliation identity |
 
 Pending decisions D1–D6 (section 12 of the contract) must be confirmed by their owners before the code that depends on them merges.
@@ -545,6 +547,87 @@ existing checkout snapshot writes, historical readers, and nullable seller image
 See the [snapshot contract and exclusions](us19-categories-variants-snapshots.md#immutable-order-item-verification-147)
 and the single [#147 verification matrix](testing.md#task-147-immutable-order-item-snapshots).
 
+## Order detail date/time and recorded total (#159)
+
+Requirement: display the selected buyer order's creation date/time and persisted
+grand total, distinguishing price components where recorded. The existing receipt
+API already supplies those facts and enforces buyer ownership. `order.html`,
+`order.js` and `order.css` implement the [detail contract](us05-buyer-order-history.md#recorded-order-summary-159).
+The [single verification matrix](testing.md#issue-159-recorded-order-date-and-total)
+covers real-browser API integration, recorded prices, zero totals, legacy fallback,
+switching/reload, responsive layouts, retry and ownership.
+
+Exclusions: payment selection/display assigned to #149, pricing changes, new API
+fields, migrations, third-party map rendering and seller-dashboard changes.
+
+## US21 admin catalog and voucher UI (#113, #152)
+
+The [UI contract](us21-admin-ui.md) records the scope over the existing portal.
+
+| Assigned requirement | Implementation | Verification |
+|---|---|---|
+| Category management and product moderation | Existing admin routes with confirmed actions, form validation and readable list states in `admin-portal.js` | [U152-01, 07, 11](testing.md#task-152-admin-catalog-and-voucher-screens) |
+| Create/manage platform vouchers | Existing API, explicit confirmations, three types, caps/limits and UTC validity controls | U152-03-05 in the same matrix |
+| Accessible feedback and recovery | Live status/error regions, retained input, pending locks, modal keyboard controls and mobile layout | U152-02, 05-07 in the same matrix |
+| Preserve current account/filter context | Current token checks around touched requests; list sequence guards | U152-08-10 in the same matrix |
+| Exact voucher payload and shared-dialog compatibility | Disabled fixed cap omitted; free-shipping value normalized; existing account/dispute dialogs retain keyboard, cancel, error and save behavior | U152-03, 12-14 in the same matrix |
+
+## US21 admin backend workflow (#113, #151)
+
+The [assigned backend boundary and API contract](us21-admin-workflow.md) distinguish
+existing admin/account behavior from this task's category audit and dispute changes.
+
+| Assigned requirement | Implementation | Verification |
+|---|---|---|
+| Explicit active-admin guard and authenticated actor | Existing `auth.AdminUser`; category/account/dispute controllers derive identity from it | [A151-01-02](testing.md#task-151-admin-authorization-and-dispute-workflow) |
+| Validated category administration with durable audit | Shared hierarchy/audit service, category audit repository/model and admin audit read API; both existing mutation surfaces | A151-03-05 in the same matrix |
+| Account status history and prohibited-action checks | Existing account status transaction and `AccountAuditLog`; strict request fields and UTC audit response | A151-02, 06 in the same matrix |
+| Atomic dispute escalation and decision effects | Admin dispute service/repository, shared return settlement/restock helpers and existing order history | A151-07-13 in the same matrix |
+| Preserve legacy facts without invented history | Nullable dispute creation actor migration; audit table registered during initialization | A151-14 in the same matrix |
+
+## US21 admin route registry and access rules (#113, #153)
+
+Every admin route implemented on `main` after #151, with its access rule and audit
+evidence. `tests/test_admin_security.py` derives the route list from the application's
+routers and fails if a route is added, removed or left without the `AdminUser` guard
+without updating this table. Browser routes are those called by the current
+`src/web/static/admin-portal.js`; screens delivered by #152 are not claimed here.
+
+Access for every row: guest 401 `ERR_AUTH_REQUIRED`; buyer or seller 403
+`ERR_ADMIN_REQUIRED`; restricted or suspended administrator 403
+`ERR_ACCOUNT_RESTRICTED`, read from the database on each request. Implementation PR
+for all rows: [#212](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/212) (#151);
+security tests: `tests/test_admin_security.py`, [#215](https://github.com/SE-FDA-NEU/G1_AI66A_SE/pull/215) (#153).
+Status: Implemented.
+
+| API route | Browser route | Story / task | Role | Ownership / scope | Audit | Test IDs |
+|---|---|---|---|---|---|---|
+| `GET /api/v1/admin/category-audits` | — | #151 | admin | Platform-wide read | Read-only; no audit row | A153-01..03 |
+| `GET /api/v1/admin/categories` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only | A153-01..03 |
+| `POST /api/v1/admin/categories` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | `category_audit_logs` CREATE, same transaction | A153-01..05 |
+| `PUT /api/v1/admin/categories/{category_id}` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | `category_audit_logs` UPDATE with before/after | A153-01..05 |
+| `DELETE /api/v1/admin/categories/{category_id}` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | `category_audit_logs` DELETE (+ UPDATE per reparented child) | A153-01..05 |
+| `GET /api/v1/admin/users` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only; shows recent account audits | A153-01..03 |
+| `GET /api/v1/admin/users/{user_id}` | — | #151 | admin | Platform-wide | Read-only; shows account audits | A153-01..03 |
+| `PATCH /api/v1/admin/users/{user_id}/status` | `/admin`, `/admin/portal` | #151 | admin | Target user; admin cannot restrict self | `account_audit_logs` actor, old/new status, reason, UTC time | A153-01..06 |
+| `GET /api/v1/admin/vouchers` | `/admin`, `/admin/portal` | #151 | admin | PLATFORM vouchers only | Read-only | A153-01..03 |
+| `POST /api/v1/admin/vouchers` | `/admin`, `/admin/portal` | #151 | admin | Always PLATFORM scope, no seller | **No audit record (gap)** | A153-01..03, 07 |
+| `PATCH /api/v1/admin/vouchers/{voucher_id}` | `/admin`, `/admin/portal` | #151 | admin | PLATFORM vouchers only; SHOP voucher is 404 | **No audit record (gap)** | A153-01..03, 07 |
+| `GET /api/v1/admin/products` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only | A153-01..03 |
+| `PATCH /api/v1/admin/products/{product_id}/status` | `/admin`, `/admin/portal` | #151 | admin | Owner seller cannot be changed | **No audit record (gap)**; moderation flag only | A153-01..03, 07 |
+| `GET /api/v1/admin/disputes` | `/admin`, `/admin/portal` | #151 | admin | Platform-wide | Read-only; shows creator and decision facts | A153-01..03 |
+| `POST /api/v1/admin/disputes` | — (portal does not call escalation) | #151 | admin | Seller order must belong to the parent order | `created_by_user_id`; order history on a new transition | A153-01..03 |
+| `POST /api/v1/admin/disputes/{dispute_id}/decision` | `/admin`, `/admin/portal` | #151, #140 | admin | Dispute/order/buyer/seller relationships verified | Dispute decider/time, order history, `REFUND` payment event | A153-01..03, 08 |
+| `GET /api/v1/categories/admin` | — (no browser caller) | #151 | admin | Platform-wide | Read-only | A153-01..03 |
+| `POST /api/v1/categories` | — (no browser caller) | #151 | admin | Platform-wide | `category_audit_logs` CREATE | A153-01..03 |
+| `PATCH /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide | `category_audit_logs` UPDATE | A153-01..03 |
+| `DELETE /api/v1/categories/{category_id}` | — (no browser caller) | #151 | admin | Platform-wide, soft deactivation | `category_audit_logs` DEACTIVATE | A153-01..03 |
+
+Known gaps recorded rather than hidden: platform voucher create/update and product
+moderation write no audit record, so "who changed this voucher/product" cannot be answered
+from the database. Adding that history needs its own task; this one only tests and
+documents current behavior.
+
 ## US22 shared design tokens and components (#114, #154)
 
 Runtime: **Implemented as a shared styling slice.** The base stylesheet defines
@@ -561,3 +644,4 @@ the reusable visual tokens and semantic component primitives described in
 Exclusions: page-specific visual redesign, new frontend dependencies, and
 backend/API behavior. Browser screenshots and human review remain delivery
 evidence, not claims made by this local implementation.
+

@@ -156,6 +156,52 @@ The DOM suite runs in the existing CI page-script step. Native checks require an
 installed Chrome/Edge, or `BROWSER_PATH`; they need no npm dependency and use an
 isolated browser profile. Actual run results and AI disclosure belong in the PR.
 
+## Task #149: payment choices and order payment display
+
+The #149 boundary is method capture and display only. The server is the single
+compatibility default: an omitted method is recorded as `COD`; the browser sends
+the required selected value. Existing payment-state defaults and seller fulfilment
+transitions are not changed by this task.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Omitted method | Stores `COD` for compatibility | `tests/test_checkout.py` |
+| Unknown method | `422` field validation and no order writes | `tests/test_checkout.py` |
+| Legacy `NULL` method | Confirmation says payment method/status not recorded | `tests/checkout_ui.mjs` |
+| Unpaid VIETQR/WALLET/CARD | Shows awaiting/demo result not recorded, never Paid | `tests/checkout_ui.mjs` and shared `payment-display.js` |
+| Legacy orders migration | Adds nullable column, preserves data, and is repeatable | `tests/test_database.py` |
+
+Commands used for local verification:
+
+```powershell
+$env:DEBUG = 'false'
+python -m src.database
+python -m src.seed
+python -m pytest -q
+node tests/checkout_ui.mjs
+python -m ruff check src tests/test_checkout.py tests/test_database.py
+git diff --check
+```
+
+Observed results on 2026-10-30, after running the README database setup, were:
+
+- `python -m src.database`: completed successfully.
+- `python -m src.seed`: completed successfully; existing database reported `Added: 0 products`.
+- `python -m pytest -q`: **1007 passed, 2 skipped, 5 warnings** in 601.00 seconds.
+- `node tests/checkout_ui.mjs`: passed, including timeout/replay, legacy receipt,
+  unpaid demo-method and shared payment-display checks.
+- All ten CI-listed page-script commands passed, including
+  `node tests/checkout_ui.mjs` and `node tests/addresses_ui.mjs`.
+- Targeted Ruff on the touched Python modules/tests: all checks passed.
+- `git diff --check`: passed.
+
+`ruff check .` still reports eight pre-existing issues in
+`tests/generate_ui_evidence.py` and `tests/test_ui_styling.py`; CI treats lint as
+warning-only. GitHub CI, teammate review and screenshot capture are not claimed
+as complete by these local results. The optional browser screenshot command
+`python tests/browser_us13.py` could not run in this environment because the
+README dependency set does not install the optional `playwright` package; no
+screenshot is claimed from that failed command.
 
 ## Task #146: category and variant APIs
 
@@ -214,6 +260,151 @@ The suite is discovered by the existing CI pytest step. No new browser dependenc
 is needed: this task tests persistence and API contracts and adds no new screen.
 Only report CI/review/clean-clone results after they have actually been verified.
 
+## Issue #159: recorded order date and total
+
+`tests/test_order_summary_browser.py` executes the production order page in
+Chromium/Chrome, routes requests through real FastAPI handlers, and uses fresh
+SQLite files. Third-party map resources are blocked; map rendering is outside this
+fix. Prices and timestamps below are independent expected purchase facts.
+
+| Case | Expected result |
+|---|---|
+| Two shops, vouchers, catalog edited after purchase; 390/768/1280 px; reload | Stored 2026-01-02 15:04 UTC displays as 22:04 GMT+7 in the configured browser; subtotal 500,000 minus shop 30,000 minus platform 47,000 plus shipping 40,000 minus shipping discount 30,000 = grand total 433,000 VND; no viewport overflow |
+| Real zero-total voucher checkout | Grand total is 0 VND, not the 50,000 VND item subtotal; zero discounts remain 0, not negative zero |
+| Switch discounted order -> legacy-pricing order -> first order | Stored totals 433,000 -> 70,000 -> 433,000; old breakdown clears and the unavailable explanation is visible for legacy pricing |
+| Detail read fails, then Retry succeeds | Summary stays hidden on the initial failure; Retry displays the actual receipt |
+| Another authenticated buyer opens the order URL | API denies access; no summary or item details are shown |
+
+Run with Python 3.12, README dependencies, Playwright, and installed Chrome:
+
+```powershell
+python -m pip install playwright
+$env:DEBUG = 'false'
+python -m pytest tests/test_order_summary_browser.py -q
+python -m ruff check tests/test_order_summary_browser.py
+node --check src/web/static/order.js
+node tests/buyer_returns_ui.mjs
+git diff --check
+```
+
+The fixture tries Playwright Chromium, then installed Chrome. Set `BROWSER_PATH`
+to an installed Chrome/Edge executable when automatic detection is unavailable.
+The existing CI pytest step discovers this file. To regenerate the desktop/mobile
+screenshots with deterministic fixture data, set
+`$env:UPDATE_ORDER_SUMMARY_SCREENSHOTS = '1'` before running the browser suite.
+Local verification, CI, human review and clean-clone verification are separate.
+
+## Task #152: admin catalog and voucher screens
+
+Expected behavior comes from #152, parent #113 and the
+[UI contract](us21-admin-ui.md). Tests use production page assets, a real browser,
+authenticated FastAPI requests and isolated SQLite; selected failure/held responses
+are explicit test doubles. They do not represent human user acceptance.
+
+| ID | Action / partition | Expected result | Verification |
+|---|---|---|---|
+| U152-01 | Create/edit/delete category; cancel deletion first | Native form checks, confirmed CRUD with persisted category changes; cancellation sends no DELETE | Real API/database lifecycle |
+| U152-02 | Open editor; Tab/Shift+Tab; Escape | Named modal, initial/trapped focus, inert background and focus restoration | Browser keyboard interactions |
+| U152-03 | Create each voucher type, with/without an optional cap; invalid end date; cancel/confirm creation | No request for invalid/cancelled input; exactly one POST with the full expected JSON payload, integer values/limits, UTC periods and no client-supplied scope/owner; API stores platform scope | Five-case payload decision table and committed voucher rows |
+| U152-04 | Cancel/confirm voucher status change | Cancel sends no PATCH; confirmation updates the named code once | Production toggle/API integration |
+| U152-05 | Read fails, code duplicates, then transient save failure | Retry works; backend error is shown and focused in the form; input remains; controls unlock; corrected retry succeeds | Read/server/network error paths |
+| U152-06 | Hold save; repeat submit; press Escape | One mutation, visible/live progress, locked controls and no pending dismissal | Controlled pending response |
+| U152-07 | Cancel/confirm product moderation; search empty; view at 390px | Correct product state; no cancelled PATCH; empty feedback; no horizontal page overflow | Catalog integration and mobile geometry |
+| U152-08 | Guest/buyer/seller opens portal | Access denied without requests for admin datasets | Role partitions, existing server authorization coverage |
+| U152-09 | Account changes before a prepared write or before an old read finishes | No prepared write; late private rows discarded and portal hidden | Account-context race regressions |
+| U152-10 | Older search response arrives after a newer empty result | Newer filter result remains visible | Out-of-order real API responses |
+| U152-11 | Whitespace name or invalid slug | Invalid field feedback and no mutation | Client validation partitions |
+| U152-12 | Fixed voucher with a carried-over cap; free shipping with a stale disabled value | Fixed voucher POST omits the `max_discount` key entirely; free shipping sends `discount_value: 0`; enabled empty caps send null | Exact JSON assertions before inspecting persisted rows; direct-request backend checks belong to #151 |
+| U152-13 | Existing account modal: keyboard trap, Cancel/Escape, failed save, corrected retry | Cancel sends no PATCH/audit; focus restores, error retains input, successful retry records the status and authenticated audit; background unlocks | Real account API/database regression |
+| U152-14 | Existing dispute modal: required notes, Escape, failed decision, retry; approve with/without restock and reject | No cancelled POST; focus/error recovery preserved; exact decision JSON, actor/notes, order/escrow state and conditional inventory effects persist | Three real dispute workflow cases after integrating #151 |
+
+Use the README Python environment and the browser dependency installed by CI:
+
+~~~powershell
+$env:DEBUG = 'false'
+python -m pip install playwright
+python -m pytest tests/test_admin_portal_browser.py tests/test_admin_portal.py tests/test_ui_docs_contract.py -q
+python -m ruff check src tests/test_admin_portal_browser.py tests/test_admin_portal.py
+node --check src/web/static/admin-portal.js
+git diff --check
+~~~
+
+Chrome/Edge is detected on Windows; set `BROWSER_PATH` if installed elsewhere.
+To regenerate the documented screenshots with fake data, set
+`ADMIN_UI_ARTIFACTS=docs/images/us21` before running the browser suite. Run results
+belong in the PR, without marking unverified CI or human review complete.
+
+## Task #151: admin authorization and dispute workflow
+
+Expected behavior comes from #151, parent #113, and the
+[US21 backend contract](us21-admin-workflow.md). New tests use isolated SQLite
+files, real authenticated routes, deterministic decision clocks and fresh-session
+assertions. Existing admin and return suites retain their earlier coverage.
+
+| ID | Partition / action | Expected result | Verification |
+|---|---|---|---|
+| A151-01 | Guest, buyer or seller calls category/audit/account/dispute routes directly | 401/403; no mutations, leaked audit records or actor spoofing | Direct-request authorization matrix |
+| A151-02 | Existing token belongs to a restricted/suspended admin or moderated buyer/seller | Server reads current account status and denies prohibited actions | Admin restriction and account moderation cases |
+| A151-03 | Create/update/delete via canonical or legacy categories; repeat an unchanged update | Before/after snapshots and authenticated UTC actor history commit with the change; no no-op audit | Both-route audit and legacy child-reparenting cases |
+| A151-04 | Duplicate slug, invalid ancestor, blank/unknown fields, inactive ancestor or legacy cycle | Reject without writes; keep existing route-specific error contracts | Validation partitions and cycle fixture |
+| A151-05 | Category audit INSERT fails during create, update or delete | 500 database error, not slug conflict; category, associations and audits equal before-state | Trigger failure matrix |
+| A151-06 | Moderate buyer/seller; repeat status; fail account audit; try self-restriction or actor injection | Existing restrictions/audit/deactivation remain atomic and server-owned | Account status/audit integration |
+| A151-07 | Escalate delivered order or existing pending buyer return | Pause seller/parent escrow, persist admin creator; one actual status event, existing buyer history retained | Escalation and request-linking cases |
+| A151-08 | Boundary reason/evidence, duplicate dispute, wrong parent, unavailable state, failed insert/history/commit or lost claim | Reject or roll back all dispute/state/history writes | Escalation boundaries and failure injection |
+| A151-09 | Paid/unpaid/failed payments, approve/reject and restock flag | Apply shared settlement rules, derive parent, update linked request and exact actor/time; restock only when approved and requested | Decision table with fixed UTC clock |
+| A151-10 | Restock an inactive purchased variant; repeat decision | Restore that variant only; product counter reconciles; repeated decision changes nothing | Variant and replay regressions |
+| A151-11 | Unreconciled payment, moved-on order, resolved/mismatched request, mismatched dispute ownership or forged decision fields | Reject before effects; preserve all persisted state | Invalid-adjudication partitions |
+| A151-12 | Inventory/history/notification/commit fails, or request/dispute conditional claim loses | Roll back dispute, request, orders, stock/counters, history and notifications together | Trigger/commit/claim failure matrix |
+| A151-13 | Another session changes a seller order after it was read | Conditional escalation cannot rewind the changed status | Two-session stale-state regression |
+| A151-14 | Initialize an old dispute schema twice, with existing known facts | Nullable unknown creator stays null; create empty category audit table; preserve facts and foreign keys | Legacy migration regression |
+| A151-15 | Decide a tracked paid dispute after integrating #148; inject refund-event failure; retry | Shared payment service records one admin-attributed refund and voids escrow; failure rolls back ledger with every other effect | Payment-event assertions and refund-trigger rollback |
+| A151-16 | Approve/reject a legacy dispute with no payment method | Preserve the stored payment snapshot without inventing a refund, refunded amount or settlement time | Legacy payment compatibility pair |
+| A151-17 | Direct fixed-amount voucher request includes a cap | 400 before persistence, with no partial voucher write | Fixed-cap validation regression |
+
+Run with the README Python 3.12 environment and dependencies:
+
+~~~powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_admin_workflow.py tests/test_admin_portal.py tests/test_return_decisions.py tests/test_return_refund.py tests/test_us19_categories_variants.py tests/test_database.py tests/test_ui_docs_contract.py -q
+python -m ruff check src tests/test_admin_workflow.py tests/test_admin_portal.py
+git diff --check
+~~~
+
+No UI or browser interaction is added by this backend task. Test execution results
+and AI assistance disclosure belong in the PR; they do not establish human review
+or story-wide acceptance.
+
+## Task #153: admin route registry and security tests
+
+Expected behavior comes from #153, parent #113 and the
+[US21 contract](us21-admin-workflow.md). Tests send direct HTTP requests with signed
+tokens on isolated SQLite files; no UI state is treated as access control.
+
+| ID | Partition / action | Expected result | Verification |
+|---|---|---|---|
+| A153-01 | Add, remove or unguard an admin route | Registry test fails until `traceability.md` and the test registry are updated; every admin route depends on `require_admin` | Route discovery from routers plus OpenAPI |
+| A153-02 | Guest, buyer, other buyer, seller, other seller, restricted and suspended admin call each admin route with a valid request | 401/403 with the documented code and an identical database snapshot | Actor x route matrix |
+| A153-03 | Active admin calls each route with a valid request | Documented success status | Same registry |
+| A153-04 | Token issued while ACTIVE, account restricted afterwards | Next request is 403 `ERR_ACCOUNT_RESTRICTED`, no write; token role must match the database role | Restriction and forged-role cases |
+| A153-05 | Unknown ids; malformed or unknown fields; limit below/above 1-100 | 404 `*_NOT_FOUND` or 422 `ERR_VALIDATION`, no write | Partition tables |
+| A153-06 | Actor id supplied in query or body | Audit actor is the authenticated admin; forbidden fields are rejected | Actor spoofing cases |
+| A153-07 | Scope, seller or owner supplied for vouchers/products; seller edits foreign or platform voucher; admin route targets shop voucher | Scope and owner come from the server; foreign access is 404 with no write | Scope and ownership cases |
+| A153-08 | Seller and admin approve the same restockable paid return; outsiders try the seller route | Same stock, payment, escrow and parent result; outsiders get 403 and no write | Parity and cross-account cases |
+| A153-09 | Failed category mutations; two admins act in sequence | No audit row for failures; history names the real actor, newest first | Audit history cases |
+
+Run with the README Python 3.12 environment:
+
+~~~powershell
+$env:DEBUG = 'false'
+python -m pytest tests/test_admin_security.py tests/test_admin_workflow.py tests/test_admin_portal.py -q
+python -m ruff check tests/test_admin_security.py
+git diff --check
+~~~
+
+Audit for platform vouchers and product moderation does not exist; it is listed as a gap
+in the traceability table, not tested as if present. CI, review and a clean-clone run
+need separate evidence.
+
 ## Task #154: shared CSS design tokens and components
 
 Expected results come from US22/#114 and the shared styling contract in
@@ -223,6 +414,8 @@ Expected results come from US22/#114 and the shared styling contract in
 |---|---|---|
 | Required token categories | Palette and semantic feedback, typography, spacing, borders, shadows, radii and focus tokens are declared in `base.css` | `test_shared_design_tokens_cover_required_categories` |
 | Shared component primitives | Buttons/inputs retain existing behavior and cards, tables, badges and alerts expose reusable selectors | `test_shared_components_have_semantic_variants` and existing UI styling tests |
+| Control sizing contract | Single-line controls (.input, .select) have 42px desktop / 44px mobile min-height; multiline controls (textarea, .textarea) preserve 96px min-height without collapsing | `test_control_aliases_preserve_native_sizing_and_textarea_min_height` |
+| Badge cascade isolation | Semantic variants (.badge--success, --warning, --danger, --info) preserve color/background when order.css is loaded | `test_semantic_badge_variants_resist_order_stylesheet_cascade_override` |
 | Accessibility regressions | Link buttons retain contrast on hover/active; controls retain desktop/mobile sizing and visible focus | Existing tests in `tests/test_ui_styling.py` |
 
 ```powershell
@@ -233,3 +426,4 @@ git diff --check
 
 This slice adds no new browser behavior or dependency. Visual review at the
 existing responsive breakpoints is still separate from these automated checks.
+

@@ -330,6 +330,9 @@ def checkout(
                 recipient_name=snapshot.recipient_name,
                 phone_number=snapshot.phone_number,
                 delivery_address=snapshot.delivery_address,
+                # Older API clients did not send a method; retain their behavior
+                # as COD while new checkout UI requests an explicit choice.
+                payment_method=body.payment_method or "COD",
             )
             session.add(order)
             session.flush()

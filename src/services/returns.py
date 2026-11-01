@@ -2,17 +2,15 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import case, update
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.models.order import Order
-from src.models.order_item import OrderItem
-from src.models.product import Product
-from src.models.product_metadata import ProductMetadata
 from src.models.return_request import ReturnRequest
 from src.models.seller_order import SellerOrder
 from src.models.user import User
+from src.repositories import returns as repository
 from src.schemas.returns import CreateReturnRequest, ReturnDecisionRequest, ReturnRequestData
 from src.services.inventory import restore_order_item_stock
 from src.services.notifications import create_notification
@@ -60,7 +58,9 @@ def _to_return_data(
     )
 
 
-def sync_parent_order_state(session: Session, order: Order) -> None:
+def sync_parent_order_state(
+    session: Session, order: Order, *, occurred_at: datetime | None = None
+) -> None:
     """Derive parent order status, payment status, and escrow status from all seller orders."""
     child_orders = session.exec(select(SellerOrder).where(SellerOrder.order_id == order.id)).all()
     if not child_orders:
@@ -72,7 +72,7 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
     if statuses == {"COMPLETED"}:
         order.status = "COMPLETED"
         if not order.completed_at:
-            order.completed_at = datetime.now(UTC)
+            order.completed_at = occurred_at or datetime.now(UTC)
     elif statuses == {"CANCELLED"}:
         order.status = "CANCELLED"
     elif statuses == {"RETURNED_REFUNDED"}:
@@ -82,11 +82,11 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
     elif statuses == {"DELIVERED"}:
         order.status = "DELIVERED"
         if not order.delivered_at:
-            order.delivered_at = datetime.now(UTC)
+            order.delivered_at = occurred_at or datetime.now(UTC)
     elif statuses == {"SHIPPED"}:
         order.status = "SHIPPED"
         if not order.shipped_at:
-            order.shipped_at = datetime.now(UTC)
+            order.shipped_at = occurred_at or datetime.now(UTC)
     elif statuses == {"CONFIRMED"}:
         order.status = "CONFIRMED"
     elif "CANCELLATION_REQUESTED" in statuses:
@@ -102,6 +102,7 @@ def sync_parent_order_state(session: Session, order: Order) -> None:
 
     # 2. Payment and escrow summaries belong to the payment service (US20).
     sync_parent_payment(session, order)
+
 
 def submit_return_request(
     session: Session,
@@ -367,6 +368,14 @@ def settle_return(
     except PaymentError as exc:
         raise ReturnError(exc.code, exc.message, exc.status) from exc
 
+
+def restock_return_items(session: Session, seller_order_id: int) -> None:
+    """Restore the purchased inventory unit and counters without committing."""
+    for item in repository.purchased_items(session, seller_order_id):
+        restore_order_item_stock(session, item)
+        repository.reduce_sold_count(session, item)
+
+
 def decide_return_request(
     session: Session,
     current_user: User,
@@ -431,30 +440,11 @@ def decide_return_request(
             400,
         )
 
-    refunds_payment = settle_return(
-        session, seller_order, decision.action, now, current_user.id
-    )
+    refunds_payment = settle_return(session, seller_order, decision.action, now, current_user.id)
 
     if decision.action == "APPROVE":
         if decision.is_restockable:
-            items = session.exec(
-                select(OrderItem, Product)
-                .join(Product, Product.id == OrderItem.product_id)
-                .where(OrderItem.seller_order_id == seller_order.id)
-            ).all()
-            for item, product in items:
-                restore_order_item_stock(session, item)
-                session.exec(
-                    update(ProductMetadata)
-                    .where(ProductMetadata.product_id == product.id)
-                    .values(
-                        sales_count=case(
-                            (ProductMetadata.sales_count - item.quantity < 0, 0),
-                            else_=ProductMetadata.sales_count - item.quantity,
-                        )
-                    )
-                    .execution_options(synchronize_session=False)
-                )
+            restock_return_items(session, seller_order.id)
             note = "Return approved. Inventory restored."
         else:
             note = "Return approved. Inventory not increased."
@@ -466,6 +456,7 @@ def decide_return_request(
             to_status="RETURNED_REFUNDED",
             actor=current_user,
             note=note,
+            occurred_at=now,
         )
 
         create_notification(
@@ -493,6 +484,7 @@ def decide_return_request(
             to_status="COMPLETED",
             actor=current_user,
             note=note,
+            occurred_at=now,
         )
 
         create_notification(
@@ -507,8 +499,8 @@ def decide_return_request(
             target_path=f"/orders/{order.id}",
         )
 
-    # Derive parent order state from all child seller orders
-    sync_parent_order_state(session, order)
+    # Derive parent milestones from the same instant as the decision history.
+    sync_parent_order_state(session, order, occurred_at=now)
 
     session.commit()
     session.refresh(ret_req)

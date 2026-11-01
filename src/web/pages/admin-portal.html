@@ -26,7 +26,7 @@
 
     <main class="admin-container">
         <!-- Unauthorized / Restricted Banner -->
-        <div id="admin-unauthorized-banner" class="alert alert-danger" style="display: none;">
+        <div id="admin-unauthorized-banner" class="alert alert-danger" role="alert" style="display: none;">
             <h3>Access Denied</h3>
             <p>You must be signed in with an active platform administrator account to access this portal.</p>
             <a href="/login?next=/admin" class="btn btn-primary btn-sm">Sign in as Admin</a>
@@ -56,7 +56,8 @@
             <!-- Portal View Content -->
             <section class="portal-views">
                 <!-- Global Feedback Toast -->
-                <div id="admin-alert" class="portal-alert" style="display: none;"></div>
+                <div id="admin-alert" class="portal-alert portal-alert-success" role="status" aria-live="polite" aria-atomic="true"></div>
+                <div id="admin-error" class="portal-alert portal-alert-danger" role="alert" aria-atomic="true"></div>
 
                 <!-- View 1: Catalog Moderation -->
                 <div id="view-catalog" class="tab-view active">
@@ -66,16 +67,17 @@
                             <p class="subtitle">Review marketplace products and enforce listing compliance.</p>
                         </div>
                         <div class="filter-controls">
-                            <input type="text" id="catalog-search" placeholder="Search by name or code..." class="form-input">
-                            <select id="catalog-filter-status" class="form-select">
+                            <input type="text" id="catalog-search" aria-label="Search catalog by name or code" placeholder="Search by name or code..." class="form-input">
+                            <select id="catalog-filter-status" aria-label="Catalog product status" class="form-select">
                                 <option value="">All Statuses</option>
                                 <option value="active">Active (On Sale)</option>
                                 <option value="inactive">Deactivated</option>
                             </select>
                         </div>
                     </div>
+                    <p id="catalog-feedback" role="status" aria-live="polite"></p>
                     <div class="table-container">
-                        <table class="admin-table" id="catalog-table">
+                        <table class="admin-table" id="catalog-table" aria-label="Catalog products">
                             <thead>
                                 <tr>
                                     <th>Code</th>
@@ -104,8 +106,9 @@
                         </div>
                         <button id="btn-new-category" class="btn btn-primary">+ Add Category</button>
                     </div>
+                    <p id="categories-feedback" role="status" aria-live="polite"></p>
                     <div class="table-container">
-                        <table class="admin-table" id="categories-table">
+                        <table class="admin-table" id="categories-table" aria-label="Categories">
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -132,8 +135,9 @@
                         </div>
                         <button id="btn-new-voucher" class="btn btn-primary">+ Create Platform Voucher</button>
                     </div>
+                    <p id="vouchers-feedback" role="status" aria-live="polite"></p>
                     <div class="table-container">
-                        <table class="admin-table" id="vouchers-table">
+                        <table class="admin-table" id="vouchers-table" aria-label="Platform vouchers">
                             <thead>
                                 <tr>
                                     <th>Code</th>
@@ -237,18 +241,18 @@
     </main>
 
     <!-- Modal: Category Editor -->
-    <div id="modal-category" class="modal-overlay" style="display: none;">
+    <div id="modal-category" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-category-title" style="display: none;">
         <div class="modal-dialog">
             <h3 id="modal-category-title">Add Category</h3>
             <form id="form-category">
                 <input type="hidden" id="category-id">
                 <div class="form-group">
                     <label for="category-name">Category Name *</label>
-                    <input type="text" id="category-name" required class="form-input">
+                    <input type="text" id="category-name" required maxlength="100" class="form-input">
                 </div>
                 <div class="form-group">
                     <label for="category-slug">Slug (Unique URL identifier) *</label>
-                    <input type="text" id="category-slug" required class="form-input">
+                    <input type="text" id="category-slug" required maxlength="100" pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Use lowercase letters, digits and single hyphens." class="form-input">
                 </div>
                 <div class="form-group">
                     <label for="category-parent">Parent Category (Optional)</label>
@@ -265,13 +269,13 @@
     </div>
 
     <!-- Modal: Voucher Creator -->
-    <div id="modal-voucher" class="modal-overlay" style="display: none;">
+    <div id="modal-voucher" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-voucher-title" style="display: none;">
         <div class="modal-dialog">
-            <h3>Create Platform Voucher</h3>
+            <h3 id="modal-voucher-title">Create Platform Voucher</h3>
             <form id="form-voucher">
                 <div class="form-group">
                     <label for="voucher-code">Voucher Code * (3-32 characters, uppercase)</label>
-                    <input type="text" id="voucher-code" required class="form-input" placeholder="e.g. PLATFORM10">
+                    <input type="text" id="voucher-code" required minlength="3" maxlength="32" class="form-input" placeholder="e.g. PLATFORM10">
                 </div>
                 <div class="form-group">
                     <label for="voucher-type">Discount Type *</label>
