@@ -423,3 +423,26 @@ git diff --check
 Audit for platform vouchers and product moderation does not exist; it is listed as a gap
 in the traceability table, not tested as if present. CI, review and a clean-clone run
 need separate evidence.
+
+## Task #154: shared CSS design tokens and components
+
+Expected results come from US22/#114 and the shared styling contract in
+`docs/design.md`.
+
+| Case | Expected result | Verification |
+|---|---|---|
+| Required token categories | Palette and semantic feedback, typography, spacing, borders, shadows, radii and focus tokens are declared in `base.css` | `test_shared_design_tokens_cover_required_categories` |
+| Shared component primitives | Buttons/inputs retain existing behavior and cards, tables, badges and alerts expose reusable selectors | `test_shared_components_have_semantic_variants` and existing UI styling tests |
+| Control sizing contract | Single-line controls (.input, .select) have 42px desktop / 44px mobile min-height; multiline controls (textarea, .textarea) preserve 96px min-height without collapsing | `test_control_aliases_preserve_native_sizing_and_textarea_min_height` |
+| Badge cascade isolation | Semantic variants (.badge--success, --warning, --danger, --info) preserve color/background when order.css is loaded | `test_semantic_badge_variants_resist_order_stylesheet_cascade_override` |
+| Accessibility regressions | Link buttons retain contrast on hover/active; controls retain desktop/mobile sizing and visible focus | Existing tests in `tests/test_ui_styling.py` |
+
+```powershell
+python -m pytest tests/test_ui_styling.py -q
+python -m ruff check tests/test_ui_styling.py
+git diff --check
+```
+
+This slice adds no new browser behavior or dependency. Visual review at the
+existing responsive breakpoints is still separate from these automated checks.
+

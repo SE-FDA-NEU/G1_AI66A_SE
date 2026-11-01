@@ -195,6 +195,9 @@ body.ios-theme {
   border-radius: 9999px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.badge:not([class*="badge-"]):not([class*="badge--"]):not(.pending):not(.confirmed):not(.processing):not(.shipped):not(.delivered):not(.completed):not(.cancelled) {
   background-color: #f1f5f9;
   color: #475569;
 }
