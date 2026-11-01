@@ -1,0 +1,60 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/minhquang/G1_AI66A_SE/.venv/bin/python
+rootdir: /home/minhquang/G1_AI66A_SE
+configfile: pyproject.toml
+plugins: anyio-4.15.1, cov-7.1.0
+collecting ... collected 45 items
+
+tests/test_m4_p0.py::test_tc_us01_01_active_product_is_listed PASSED     [  2%]
+tests/test_m4_p0.py::test_tc_us01_02_inactive_product_is_hidden PASSED   [  4%]
+tests/test_m4_p0.py::test_tc_us01_03_to_05_page_size_boundary[19-19-19] PASSED [  6%]
+tests/test_m4_p0.py::test_tc_us01_03_to_05_page_size_boundary[20-20-20] PASSED [  8%]
+tests/test_m4_p0.py::test_tc_us01_03_to_05_page_size_boundary[21-20-21] PASSED [ 11%]
+tests/test_m4_p0.py::test_tc_us02_01_existing_product_detail PASSED      [ 13%]
+tests/test_m4_p0.py::test_tc_us02_02_unknown_product_is_404 PASSED       [ 15%]
+tests/test_m4_p0.py::test_tc_us02_03_04_stock_boundary_is_reported[0] PASSED [ 17%]
+tests/test_m4_p0.py::test_tc_us02_03_04_stock_boundary_is_reported[1] PASSED [ 20%]
+tests/test_m4_p0.py::test_tc_us03_01_add_valid_quantity PASSED           [ 22%]
+tests/test_m4_p0.py::test_tc_us03_02_to_04_stock_boundary[9-True] PASSED [ 24%]
+tests/test_m4_p0.py::test_tc_us03_02_to_04_stock_boundary[10-True] PASSED [ 26%]
+tests/test_m4_p0.py::test_tc_us03_02_to_04_stock_boundary[11-False] PASSED [ 28%]
+tests/test_m4_p0.py::test_tc_us03_05_06_non_positive_quantity_is_refused[0] PASSED [ 31%]
+tests/test_m4_p0.py::test_tc_us03_05_06_non_positive_quantity_is_refused[-1] PASSED [ 33%]
+tests/test_m4_p0.py::test_tc_us04_01_valid_checkout_creates_order_and_reduces_stock PASSED [ 35%]
+tests/test_m4_p0.py::test_tc_us04_02_empty_cart_is_refused PASSED        [ 37%]
+tests/test_m4_p0.py::test_tc_us04_03_stock_reduced_after_adding_is_refused_and_nothing_saved PASSED [ 40%]
+tests/test_m4_p0.py::test_tc_us04_04_stock_exactly_equal_to_quantity_succeeds PASSED [ 42%]
+tests/test_m4_p0.py::test_tc_us04_05_same_idempotency_key_creates_one_order PASSED [ 44%]
+tests/test_m4_p0.py::test_tc_us06_01_seller_creates_valid_product PASSED [ 46%]
+tests/test_m4_p0.py::test_tc_us06_02_buyer_cannot_create_product PASSED  [ 48%]
+tests/test_m4_p0.py::test_tc_us06_03_to_07_price_boundary[-1-False] PASSED [ 51%]
+tests/test_m4_p0.py::test_tc_us06_03_to_07_price_boundary[0-False] PASSED [ 53%]
+tests/test_m4_p0.py::test_tc_us06_03_to_07_price_boundary[1-True] PASSED [ 55%]
+tests/test_m4_p0.py::test_tc_us06_03_to_07_price_boundary[1000000000-True] PASSED [ 57%]
+tests/test_m4_p0.py::test_tc_us06_03_to_07_price_boundary[1000000001-False] PASSED [ 60%]
+tests/test_m4_p0.py::test_tc_us06_08_to_11_stock_boundary[-1-False] PASSED [ 62%]
+tests/test_m4_p0.py::test_tc_us06_08_to_11_stock_boundary[0-True] PASSED [ 64%]
+tests/test_m4_p0.py::test_tc_us06_08_to_11_stock_boundary[1000000-True] PASSED [ 66%]
+tests/test_m4_p0.py::test_tc_us06_08_to_11_stock_boundary[1000001-False] PASSED [ 68%]
+tests/test_m4_p0.py::test_tc_us08_01_seller_sees_own_order PASSED        [ 71%]
+tests/test_m4_p0.py::test_tc_us08_02_other_seller_sees_nothing_and_cannot_update PASSED [ 73%]
+tests/test_m4_p0.py::test_tc_us08_03_valid_transition_succeeds PASSED    [ 75%]
+tests/test_m4_p0.py::test_tc_us08_04_invalid_transition_is_refused_and_status_unchanged PASSED [ 77%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[PENDING-CONFIRMED-True] PASSED [ 80%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[PENDING-COMPLETED-False] PASSED [ 82%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[CONFIRMED-SHIPPED-True] PASSED [ 84%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[CONFIRMED-DELIVERED-False] PASSED [ 86%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[SHIPPED-DELIVERED-True] PASSED [ 88%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[COMPLETED-CANCELLED-False] PASSED [ 91%]
+tests/test_m4_p0.py::test_tc_us08_05_transition_decision_table[CANCELLED-CONFIRMED-False] PASSED [ 93%]
+tests/test_m4_p0.py::test_tc_us08_06_to_08_pagination_boundary[19-19] PASSED [ 95%]
+tests/test_m4_p0.py::test_tc_us08_06_to_08_pagination_boundary[20-20] PASSED [ 97%]
+tests/test_m4_p0.py::test_tc_us08_06_to_08_pagination_boundary[21-20] PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/conftest.py:8
+  /home/minhquang/G1_AI66A_SE/tests/conftest.py:8: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 45 passed, 1 warning in 32.25s ========================

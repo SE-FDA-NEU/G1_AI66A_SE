@@ -193,7 +193,8 @@ activated (or stop the server first):
 python -m pytest -v
 ```
 
-Expected: every test passes. Tests use in-memory or disposable file databases;
+Expected: every test passes. The Milestone 4 P0 cases alone run with
+`python -m pytest tests/test_m4_p0.py -v` (about 1 minute); see [testing.md](testing.md). Tests use in-memory or disposable file databases;
 subprocess seed checks override DATABASE_URL and do not touch marketplace.db.
 
 `uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload` also starts the
