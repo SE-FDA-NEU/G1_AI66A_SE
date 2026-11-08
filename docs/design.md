@@ -1056,14 +1056,14 @@ The database setup and seeding process is verified through automated commands an
 - **Database Seeding:**
   - Executed via `python -m src.seed`.
   - Ensures a default seller user (`id=1`, `email="seller@marketplace.local"`, `role="seller"`) exists.
-  - Seeds 43 source-matched sample products across keyboards/mice, webcams, USB hubs, laptop stands, monitors, phones, tablets, and laptops with valid prices, positive stock quantities, and `is_active = True`.
+  - Seeds 47 source-matched sample products across keyboards/mice, webcams, USB hubs, laptop stands, monitors, phones, tablets, laptops, Apple, and LG products with valid prices, positive stock quantities, and `is_active = True`.
   - **Idempotency:** When executed on a fresh database, it reports:
     ```text
     Database tables created or verified.
     Default seller user ready (ID: 1).
-    Added: 43 products
-    Total products: 43
-    Active products: 43
+    Added: 47 products
+    Total products: 47
+    Active products: 47
     ```
     When executed again against the same database, it detects existing product codes and inserts zero duplicates:
     ```text
@@ -1231,7 +1231,7 @@ from the Milestone 1/2 design; each is in the code on `main` and covered by test
 | API: seller product body | Multipart or JSON with an uploaded `image` | JSON with an absolute `image_url`; sellers may first upload raw JPEG/PNG/WebP bytes through `POST /api/v1/seller/products/upload-image`; errors grouped per field in `error.fields` | Keep the existing URL contract while adding bounded local storage for seller uploads | US06 |
 | Schema: `order_history` | Not in the six-table design | Audit row for every seller order status change (`from_status`, `to_status`, `changed_by_user_id`, `note`) | Traceable fulfilment and cancellations (BR6) | #82, PR #96 |
 | Architecture: browser entry | `GET /` returns JSON only | Browsers (`Accept: text/html`) get `307` to `/products`; other clients keep the JSON | Usability: the root URL opens the shop | #83, PR #97 |
-| Seed: demo dataset | Generic mixed catalog | `python -m src.seed` maintains 43 source-matched products across keyboard/mouse, webcam, USB hub, laptop-stand, monitor, phone, tablet, and laptop categories owned by the demo seller; legacy products with history are deactivated and unreferenced legacy fixtures are removed | Make category filtering and product imagery demonstrable while preserving order history | Catalog image/data acceptance |
+| Seed: demo dataset | Generic mixed catalog | `python -m src.seed` maintains 47 source-matched products across keyboard/mouse, webcam, USB hub, laptop-stand, monitor, phone, tablet, and laptop categories owned by the demo seller, including Apple and LG listings; legacy products with history are deactivated and unreferenced legacy fixtures are removed | Make category filtering and product imagery demonstrable while preserving order history | Catalog image/data acceptance |
 | API: receipt names products | Receipt items carried only `product_id`, so the confirmation page showed "Product #46" and "100000 VND" | Each item also returns `product_code` and `product_name` (the current name; the price stays the purchase-time snapshot); the page shows "Demo cart item (P-DEMO-CART) × 2 · 100.000 ₫ each" | Found while drawing and checking the confirmation screen for Milestone 3 | #85; `src/services/orders.py` `receipt()`, `OrderLine` |
 
 ## US04 atomic checkout implementation (#80)
@@ -1469,10 +1469,10 @@ bytes from an authenticated seller, rejects files above 5 MB or with a bad
 signature, and returns a generated `/static/uploads/products/...` URL. The
 seller form can use that URL automatically when a local file is selected.
 
-The catalog seed maintains 43 source-matched products owned by the demo seller,
+The catalog seed maintains 47 source-matched products owned by the demo seller,
 covering AULA keyboards/mouse, Logitech webcams, an ORICO USB hub, an Ergotek
 laptop stand, AOC monitors, Samsung phones, Xiaomi tablets, and ASUS/Lenovo/HP
-laptops, with
+laptops, plus Apple iPhone/iPad and LG monitors, with
 names and image URLs matched to HACOM/HanoiComputer product pages. Legacy rows
 with order/cart/variant/review references are deactivated; unreferenced legacy
 rows are deleted so historical order snapshots remain intact.

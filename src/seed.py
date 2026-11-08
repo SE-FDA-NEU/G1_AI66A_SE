@@ -366,6 +366,30 @@ def build_products(seller_id: int = 1) -> list[Product]:
             20990000,
             "https://hanoicomputercdn.com/media/product/75771_laptop_hp_pavilion_15_eg3035tx__8u6l7pa___4_.jpg",
         ),
+        (
+            "PHONE-044",
+            "Apple iPhone 15 128GB Phone - Blue (MTP43VN/A)",
+            17499000,
+            "https://cdn-files.hacom.vn/hacom//web/Dien-thoai-di-dong-iPhone-15-128GB-Blue-MTP43VNA-1.jpg",
+        ),
+        (
+            "TAB-045",
+            "Apple iPad A16 Gen 11 5G 128GB Tablet - Blue (MD7G4ZA/A)",
+            16199000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/20102025/may-tinh-bang-apple-ipad-a16-gen-11-5g-mtbp0304_0002_Layer-2.jpg",
+        ),
+        (
+            "MON-046",
+            "LG 27MK600M-B 27-inch FHD IPS Monitor",
+            3289000,
+            "https://hanoicomputercdn.com/media/product/45488_lg_27mk600m__4_.png",
+        ),
+        (
+            "MON-047",
+            "LG 24MK600M-B 23.8-inch FHD IPS Monitor",
+            2899000,
+            "https://hanoicomputercdn.com/media/product/44319_lg_24mk600m__4_.png",
+        ),
     ]
 
     products: list[Product] = []

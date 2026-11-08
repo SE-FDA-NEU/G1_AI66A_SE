@@ -92,8 +92,8 @@ from `stock_quantity`: `out_of_stock` at 0, `low_stock` up to 5, otherwise
 
 | Requirement | Contract | Implementation | Verification |
 |---|---|---|---|
-| Catalog must contain many source-matched products across categories | Seeded seller listings use source-matched names and HTTPS image URLs from HACOM/HanoiComputer | `build_products()` creates 43 listings for `demo.seller@marketplace.local`; `seed_product_metadata()` maps keyboard/mouse, webcam, hub, stand, monitor, phone, tablet, and laptop products to categories | `test_seed_catalog_uses_source_matched_aula_names_and_images`; `python -m src.seed` output and DB inspection |
-| Do not destroy historical product references while removing unusable legacy data | Products referenced by orders, carts, variants, or reviews are deactivated; only unreferenced legacy rows are deleted | `cleanup_legacy_catalog()` in `src/seed.py` | Seed rerun retains order item rows and reports 43 active products |
+| Catalog must contain many source-matched products across categories | Seeded seller listings use source-matched names and HTTPS image URLs from HACOM/HanoiComputer | `build_products()` creates 47 listings for `demo.seller@marketplace.local`; `seed_product_metadata()` maps keyboard/mouse, webcam, hub, stand, monitor, phone, tablet, and laptop products to categories, including Apple and LG | `test_seed_catalog_uses_source_matched_aula_names_and_images`; `python -m src.seed` output and DB inspection |
+| Do not destroy historical product references while removing unusable legacy data | Products referenced by orders, carts, variants, or reviews are deactivated; only unreferenced legacy rows are deleted | `cleanup_legacy_catalog()` in `src/seed.py` | Seed rerun retains order item rows and reports 47 active products |
 | Seller can upload a product image | Authenticated seller sends bounded raw image bytes and receives a generated static URL | `POST /api/v1/seller/products/upload-image`, seller form file input, static upload directory | `test_seller_can_upload_a_product_image`; `test_buyer_cannot_upload_a_product_image` |
 
 ### Backend evidence for issue #49
