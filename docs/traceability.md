@@ -24,6 +24,10 @@ update this file should not be approved.
 
 **Access codes:** G = guest (not logged in) · U = authenticated user · A = admin
 
+Seller workspace browser pages also run `src/web/static/seller-access.js` before
+their page scripts. A known authenticated non-seller is redirected to
+`/products`; the seller-only API dependencies remain the server-side authority.
+
 **Spec PR:** the merged Milestone 1 pull request that specified the story. A
 merged spec PR means the story is specified, not built.
 
