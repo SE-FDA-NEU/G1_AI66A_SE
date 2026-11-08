@@ -67,7 +67,7 @@ class ProductResponse(BaseModel):
 
 
 def public_product_image_url(product: Product) -> str:
-    """Return a usable image URL, including a local fallback for seed assets."""
+    """Return a usable image URL, including a fallback for legacy/missing assets."""
     if product.image_url and not product.image_url.startswith("/images/"):
         return product.image_url
     return f"/api/v1/products/{product.code}/image"

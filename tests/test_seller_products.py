@@ -114,7 +114,7 @@ def test_seller_can_list_get_and_patch_an_existing_product_without_an_image(api,
     assert row["image_url"] is None
     detail = api.get("/api/v1/products/P-NO-IMAGE", headers=owner)
     assert detail.status_code == 200, detail.text
-    assert detail.json()["image_url"] is None
+    assert detail.json()["image_url"] == "/api/v1/products/P-NO-IMAGE/image"
     patched = api.patch(f"{URL}/{product_id}", headers=owner, json={"is_active": False})
     assert patched.status_code == 200, patched.text
     assert patched.json()["data"]["image_url"] is None
@@ -625,12 +625,13 @@ def test_form_page_and_its_assets_are_served_to_anyone(api):
         ("description", "Description *"),
         ("price", "Price (₫) *"),
         ("stock_quantity", "Stock quantity *"),
-        ("image_url", "Image URL *"),
+        ("image_url", "Image URL or upload *"),
     ]:
         assert f'name="{field}"' in html
         assert f">{label}</label>" in html
         assert f'id="{field}-error"' in html
     assert "Create listing" in html and 'role="alert"' in html
+    assert 'name="image_file"' in html
     for asset, content_type in [
         ("/static/seller-product-new.js", "javascript"),
         ("/static/seller-product-new.css", "text/css"),
@@ -638,6 +639,31 @@ def test_form_page_and_its_assets_are_served_to_anyone(api):
         response = api.get(asset)
         assert response.status_code == 200
         assert content_type in response.headers["content-type"]
+
+
+def test_seller_can_upload_a_product_image(api, engine):
+    response = api.post(
+        f"{URL}/upload-image",
+        content=b"\x89PNG\r\n\x1a\nminimal-test-image",
+        headers={**headers(engine), "Content-Type": "image/png", "X-File-Name": "keyboard.png"},
+    )
+
+    assert response.status_code == 201, response.text
+    image_url = response.json()["data"]["image_url"]
+    assert image_url.startswith("/static/uploads/products/")
+    served = api.get(image_url)
+    assert served.status_code == 200
+    assert served.content.startswith(b"\x89PNG")
+
+
+def test_buyer_cannot_upload_a_product_image(api, engine):
+    response = api.post(
+        f"{URL}/upload-image",
+        content=b"\x89PNG\r\n\x1a\nminimal-test-image",
+        headers={**headers(engine, BUYER_ID), "Content-Type": "image/png"},
+    )
+
+    assert response.status_code == 403
 
 
 # Task 3: the created listing in the catalog, detail page, cart and checkout

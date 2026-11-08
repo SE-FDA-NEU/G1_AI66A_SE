@@ -355,7 +355,7 @@ are intentionally hidden from the catalog but accessible by their detail URL.
 |---|---|---|
 | user@example.com | password | Cart: P-DEMO-CART x2, total 200000 VND; owns four sample orders |
 | demo.buyer@marketplace.local | password | Empty cart, no sample orders; buyer isolation check |
-| demo.seller@marketplace.local | password | 45 catalog products plus demo cart/pending/completed products |
+| demo.seller@marketplace.local | password | 43 source-matched products across keyboards, webcams, USB hubs, laptop stands, monitors, phones, tablets, and laptops plus demo cart/pending/completed products |
 | seller@example.com | password | Demo processing/cancelled/out-of-stock products |
 
 Passwords are stored as scrypt hashes. Existing nonempty hashes, products and user

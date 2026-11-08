@@ -1056,14 +1056,14 @@ The database setup and seeding process is verified through automated commands an
 - **Database Seeding:**
   - Executed via `python -m src.seed`.
   - Ensures a default seller user (`id=1`, `email="seller@marketplace.local"`, `role="seller"`) exists.
-  - Seeds 45 realistic sample products across multiple categories (electronics, accessories, stationery) with valid prices, positive stock quantities, and `is_active = True`.
+  - Seeds 43 source-matched sample products across keyboards/mice, webcams, USB hubs, laptop stands, monitors, phones, tablets, and laptops with valid prices, positive stock quantities, and `is_active = True`.
   - **Idempotency:** When executed on a fresh database, it reports:
     ```text
     Database tables created or verified.
     Default seller user ready (ID: 1).
-    Added: 45 products
-    Total products: 45
-    Active products: 45
+    Added: 43 products
+    Total products: 43
+    Active products: 43
     ```
     When executed again against the same database, it detects existing product codes and inserts zero duplicates:
     ```text
@@ -1228,10 +1228,10 @@ from the Milestone 1/2 design; each is in the code on `main` and covered by test
 | API/business rule: catalog stock filter | Out-of-stock products listed with a badge | Catalog returns only `stock_quantity > reserved_stock`; detail still shows "Out of stock" | BR1 refinement in Sprint 3 planning | #77, PR #90 |
 | API and schema: idempotent checkout | `POST /api/v1/orders` without retry protection | Required `Idempotency-Key` header; new `orders.request_key` (unique) and `orders.request_hash` columns, added to old databases by `migrate_db()`; a replay returns the first order | A timeout retry must not create a second order | #80, PR #94 |
 | API: validation status | `400` for invalid input | `422 ERR_VALIDATION` for schema-invalid input; `400` only for business rules such as `ERR_EMPTY_CART` | One status for FastAPI validation everywhere | #80, #81 |
-| API: seller product body | Multipart or JSON with an uploaded `image` | JSON with an absolute `image_url`; errors grouped per field in `error.fields` | No file storage in the P0 scope; field-level errors for the form | #81, PR #95 |
+| API: seller product body | Multipart or JSON with an uploaded `image` | JSON with an absolute `image_url`; sellers may first upload raw JPEG/PNG/WebP bytes through `POST /api/v1/seller/products/upload-image`; errors grouped per field in `error.fields` | Keep the existing URL contract while adding bounded local storage for seller uploads | US06 |
 | Schema: `order_history` | Not in the six-table design | Audit row for every seller order status change (`from_status`, `to_status`, `changed_by_user_id`, `note`) | Traceable fulfilment and cancellations (BR6) | #82, PR #96 |
 | Architecture: browser entry | `GET /` returns JSON only | Browsers (`Accept: text/html`) get `307` to `/products`; other clients keep the JSON | Usability: the root URL opens the shop | #83, PR #97 |
-| Seed: demo dataset | 45 catalog products | `python -m src.seed --demo` adds 2 buyers, 2 sellers, carts and orders in four statuses; repeat runs change nothing | Demonstrate every P0 state | #84, PR #98 |
+| Seed: demo dataset | Generic mixed catalog | `python -m src.seed` maintains 43 source-matched products across keyboard/mouse, webcam, USB hub, laptop-stand, monitor, phone, tablet, and laptop categories owned by the demo seller; legacy products with history are deactivated and unreferenced legacy fixtures are removed | Make category filtering and product imagery demonstrable while preserving order history | Catalog image/data acceptance |
 | API: receipt names products | Receipt items carried only `product_id`, so the confirmation page showed "Product #46" and "100000 VND" | Each item also returns `product_code` and `product_name` (the current name; the price stays the purchase-time snapshot); the page shows "Demo cart item (P-DEMO-CART) × 2 · 100.000 ₫ each" | Found while drawing and checking the confirmation screen for Milestone 3 | #85; `src/services/orders.py` `receipt()`, `OrderLine` |
 
 ## US04 atomic checkout implementation (#80)
@@ -1461,4 +1461,19 @@ those variables. Components expose semantic variants such as `.badge--success`
 and `.alert--danger`; page-specific styles may refine layout without redefining
 the semantic colors. This task is styling-only: it does not change page data
 contracts, payment behavior or backend validation.
+
+## Seller image upload and source-matched seed catalog
+
+`POST /api/v1/seller/products/upload-image` accepts raw JPEG, PNG, or WebP
+bytes from an authenticated seller, rejects files above 5 MB or with a bad
+signature, and returns a generated `/static/uploads/products/...` URL. The
+seller form can use that URL automatically when a local file is selected.
+
+The catalog seed maintains 43 source-matched products owned by the demo seller,
+covering AULA keyboards/mouse, Logitech webcams, an ORICO USB hub, an Ergotek
+laptop stand, AOC monitors, Samsung phones, Xiaomi tablets, and ASUS/Lenovo/HP
+laptops, with
+names and image URLs matched to HACOM/HanoiComputer product pages. Legacy rows
+with order/cart/variant/review references are deactivated; unreferenced legacy
+rows are deleted so historical order snapshots remain intact.
 

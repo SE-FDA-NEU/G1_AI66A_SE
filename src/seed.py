@@ -13,6 +13,8 @@ from src.models.order import Order
 from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
+from src.models.product_variant import ProductVariant
+from src.models.review import Review
 from src.models.seller_order import SellerOrder
 from src.models.user import User
 
@@ -26,6 +28,10 @@ SEED_CATEGORIES = [
     {"id": 3, "name": "Keyboards & Mice", "slug": "keyboards-mice", "parent_id": 2},
     {"id": 4, "name": "Cables & Hubs", "slug": "cables-hubs", "parent_id": 2},
     {"id": 5, "name": "Audio & Video", "slug": "audio-video", "parent_id": 1},
+    {"id": 8, "name": "Monitors", "slug": "monitors", "parent_id": 1},
+    {"id": 9, "name": "Phones", "slug": "phones", "parent_id": 1},
+    {"id": 10, "name": "Tablets", "slug": "tablets", "parent_id": 1},
+    {"id": 11, "name": "Laptops", "slug": "laptops", "parent_id": 1},
     {"id": 6, "name": "Office & Desk", "slug": "office-desk", "parent_id": None},
     {"id": 7, "name": "Stands & Ergonomics", "slug": "stands-ergonomics", "parent_id": 6},
 ]
@@ -68,9 +74,7 @@ def seed_categories(session: Session) -> dict[str, Category]:
     """Upsert standard category hierarchy by unique slug."""
     for item in SEED_CATEGORIES:
         session.exec(
-            insert(Category)
-            .values(**item)
-            .on_conflict_do_nothing(index_elements=["slug"])
+            insert(Category).values(**item).on_conflict_do_nothing(index_elements=["slug"])
         )
     return {cat.slug: cat for cat in session.exec(select(Category)).all()}
 
@@ -101,98 +105,279 @@ def make_product(
 
 
 def build_products(seller_id: int = 1) -> list[Product]:
-    """Build the sample product catalog."""
+    """Build source-matched listings across peripherals and consumer devices."""
+    source_images = "https://hanoicomputercdn.com/media/product/"
     products_data = [
         (
+            "P-100",
             "AULA S13 Wired Gaming Mouse - Black",
-            "AULA S13 wired gaming mouse with RGB lighting and USB connection.",
             180000,
+            "77136_chuot_gaming_co_day_aula_s13_mau_den_1.jpg",
         ),
         (
+            "P-101",
             "AULA S100 Pro Mechanical Keyboard - 3 Mode Red Switch",
-            "AULA S100 Pro mechanical keyboard with 3-mode connection and Red switch.",
             650000,
-        ),
-        ("USB-C Cable", "USB-C charging and data cable", 90000),
-        ("Laptop Stand", "Adjustable aluminium laptop stand", 280000),
-        ("Webcam", "1080p webcam for online meetings", 420000),
-        ("Bluetooth Speaker", "Portable Bluetooth speaker", 390000),
-        ("Phone Stand", "Adjustable desktop phone stand", 120000),
-        ("USB-C Charger", "Fast USB-C wall charger", 180000),
-        ("Wireless Earbuds", "Bluetooth wireless earbuds", 450000),
-        ("Power Bank", "Portable high-capacity power bank", 350000),
-        ("HDMI Cable", "HDMI cable for monitor connection", 110000),
-        ("Mouse Pad", "Non-slip mouse pad for desk use", 70000),
-        ("USB Hub", "Multi-port USB hub", 260000),
-        ("Portable SSD Case", "Protective case for portable SSD", 140000),
-        ("Tablet Stand", "Adjustable stand for tablets", 160000),
-        ("Keyboard Wrist Rest", "Comfortable keyboard wrist rest", 130000),
-        ("Gaming Mouse", "Ergonomic gaming mouse", 320000),
-        ("Wireless Keyboard", "Compact wireless keyboard", 390000),
-        ("USB Microphone", "USB microphone for calls and streaming", 520000),
-        ("Headphone Stand", "Desktop stand for headphones", 150000),
-        ("Laptop Cooling Pad", "Cooling pad with USB-powered fans", 330000),
-        ("Bluetooth Mouse", "Compact Bluetooth mouse", 210000),
-        ("USB Flash Drive 32GB", "Portable 32GB USB flash drive", 120000),
-        ("USB Flash Drive 64GB", "Portable 64GB USB flash drive", 180000),
-        ("Memory Card Reader", "USB memory card reader", 160000),
-        ("Ethernet Adapter", "USB-C to Ethernet network adapter", 280000),
-        ("USB-C to HDMI Adapter", "USB-C video output adapter", 310000),
-        ("Wireless Presenter", "Wireless presentation clicker", 270000),
-        (
-            "Noise Cancelling Headphones",
-            "Over-ear Bluetooth headphones",
-            890000,
-        ),
-        ("Mini Bluetooth Keyboard", "Portable Bluetooth keyboard", 350000),
-        ("Smartphone Tripod", "Compact tripod for smartphones", 230000),
-        ("Webcam Cover", "Sliding privacy cover for webcams", 50000),
-        ("Cable Organizer", "Desktop cable management organizer", 80000),
-        ("Screen Cleaning Kit", "Cleaning kit for displays and devices", 95000),
-        ("USB Extension Cable", "USB extension cable", 85000),
-        ("Laptop Privacy Filter", "Privacy screen filter for laptops", 370000),
-        ("Wireless Charging Pad", "Qi wireless charging pad", 290000),
-        ("USB Desk Fan", "Compact USB-powered desk fan", 170000),
-        (
-            "Portable Bluetooth Receiver",
-            "Bluetooth audio receiver",
-            220000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/16032026/ban-phim-co-gaming-aula-s100-pro-3mode-den-xam-cam.jpg",
         ),
         (
-            "Computer Cleaning Brush",
-            "Soft brush for keyboards and devices",
-            65000,
-        ),
-        ("USB Numeric Keypad", "External USB numeric keypad", 190000),
-        ("USB Sound Card", "External USB audio adapter", 180000),
-        ("Laptop Webcam Light", "USB light for video calls", 250000),
-        (
-            "Portable Monitor Stand",
-            "Foldable stand for portable monitors",
-            240000,
+            "AULA-003",
+            "AULA F75 Ice Blue Mechanical Keyboard - Ice Vein Switch",
+            1290000,
+            "78915_ban_phim_co_aula_f75_ice_blue_3_mode_typec_2_4g_bluetooth_ice_vein_switch_1.jpg",
         ),
         (
-            "USB-C Multiport Adapter",
-            "USB-C adapter with HDMI and USB ports",
-            490000,
+            "AULA-004",
+            "AULA F75 Dark Blue Mechanical Keyboard - Greywood V3",
+            1290000,
+            "80850_ban_phim_co_aula_f75_den_xanh_dam_cam_3_mode_grey_wood_v3_switch_1.jpg",
+        ),
+        (
+            "AULA-005",
+            "AULA F75 White Mechanical Keyboard - Red Switch",
+            990000,
+            "89538_ban_phim_co_gaming_co_day_aula_f75_red_switch_mau_trang_1.jpg",
+        ),
+        (
+            "AULA-006",
+            "AULA F75 Lavender Mechanical Keyboard - Greywood V3",
+            1290000,
+            "80852_ban_phim_co_aula_f75_tim_nhat_be_xanh_la_1.jpg",
+        ),
+        (
+            "AULA-007",
+            "AULA F75 Ice Blue Mechanical Keyboard - Reaper Switch",
+            1390000,
+            "78916_ban_phim_co_aula_f75_ice_blue_3_mode_typec_2_4g_bluetooth_reaper_switch_1.jpg",
+        ),
+        (
+            "AULA-008",
+            "AULA F99 White Grey Mechanical Keyboard - Greywood Switch",
+            1490000,
+            "77238_ban_phim_co_aula_f99_3_mode_trang_xam_typec_2_4g_bluetooth_grey_wood_switch_led_rgb_1.jpg",
+        ),
+        (
+            "AULA-009",
+            "AULA F99 Blue Purple Mechanical Keyboard - Greywood Switch",
+            1490000,
+            "77239_ban_phim_co_aula_f99_3_mode_trang_tim_typec_2_4g_bluetooth_grey_wood_switch_led_rgb_1.jpg",
+        ),
+        (
+            "AULA-010",
+            "AULA F87 Green Mechanical Keyboard - Greywood V3",
+            1390000,
+            "https://hanoicomputercdn.com/media/lib/21-10-2024/ban-phim-co-aula-f87-3-mode-den-trang-xanh-la-typec-21.png",
+        ),
+        (
+            "AULA-011",
+            "AULA F2058 Black Mechanical Keyboard - Red Switch",
+            799000,
+            "90722_ban_phim_co_day_gaming_aula_f2058_red_switch_mau_den_1.jpg",
+        ),
+        (
+            "AULA-012",
+            "AULA F99 Pro Grey Black Mechanical Keyboard - Nimbus V3",
+            1690000,
+            "86327_ban_phim_co_gaming_aula_f99_pro_3_mode_xam_den_gradient_rgb_nimbus_v3_switch_1.jpg",
+        ),
+        (
+            "AULA-013",
+            "AULA F87 Green Mechanical Keyboard - Greywood V4",
+            1490000,
+            "86907_ban_phim_co_gaming_aula_f87_3_mode_den_trang_xanh_la_grey_wood_v4_switch_1.jpg",
+        ),
+        (
+            "AULA-014",
+            "AULA F99 Blue Purple Mechanical Keyboard - Reaper Switch",
+            1490000,
+            "85172_ban_phim_co_aula_f99_xanh_duong_trang_tim_dam_1.jpg",
+        ),
+        (
+            "AULA-015",
+            "AULA F75 Grey Black Mechanical Keyboard - Reaper Switch",
+            1390000,
+            "86321_ban_phim_co_gaming_aula_f75_3_mode_xam_den_gradient_rgb_reaper_switch_1.jpg",
+        ),
+        (
+            "AULA-016",
+            "AULA F99 Blue Gradient Mechanical Keyboard - Star Vector",
+            1590000,
+            "88887_ban_phim_co_gaming_aula_f99_3_mode_den_trang_xanh_duong_gradient_star_vector_switch_1.jpg",
+        ),
+        (
+            "AULA-017",
+            "AULA F75 Purple White Mechanical Keyboard - Star Vector",
+            1590000,
+            "88885_ban_phim_co_aula_f75_f75_pro_3_mode_trang_tim_gradient_star_vector_switch_1.jpg",
+        ),
+        (
+            "AULA-018",
+            "AULA F99 Pro Grey Black Mechanical Keyboard - Greywood V3",
+            1690000,
+            "86326_ban_phim_co_gaming_aula_f99_pro_3_mode_xam_den_gradient_rgb_greywood_v3_switch_1.jpg",
+        ),
+        (
+            "AULA-019",
+            "AULA AU75 Black Grey Orange Mechanical Keyboard",
+            1390000,
+            "88877_ban_phim_co_gaming_aula_au75_3_mode_den_xam_cam_star_vector_switch_1.jpg",
+        ),
+        (
+            "AULA-020",
+            "AULA F108 Pro Black Pink Mechanical Keyboard",
+            1790000,
+            "90244_ban_phim_co_gaming_aula_f108_pro_3_mode_den_hong_grey_wood_v3_switch_1.jpg",
+        ),
+        (
+            "AULA-021",
+            "AULA F75 Max Grey Black Mechanical Keyboard",
+            1590000,
+            "90720_ban_phim_co_gaming_aula_f75_max_3_mode_xam_den_gradient_reaper_switch_1.jpg",
+        ),
+        (
+            "AULA-022",
+            "AULA AU75 Purple Beige Red Mechanical Keyboard",
+            1390000,
+            "88878_ban_phim_co_gaming_aula_au75_3_mode_tim_be_do_star_vector_switch_1.jpg",
+        ),
+        (
+            "AULA-023",
+            "AULA F75 Comic Mechanical Keyboard - Reaper Switch",
+            1390000,
+            "92417_ban_phim_co_gaming_aula_f75_3_mode_comic_reaper_switch.jpg",
+        ),
+        (
+            "AULA-024",
+            "AULA WIN68HE MAX Magnetic Mechanical Keyboard",
+            1049000,
+            "92428_ban_phim_aula_win68he_max_co_day_den_do_wing_chun_magnetic_switch.jpg",
+        ),
+        (
+            "AULA-025",
+            "AULA F108 Pro Grey Black Mechanical Keyboard",
+            1790000,
+            "92986_ban_phim_co_gaming_aula_f108_pro_3_mode_grey_black_gradient_nimbus_switch_1.jpg",
+        ),
+        (
+            "AULA-026",
+            "AULA M75 Blue White Orange Mechanical Keyboard",
+            1590000,
+            "https://hanoicomputercdn.com/media/lib/06-02-2025/ban-phim-co-gaming-aula-m75-3-mode7.jpg",
+        ),
+        (
+            "AULA-027",
+            "AULA F99 Pro Black Pink Mechanical Keyboard",
+            1690000,
+            "92832_ban_phim_co_gaming_aula_f99_pro_3_mode_co_num_xoay_den_hong_gradient_1.jpg",
+        ),
+        (
+            "AULA-028",
+            "AULA F108 Grey Black Mechanical Keyboard",
+            1590000,
+            "92835_ban_phim_co_gaming_aula_f108_3_mode_xam_den_gradient_nimbus_switch_1.jpg",
+        ),
+        (
+            "AULA-029",
+            "AULA F99 Comic Mechanical Keyboard - Greywood V3",
+            1490000,
+            "92840_ban_phim_co_gaming_aula_f99_3_mode_mau_comic_greywood_v3_switch.jpg",
+        ),
+        (
+            "AULA-030",
+            "AULA F75 Black Pink Mechanical Keyboard - Reaper Switch",
+            1390000,
+            "92830_ban_phim_co_gaming_aula_f75_3_mode_den_hong_gradient_reaper_switch_1.jpg",
+        ),
+        (
+            "MIX-031",
+            "Logitech HD C270 Webcam",
+            399000,
+            "https://hanoicomputercdn.com/media/product/17151_webcam_logitech_hd_c270.jpg",
+        ),
+        (
+            "MIX-032",
+            "Logitech HD C310 Webcam",
+            549000,
+            "https://hanoicomputercdn.com/media/product/16458_webcam_logitech_hd_webcam_c310.jpg",
+        ),
+        (
+            "MIX-033",
+            "ORICO BT2U3-10AB-GY USB 3.0 Hub - 10 Ports",
+            1089000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/17082026/Bo-Chia-USB-HUB-ORICO-10-cong-USB-3.0-BT2U3-10AB-GY.jpg",
+        ),
+        (
+            "MIX-034",
+            "Ergotek L234 360-Degree Laptop and Tablet Stand - Silver",
+            299000,
+            "https://hanoicomputercdn.com/media/product/87167_gia_do_laptop_macbook_ipad_tabblet_de_xoay_360_do_ergotek_l234_hop_kim_thep_mau_bac.jpg",
+        ),
+        (
+            "MON-035",
+            "AOC 24B36X 23.8-inch FHD IPS 144Hz Monitor",
+            1990000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/01012026/IMG_2901.jpg",
+        ),
+        (
+            "MON-036",
+            "AOC 27B30H 27-inch FHD IPS 120Hz Monitor",
+            2399000,
+            "https://hanoicomputercdn.com/media/product/90883_man_hinh_aoc_27b30h_new3.jpg",
+        ),
+        (
+            "PHONE-037",
+            "Samsung Galaxy A17 5G 8GB/128GB Phone - Black",
+            5749000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/23032026/Dien-thoai-Samsung-Galaxy-A17-5G-8GB128GB-Den-SM-A176BDS-1.jpg",
+        ),
+        (
+            "PHONE-038",
+            "Samsung Galaxy A17 5G 8GB/128GB Phone - Blue",
+            5749000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/21072026/Dien-thoai-Samsung-Galaxy-A17-5G-8GB128GB-Xanh-SM-A176BDS-1.jpg",
+        ),
+        (
+            "TAB-039",
+            "Xiaomi Pad 7 8GB/128GB WiFi Tablet - Blue",
+            9199000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/24112025/may-tinh-bang-xiaomi-pad-7-8gb128gb-wifi-mtbx0007_0001_Layer-2.jpg",
+        ),
+        (
+            "TAB-040",
+            "Xiaomi Pad 7 8GB/128GB WiFi Tablet - Gray",
+            9199000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/26112025/may-tinh-bang-xiaomi-pad-7-8gb128gb-wifi-mtbx0016_0001_xiaomi-2.jpg",
+        ),
+        (
+            "LAP-041",
+            "ASUS VivoBook S3407QA-SF043W 14-inch OLED Laptop",
+            21490000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/15062026/Laptop-Asus-VivoBook-S3407QA-SF043W-X1-26-100-16GB-RAM-D5X-512GB-SSD-14-OLED-W6E-BT-Win11SL-Xam-1.jpg",
+        ),
+        (
+            "LAP-042",
+            "Lenovo V14 G5 83HD0062VA 14-inch Laptop",
+            20990000,
+            "https://cdn-files.hacom.vn/hacom/cdn/web/07112025/laptop-lenovo-v14-g5-83hd005kva-ltlv0290_0007_lnv1.jpg",
+        ),
+        (
+            "LAP-043",
+            "HP Pavilion 15-eg3035TX 15.6-inch Laptop",
+            20990000,
+            "https://hanoicomputercdn.com/media/product/75771_laptop_hp_pavilion_15_eg3035tx__8u6l7pa___4_.jpg",
         ),
     ]
 
     products: list[Product] = []
 
-    for index, (name, description, price) in enumerate(products_data):
-        code_number = 100 + index
-
-        image_url = {
-            100: "https://hanoicomputercdn.com/media/product/77136_chuot_gaming_co_day_aula_s13_mau_den_1.jpg",
-            101: "https://cdn-files.hacom.vn/hacom/cdn/web/16032026/ban-phim-co-gaming-aula-s100-pro-3mode-den-xam-cam.jpg",
-        }.get(code_number)
+    for index, (code, name, price, image_path) in enumerate(products_data):
+        image_url = image_path if image_path.startswith("http") else source_images + image_path
         products.append(
             make_product(
-                code=f"P-{code_number}",
+                code=code,
                 seller_id=seller_id,
                 name=name,
-                description=description,
+                description=f"{name}. Source-matched product listing from HACOM.",
                 price=price,
                 stock_quantity=12 + (index % 19),
                 reserved_stock=0 if index % 5 else 2,
@@ -210,7 +395,11 @@ def seed_product_metadata(session: Session, products: list[Product]) -> None:
     catalog products. Any non-sample product without metadata receives clean default
     metadata (0.0 rating, 0 sales, current UTC timestamp).
     """
+    category_code_map = {"MON": 8, "PHONE": 9, "TAB": 10, "LAP": 11}
     category_keyword_map = [
+        (("Monitor", "Screen", "Display"), 8),
+        (("Phone", "Galaxy", "iPhone"), 9),
+        (("Tablet", "Pad", "iPad"), 10),
         (("Mouse", "Keyboard", "Keypad", "Wrist Rest"), 3),
         (("Cable", "Hub", "Adapter", "Flash Drive", "Memory Card", "Case", "Organizer"), 4),
         (("Webcam", "Speaker", "Earbuds", "Headphone", "Microphone", "Sound Card", "Light"), 5),
@@ -224,13 +413,16 @@ def seed_product_metadata(session: Session, products: list[Product]) -> None:
                 return cat_id
         return 6  # Office & Desk default
 
-    sample_codes = {f"P-{100 + i}" for i in range(45)}
+    sample_codes = {p.code for p in products}
 
     for index, product in enumerate(products):
         if product.id is None:
             continue
         is_sample = product.code in sample_codes
-        cat_id = resolve_category(product.name) if is_sample else None
+        code_prefix = product.code.split("-", 1)[0]
+        cat_id = None
+        if is_sample:
+            cat_id = category_code_map.get(code_prefix) or resolve_category(product.name)
         rating_val = round(3.5 + ((index * 3) % 15) * 0.1, 1) if is_sample else 0.0
         sales_val = (((index * 23 + 17) % 350) + 5) if is_sample else 0
         created_dt = (DEMO_DATE - timedelta(hours=index * 6)) if is_sample else datetime.now(UTC)
@@ -247,6 +439,10 @@ def seed_product_metadata(session: Session, products: list[Product]) -> None:
             )
             .on_conflict_do_nothing(index_elements=["product_id"])
         )
+        existing_meta = session.get(ProductMetadata, product.id)
+        if existing_meta and is_sample and existing_meta.category_id is None:
+            existing_meta.category_id = cat_id
+            session.add(existing_meta)
 
 
 def seed_users(session: Session) -> dict[str, User]:
@@ -281,6 +477,42 @@ def seed_users(session: Session) -> dict[str, User]:
 
 def get_or_create_demo_seller(session: Session) -> User:
     return seed_users(session)[DEMO_SELLER_EMAIL]
+
+
+def cleanup_legacy_catalog(session: Session, source_codes: set[str]) -> None:
+    """Remove unused legacy fixtures while preserving anything referenced by history."""
+    legacy_products = session.exec(
+        select(Product).where(
+            Product.code.not_in(source_codes),
+            (Product.code.like("P-%")),
+        )
+    ).all()
+    for product in legacy_products:
+        has_order = (
+            session.exec(select(OrderItem.id).where(OrderItem.product_id == product.id)).first()
+            is not None
+        )
+        has_cart = (
+            session.exec(select(CartItem.id).where(CartItem.product_id == product.id)).first()
+            is not None
+        )
+        has_variant = (
+            session.exec(
+                select(ProductVariant.id).where(ProductVariant.product_id == product.id)
+            ).first()
+            is not None
+        )
+        has_review = (
+            session.exec(select(Review.id).where(Review.product_id == product.id)).first()
+            is not None
+        )
+        if has_order or has_cart or has_variant or has_review:
+            product.is_active = False
+            session.add(product)
+            continue
+        # ProductMetadata has an ON DELETE CASCADE foreign key; deleting only
+        # the parent avoids scheduling the same metadata row twice in SQLite.
+        session.delete(product)
 
 
 def _seed_catalog(session: Session) -> tuple[int, int, int]:
@@ -322,6 +554,14 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
             session.add(existing)
 
     sample_codes = [p.code for p in sample_products]
+    for seeded in sample_products:
+        existing = session.exec(select(Product).where(Product.code == seeded.code)).first()
+        if existing and existing.seller_id == seller.id and existing.name == seeded.name:
+            # Refresh source links for unchanged seed rows without overwriting seller edits.
+            existing.description = seeded.description
+            existing.image_url = seeded.image_url
+            session.add(existing)
+    cleanup_legacy_catalog(session, set(sample_codes))
     seeded_products = session.exec(
         select(Product).where(Product.code.in_(sample_codes)).order_by(Product.id.asc())
     ).all()

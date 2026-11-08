@@ -1,8 +1,10 @@
 """Seller product creation endpoint (US06). The owner is always the authenticated seller."""
 
 import logging
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
@@ -39,6 +41,47 @@ inventory_router = APIRouter(prefix="/seller/inventory", tags=["Seller inventory
 # The validation handler in src/main.py answers this route with field-level errors.
 SELLER_PRODUCTS_PATH = "/api/v1/seller/products"
 CREATE_DATABASE_ERROR_MESSAGE = "Unable to create the product right now. Please try again later."
+MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024
+PRODUCT_IMAGE_DIR = Path(__file__).resolve().parents[1] / "web" / "static" / "uploads" / "products"
+IMAGE_TYPES = {
+    "image/jpeg": ("jpg", b"\xff\xd8\xff"),
+    "image/png": ("png", b"\x89PNG\r\n\x1a\n"),
+    "image/webp": ("webp", b"RIFF"),
+}
+
+
+@router.post("/upload-image", status_code=status.HTTP_201_CREATED)
+async def upload_product_image(request: Request, seller: SellerUser) -> dict[str, dict[str, str]]:
+    """Store one seller-uploaded image and return its static URL.
+
+    The endpoint accepts the file bytes as the request body. This keeps the API
+    compatible with the project's existing dependency set while still allowing
+    browser File uploads without trusting a client-provided path.
+    """
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
+    image_type = IMAGE_TYPES.get(content_type)
+    if image_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=error_detail("ERR_VALIDATION", "Only JPEG, PNG, and WebP images are supported."),
+        )
+    body = await request.body()
+    if not body or len(body) > MAX_PRODUCT_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=error_detail("ERR_VALIDATION", "Image must be between 1 byte and 5 MB."),
+        )
+    extension, signature = image_type
+    if not body.startswith(signature):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=error_detail("ERR_VALIDATION", "The uploaded bytes are not a valid image."),
+        )
+    PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid4().hex}.{extension}"
+    (PRODUCT_IMAGE_DIR / filename).write_bytes(body)
+    del seller  # Authentication and seller authorization are enforced by the dependency.
+    return {"data": {"image_url": f"/static/uploads/products/{filename}"}}
 
 
 @inventory_router.get("", response_model=SellerInventoryListResponse)
