@@ -202,4 +202,25 @@ Given the product ID does not exist, when I open the URL, then the system shows 
 
 Covered by Section 4.
 
+## Purchase controls by role (#220)
+
+Cart navigation and the quantity/Add to Cart form start hidden. Once initialized,
+a signed-in seller or administrator sees neither Cart nor the purchase form, for
+both their own products and another shop's products. Product information, option
+selection, reviews and authorized seller-management controls remain available.
+
+Buyers can add an available product or selected variant. Guests retain the existing
+login redirect with quantity and variant preserved. Unavailable stock disables
+Add to Cart for both; a forced submit cannot send an unavailable purchase or a
+seller/admin cart mutation. The UI role hint does not replace server authorization.
+
+One purchase-state update combines the current role, selected stock and in-flight
+submission lock. It runs after product loading, option changes, account/navigation
+changes and request completion. Duplicate submissions are locked. Current-account
+errors retain quantity and permit retry; a response from a previous account may
+not display purchase feedback or redirect the new session to Cart.
+
+Verification and screenshots:
+[#220 test matrix](testing-task-notes.md#issue-220-seller-purchase-controls).
+
 ---

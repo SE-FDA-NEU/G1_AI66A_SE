@@ -512,3 +512,55 @@ modals, error summaries, loading and empty states are not driven here; `/checkou
 saved address and `/seller/analytics` has no sales data in this fixture; this is Chromium
 only. Manual browser QA with evidence, and a rerun after the shared design tokens
 (#154/#155) merge, are still required and are not claimed by this task.
+
+## Issue #220: seller purchase controls
+
+Requirements: #220, [US01](us01-browse-product-catalog.md#purchase-navigation-by-role-220),
+[US02](us02-view-product-detail.md#purchase-controls-by-role-220) and
+[US03](us03-cart.md#buyer-only-access-and-purchase-entry-points-220).
+The browser suite executes production page assets and real authenticated FastAPI
+handlers against isolated SQLite files. Held responses and one injected failure
+are explicit transport doubles. These are automated checks, not human user tests.
+
+| ID | Action / partition | Expected result | Verification |
+|---|---|---|---|
+| P220-01 | Seller/admin opens catalogue, own product or another shop's product | Cart and detail purchase form hidden; forced submit sends no cart POST; seller navigation retained | Six role/page cases in `tests/test_purchase_roles_browser.py` |
+| P220-02 | Buyer adds two available items, then repeats a pending submit | One POST, two units persisted for that buyer, normal Cart navigation | Held request plus fresh-session database assertion |
+| P220-03 | Guest chooses quantity/variant, logs in as Buyer and returns | Login return URL and form preserve both selections; the real cart stores them | Guest-to-Buyer browser flow |
+| P220-04 | Change in-stock/empty variants, switch Buyer -> Seller -> Buyer | Purchase availability reflects both current stock and role; seller form never reappears after variant changes | Variant/account state sequence |
+| P220-05 | Change account or logout on catalogue/detail without reloading | Navigation updates; login prompt restored on logout | Both page controllers |
+| P220-06 | Old Buyer cart success or failure arrives after switching to Seller | No stale feedback/Cart redirect or re-enabled seller purchase form | Two held-response cases |
+| P220-07 | Page scripts have not executed | Cart navigation hidden on both pages | Script interception |
+| P220-08 | Seller/Buyer views detail at 390px | Correct role controls, visible product information, no viewport overflow | Two mobile cases |
+| P220-09 | Buyer forces submit for out-of-stock product | Disabled action and no cart POST | Browser unavailable-stock case |
+| P220-10 | Transient cart error, then Buyer retries | Quantity retained, controls unlock, successful retry persists exact quantity | Failure double followed by real API |
+| P220-11 | Seller directly calls each of six cart endpoints | 403 `ERR_BUYER_REQUIRED`; existing Buyer cart and product stock unchanged | Strengthened `tests/test_cart_api.py::test_seller_has_no_cart` |
+
+Run with Python 3.12 and the README dependencies:
+
+```powershell
+python -m pip install playwright
+$env:DEBUG = 'false'
+python -m pytest tests/test_purchase_roles_browser.py tests/test_cart_api.py tests/test_catalog_browser.py tests/test_products_page.py tests/test_product_detail.py tests/test_cart_page.py tests/test_checkout.py tests/test_us19_categories_variants.py tests/test_ui_docs_contract.py tests/test_ui_styling.py -q
+python -m ruff check tests/test_purchase_roles_browser.py tests/test_cart_api.py tests/test_cart_page.py
+node --check src/web/static/products.js
+node --check src/web/static/product-detail.js
+node tests/products_ui.mjs
+node tests/catalog_ui.mjs
+node tests/product_detail_ui.mjs
+node tests/product_detail_variants.mjs
+git diff --check
+```
+
+The browser fixture uses installed Chrome/Edge or Playwright Chromium; set
+`BROWSER_PATH` to an executable when needed. Existing CI pytest discovery includes
+the new suite. To regenerate fixture screenshots, set
+`$env:PURCHASE_UI_ARTIFACTS = 'docs/images/issue220'` before the browser run.
+
+- [Seller catalogue, desktop](images/issue220/seller-catalog-desktop.png)
+- [Seller detail, mobile](images/issue220/seller-detail-mobile.png)
+- [Buyer detail, mobile](images/issue220/buyer-detail-mobile.png)
+
+Local execution, remote CI, clean-clone verification and human acceptance require
+their own evidence. Runtime authorization, cart/checkout business rules, migrations
+and unrelated screen redesign are outside this UI fix.

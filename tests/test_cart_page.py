@@ -74,8 +74,8 @@ def test_cart_script_sends_the_token_and_returns_to_the_cart_after_login(
     assert 'encodeURIComponent("/cart")' in script
 
 
-def test_catalog_navigation_links_to_the_cart(client: TestClient) -> None:
-    assert '<a id="cart-link" href="/cart">Cart</a>' in client.get("/products").text
+def test_catalog_cart_link_waits_for_role_initialization(client: TestClient) -> None:
+    assert '<a id="cart-link" href="/cart" hidden>Cart</a>' in client.get("/products").text
 
 
 @pytest.mark.parametrize(
