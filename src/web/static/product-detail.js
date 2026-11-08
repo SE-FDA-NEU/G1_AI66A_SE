@@ -55,6 +55,7 @@ const elements = {
 };
 const priceFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 let currentProduct = null;
+let cartSubmitting = false;
 let selectedVariantId = null;
 let currentIdentity = null;
 let authRevision = 0;
@@ -104,6 +105,26 @@ function configureNavigation() {
   if (elements.sellerNewProduct) elements.sellerNewProduct.hidden = !isSeller;
   if (elements.sellerOrders) elements.sellerOrders.hidden = !isSeller;
   if (elements.adminPortal) elements.adminPortal.hidden = !isAdmin;
+  updatePurchaseControls();
+}
+
+function updatePurchaseControls() {
+  const user = getUserFromToken();
+  // Guests keep the login-to-purchase flow; authenticated buying is Buyer-only.
+  const canPurchase = !user || user.role === "buyer";
+  const available = Boolean(currentProduct && Number(elements.quantity.max) > 0);
+  if (elements.cartLink) elements.cartLink.hidden = !canPurchase;
+  elements.form.hidden = !canPurchase;
+  elements.quantity.disabled = !canPurchase || cartSubmitting;
+  elements.add.disabled = !canPurchase || !available || cartSubmitting;
+  if (!canPurchase) elements.cartStatus.textContent = "";
+}
+
+function redirectToBuyerLogin(quantity) {
+  try {
+    sessionStorage.setItem(`pending_cart_${code}`, JSON.stringify({ product_code: code, quantity }));
+  } catch (_) {}
+  window.location.assign(`/login?return_to=${encodeURIComponent(getReturnPath(quantity))}`);
 }
 
 function setProductImage(imageUrl, altText) {
@@ -197,7 +218,6 @@ async function loadProduct() {
     const available = selected.stock_quantity > 0;
     elements.stock.textContent = available ? `In Stock (${selected.stock_quantity} available)` : "Out of stock";
     elements.stock.className = `product-detail__stock ${available ? "product-detail__stock--available" : "product-detail__stock--unavailable"}`;
-    elements.add.disabled = !available || (hasVariants && variants.length === 0);
     elements.quantity.max = String(selected.stock_quantity);
 
     // Restore and revalidate selected quantity against current stock
@@ -242,25 +262,36 @@ elements.variant.addEventListener("change", () => {
   const available = variant.stock_quantity > 0;
   elements.stock.textContent = available ? `In Stock (${variant.stock_quantity} available)` : "Out of stock";
   elements.stock.className = `product-detail__stock ${available ? "product-detail__stock--available" : "product-detail__stock--unavailable"}`;
-  elements.add.disabled = !available;
   elements.quantity.max = String(variant.stock_quantity);
   elements.quantity.value = available ? String(Math.min(Number(elements.quantity.value) || 1, variant.stock_quantity)) : "1";
+  updatePurchaseControls();
 });
 
 elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (cartSubmitting) return;
   const token = localStorage.getItem("access_token");
+  const user = getUserFromToken();
   const quantityValue = parseInt(elements.quantity.value, 10) || 1;
 
-  if (!token) {
-    const returnDestination = getReturnPath(quantityValue);
-    try {
-      sessionStorage.setItem(`pending_cart_${code}`, JSON.stringify({ product_code: code, quantity: quantityValue }));
-    } catch (_) {}
-    window.location.assign(`/login?return_to=${encodeURIComponent(returnDestination)}`);
+  if (user && user.role !== "buyer") {
+    configureNavigation();
     return;
   }
-  elements.add.disabled = true;
+  if (!token || !user) {
+    if (token) {
+      localStorage.removeItem("access_token");
+      authRevision += 1;
+      configureNavigation();
+    }
+    redirectToBuyerLogin(quantityValue);
+    return;
+  }
+  if (!currentProduct || Number(elements.quantity.max) <= 0) return;
+  if (elements.form.reportValidity && !elements.form.reportValidity()) return;
+  const revision = authRevision;
+  cartSubmitting = true;
+  updatePurchaseControls();
   elements.cartStatus.textContent = "";
   try {
     const response = await fetch("/api/v1/cart/items", {
@@ -273,22 +304,23 @@ elements.form.addEventListener("submit", async (event) => {
       }),
     });
     const payload = await response.json().catch(() => null);
+    if (!isCurrentAuth(token, revision)) return;
     if (response.status === 401) {
       localStorage.removeItem("access_token");
-      const returnDestination = getReturnPath(quantityValue);
-      try {
-        sessionStorage.setItem(`pending_cart_${code}`, JSON.stringify({ product_code: code, quantity: quantityValue }));
-      } catch (_) {}
-      window.location.assign(`/login?return_to=${encodeURIComponent(returnDestination)}`);
+      authRevision += 1;
+      redirectToBuyerLogin(quantityValue);
       return;
     }
     if (!response.ok) throw new Error(payload?.error?.message || "Unable to add product to cart.");
     elements.cartStatus.innerHTML = 'Product added to cart. <a id="view-cart-link" class="button button--link" href="/cart">Proceed to Cart →</a>';
     window.location.assign("/cart");
   } catch (error) {
-    elements.cartStatus.textContent = error instanceof Error ? error.message : "Unable to add product to cart.";
+    if (isCurrentAuth(token, revision)) {
+      elements.cartStatus.textContent = error instanceof Error ? error.message : "Unable to add product to cart.";
+    }
   } finally {
-    elements.add.disabled = elements.quantity.max === "0";
+    cartSubmitting = false;
+    updatePurchaseControls();
   }
 });
 
@@ -297,6 +329,7 @@ elements.logout.addEventListener("click", () => {
   authRevision += 1;
   currentIdentity = null;
   reviewFormAuth = null;
+  elements.cartStatus.textContent = "";
   elements.reviewComment.value = "";
   elements.reviewMediaUrl.value = "";
   elements.reviewForm.hidden = true;
@@ -897,6 +930,7 @@ window.addEventListener?.("storage", (event) => {
   authRevision += 1;
   reviewFormAuth = null;
   currentIdentity = null;
+  elements.cartStatus.textContent = "";
   elements.reviewForm.hidden = true;
   elements.reviewComment.value = "";
   elements.reviewMediaUrl.value = "";
@@ -905,3 +939,5 @@ window.addEventListener?.("storage", (event) => {
   loadReviews();
   loadReviewForm();
 });
+
+window.addEventListener?.("pageshow", configureNavigation);

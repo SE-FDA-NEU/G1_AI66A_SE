@@ -13,7 +13,7 @@
   <main class="catalog">
     <nav class="site-nav" aria-label="Main navigation">
       <a href="/products">Products</a>
-      <a id="cart-link" href="/cart">Cart</a>
+      <a id="cart-link" href="/cart" hidden>Cart</a>
       <a id="my-orders-link" href="/orders" hidden>My orders</a>
       <a id="seller-new-product-link" href="/seller/products/new" hidden>Create product</a>
       <a id="seller-orders-link" href="/seller/orders" hidden>Seller orders</a>
@@ -34,7 +34,7 @@
         <label id="variant-label" for="product-variant" hidden>Product option</label>
         <select id="product-variant" hidden></select>
         <p id="product-stock" class="product-detail__stock"></p>
-        <form id="add-to-cart-form" class="cart-form">
+        <form id="add-to-cart-form" class="cart-form" hidden>
           <p class="field-hint">Fields marked * are required.</p>
           <label for="product-quantity">Quantity *</label>
           <input id="product-quantity" type="number" min="1" value="1" required>
