@@ -4,12 +4,10 @@ from src.models.account_audit_log import AccountAuditLog
 from src.models.base import Base
 from src.models.cart_item import CartItem
 from src.models.category import Category
-from src.models.category_audit_log import CategoryAuditLog
 from src.models.notification import Notification
 from src.models.order import Order
 from src.models.order_history import OrderHistory
 from src.models.order_item import OrderItem
-from src.models.payment_event import PaymentEvent
 from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.product_variant import ProductVariant
@@ -20,7 +18,6 @@ from src.models.seller_order import SellerOrder
 from src.models.user import User
 from src.models.user_address import UserAddress
 from src.models.voucher import Voucher
-from src.models.voucher_usage import VoucherUsage
 
 __all__ = [
     "Base",
@@ -28,7 +25,6 @@ __all__ = [
     "UserAddress",
     "AccountAuditLog",
     "Category",
-    "CategoryAuditLog",
     "Product",
     "ProductVariant",
     "ProductMetadata",
@@ -37,11 +33,9 @@ __all__ = [
     "OrderHistory",
     "SellerOrder",
     "OrderItem",
-    "PaymentEvent",
     "Review",
     "Notification",
     "Voucher",
-    "VoucherUsage",
     "ReturnDispute",
     "ReturnRequest",
 ]
