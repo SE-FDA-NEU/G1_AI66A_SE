@@ -83,6 +83,7 @@ def make_product(
     stock_quantity: int,
     reserved_stock: int = 0,
     seller_id: int = 1,
+    image_url: str | None = None,
 ) -> Product:
     """Create one product linked to an existing seller."""
     return Product(
@@ -93,7 +94,7 @@ def make_product(
         price=price,
         stock_quantity=stock_quantity,
         reserved_stock=reserved_stock,
-        image_url=f"/images/{code.lower()}.jpg",
+        image_url=image_url or f"/images/{code.lower()}.jpg",
         is_active=True,
         version=1,
     )
@@ -102,8 +103,16 @@ def make_product(
 def build_products(seller_id: int = 1) -> list[Product]:
     """Build the sample product catalog."""
     products_data = [
-        ("Wireless Mouse", "Wireless mouse for study and office work", 180000),
-        ("Mechanical Keyboard", "Mechanical keyboard with tactile switches", 650000),
+        (
+            "AULA S13 Wired Gaming Mouse - Black",
+            "AULA S13 wired gaming mouse with RGB lighting and USB connection.",
+            180000,
+        ),
+        (
+            "AULA S100 Pro Mechanical Keyboard - 3 Mode Red Switch",
+            "AULA S100 Pro mechanical keyboard with 3-mode connection and Red switch.",
+            650000,
+        ),
         ("USB-C Cable", "USB-C charging and data cable", 90000),
         ("Laptop Stand", "Adjustable aluminium laptop stand", 280000),
         ("Webcam", "1080p webcam for online meetings", 420000),
@@ -174,6 +183,10 @@ def build_products(seller_id: int = 1) -> list[Product]:
     for index, (name, description, price) in enumerate(products_data):
         code_number = 100 + index
 
+        image_url = {
+            100: "https://hanoicomputercdn.com/media/product/77136_chuot_gaming_co_day_aula_s13_mau_den_1.jpg",
+            101: "https://cdn-files.hacom.vn/hacom/cdn/web/16032026/ban-phim-co-gaming-aula-s100-pro-3mode-den-xam-cam.jpg",
+        }.get(code_number)
         products.append(
             make_product(
                 code=f"P-{code_number}",
@@ -183,6 +196,7 @@ def build_products(seller_id: int = 1) -> list[Product]:
                 price=price,
                 stock_quantity=12 + (index % 19),
                 reserved_stock=0 if index % 5 else 2,
+                image_url=image_url,
             )
         )
 
@@ -281,6 +295,31 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
             .on_conflict_do_nothing(index_elements=["code"])
         )
         added += result.rowcount
+
+    # Keep the two demo listings synchronized for databases created before the
+    # catalog adopted the external product names and images. This is limited to
+    # the original seed names and never overwrites a seller's later edits.
+    legacy_catalog_updates = {
+        "P-100": (
+            "Wireless Mouse",
+            "AULA S13 Wired Gaming Mouse - Black",
+            "AULA S13 wired gaming mouse with RGB lighting and USB connection.",
+            "https://hanoicomputercdn.com/media/product/77136_chuot_gaming_co_day_aula_s13_mau_den_1.jpg",
+        ),
+        "P-101": (
+            "Mechanical Keyboard",
+            "AULA S100 Pro Mechanical Keyboard - 3 Mode Red Switch",
+            "AULA S100 Pro mechanical keyboard with 3-mode connection and Red switch.",
+            "https://cdn-files.hacom.vn/hacom/cdn/web/16032026/ban-phim-co-gaming-aula-s100-pro-3mode-den-xam-cam.jpg",
+        ),
+    }
+    for code, (legacy_name, name, description, image_url) in legacy_catalog_updates.items():
+        existing = session.exec(select(Product).where(Product.code == code)).first()
+        if existing and existing.name == legacy_name:
+            existing.name = name
+            existing.description = description
+            existing.image_url = image_url
+            session.add(existing)
 
     sample_codes = [p.code for p in sample_products]
     seeded_products = session.exec(

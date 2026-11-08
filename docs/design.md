@@ -212,7 +212,11 @@ Each product belongs to one seller through `seller_id`.
 
 The current implementation already uses these fields in the `Product` SQLModel. The existing `seller_id` field is finalized by this design as a foreign key to `users.id`.
 
-`thumbnail_url` is not stored as a separate database column. The product API can derive the public thumbnail URL from the stored `image_url` value.
+`thumbnail_url` is not stored as a separate database column. The product API can derive the public thumbnail URL from the stored `image_url` value. Legacy seed paths under `/images/` are mapped to a deterministic local SVG fallback at `/api/v1/products/{productCode}/image`; the fallback embeds the canonical product name so catalog and detail views stay synchronized without depending on an external image host.
+
+The demo catalog's `P-100` and `P-101` listings use source-matched AULA names
+and image URLs from HACOM's product pages. Seed synchronization only updates
+those original legacy demo names, so later seller edits are preserved.
 
 ---
 

@@ -63,6 +63,15 @@ def test_init_and_seed_commands_on_sqlite_file(tmp_path: Path) -> None:
     assert "Added: 0 products" in run_python(["-m", "src.seed"], db_path)
     assert run_python(["-c", API_TOTAL_SCRIPT], db_path).strip() == str(expected)
 
+
+def test_seed_catalog_uses_source_matched_aula_names_and_images() -> None:
+    products = {product.code: product for product in build_products()}
+
+    assert products["P-100"].name == "AULA S13 Wired Gaming Mouse - Black"
+    assert products["P-101"].name == "AULA S100 Pro Mechanical Keyboard - 3 Mode Red Switch"
+    assert products["P-100"].image_url.startswith("https://hanoicomputercdn.com/")
+    assert products["P-101"].image_url.startswith("https://cdn-files.hacom.vn/")
+
 def test_check_db_connection_handles_database_error(monkeypatch) -> None:
     """Database connection failures should be handled without crashing."""
 

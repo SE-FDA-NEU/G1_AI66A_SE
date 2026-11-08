@@ -480,6 +480,21 @@ def test_sort_rating_desc(client: TestClient, sample_catalog):
     assert codes == ["P-LAP-PRO", "P-ACC-MOUSE", "P-LAP-AIR", "P-ACC-KEYB", "P-OFF-CHAIR"]
 
 
+def test_catalog_and_detail_share_product_name_and_usable_image(client: TestClient, sample_catalog):
+    """Every catalog card can load a matching image used by the detail page."""
+    listing = client.get("/api/v1/products?limit=1").json()["data"][0]
+    detail = client.get(f"/api/v1/products/{listing['code']}").json()
+
+    assert listing["name"] == detail["name"]
+    assert listing["image_url"] == listing["thumbnail_url"]
+    assert listing["image_url"]
+
+    image = client.get(listing["image_url"])
+    assert image.status_code == 200
+    assert image.headers["content-type"].startswith("image/svg+xml")
+    assert listing["name"] in image.text
+
+
 def test_pagination_returns_total_items_total_pages_current_page(
     client: TestClient, sample_catalog
 ):
