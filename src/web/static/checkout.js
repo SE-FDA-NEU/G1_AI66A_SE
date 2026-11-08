@@ -527,6 +527,39 @@ for (const slot of ["platform", "shipping"]) {
   document.getElementById(`voucher-${slot}-apply`).addEventListener("click", () => changeVoucher(`${slot}_voucher`, input.value));
   document.getElementById(`voucher-${slot}-remove`).addEventListener("click", () => changeVoucher(`${slot}_voucher`, ""));
 }
+function initTestVouchers() {
+  const panel = document.getElementById("test-vouchers-helper");
+  if (!panel || !panel.querySelectorAll) return;
+  const buttons = panel.querySelectorAll(".test-voucher-apply") || [];
+  for (const button of buttons) {
+    button.addEventListener?.("click", () => {
+      if (authenticationChanged() || busy || pending) return;
+      const type = button.getAttribute?.("data-type") || button["data-type"];
+      const code = button.getAttribute?.("data-code") || button["data-code"];
+      if (!type || !code) return;
+      if (type === "platform") {
+        const inp = document.getElementById("voucher-platform");
+        if (inp) inp.value = code;
+        changeVoucher("platform_voucher", code);
+      } else if (type === "shipping") {
+        const inp = document.getElementById("voucher-shipping");
+        if (inp) inp.value = code;
+        changeVoucher("shipping_voucher", code);
+      } else if (type === "shop") {
+        const shopSlots = document.getElementById("shop-vouchers")?.querySelectorAll?.("input") || [];
+        if (shopSlots.length > 0) {
+          const target = shopSlots[0];
+          target.value = code;
+          const field = `shop_vouchers.${(target.id || "").replace("voucher-shop-", "")}`;
+          changeVoucher(field, code);
+        } else {
+          message("Select an item in your cart to use shop vouchers.");
+        }
+      }
+    });
+  }
+}
+initTestVouchers();
 refreshQuoteButton.addEventListener("click", () => { if (!authenticationChanged() && !busy) refreshQuote(); });
 globalThis.addEventListener?.("storage", event => {
   if (event.key === "access_token") authenticationChanged();

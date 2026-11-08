@@ -8,28 +8,62 @@
   <link rel="stylesheet" href="/static/checkout.css">
   <script src="/static/checkout.js" defer></script>
 </head>
-<body>
-  <header>
-    <a href="/products">Mini Marketplace</a>
-    <a href="/cart">Cart</a>
-    <a href="/notifications">Notifications</a>
+<body class="checkout-page">
+  <header class="checkout-header">
+    <div class="checkout-header-inner">
+      <div class="header-brand-group">
+        <a href="/products" class="header-brand">Mini Marketplace</a>
+        <span class="header-sep">/</span>
+        <span class="page-label">Checkout</span>
+      </div>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/products">Products</a>
+        <a href="/cart">Cart</a>
+        <a href="/orders">My orders</a>
+        <a href="/notifications">Notifications</a>
+      </nav>
+    </div>
   </header>
+
   <main>
+    <div class="checkout-steps" aria-label="Checkout progress">
+      <div class="step-item completed">
+        <span class="step-num">1</span>
+        <span class="step-label">Cart</span>
+      </div>
+      <div class="step-sep" aria-hidden="true">&rarr;</div>
+      <div class="step-item active">
+        <span class="step-num">2</span>
+        <span class="step-label">Delivery &amp; Vouchers</span>
+      </div>
+      <div class="step-sep" aria-hidden="true">&rarr;</div>
+      <div class="step-item">
+        <span class="step-num">3</span>
+        <span class="step-label">Confirmation</span>
+      </div>
+    </div>
+
     <h1>Checkout</h1>
+
+    <!-- Delivery Address Book (US13) -->
     <section id="address-book" hidden aria-labelledby="address-heading">
       <h2 id="address-heading">Delivery address book</h2>
       <p id="address-status" role="status" tabindex="-1">Loading addresses...</p>
       <div id="address-list"></div>
-      <label for="address-choice">Use for this order
+      <label for="address-choice" class="address-choice-label">Use for this order
         <select id="address-choice">
           <option value="">Enter delivery information manually</option>
         </select>
       </label>
-      <button id="add-address" type="button">Add address</button>
-      <button id="reload-addresses" type="button">Reload addresses</button>
+      <div class="address-book-actions">
+        <button id="add-address" type="button" class="btn btn-secondary">Add address</button>
+        <button id="reload-addresses" type="button" class="btn btn-outline">Reload addresses</button>
+      </div>
+
+      <!-- Add / Edit Address Form -->
       <form id="address-form" hidden>
         <h3 id="address-form-heading">Add address</h3>
-        <p>Fields marked * are required.</p>
+        <p class="form-required-note">Fields marked * are required.</p>
         <label for="address-recipient_name">Recipient name *
           <input id="address-recipient_name" name="recipient_name" type="text" required maxlength="100" aria-describedby="address-recipient_name-error">
           <span class="field-error" id="address-recipient_name-error"></span>
@@ -59,46 +93,138 @@
         </label>
         <span class="field-error" id="address-is_default-error"></span>
         <p id="address-error" role="alert" tabindex="-1"></p>
-        <button type="submit">Save address</button>
-        <button id="cancel-address" type="button">Cancel</button>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save address</button>
+          <button id="cancel-address" type="button" class="btn btn-secondary">Cancel</button>
+        </div>
       </form>
+
+      <!-- Delete Confirmation Dialog -->
       <div id="address-delete" hidden role="group" aria-labelledby="delete-question" aria-describedby="delete-address-summary">
         <p id="delete-question">Delete this saved address? Existing orders will keep their delivery details.</p>
         <p id="delete-address-summary"></p>
-        <button id="confirm-delete" type="button">Delete address</button>
-        <button id="cancel-delete" type="button">Cancel</button>
+        <div class="form-actions">
+          <button id="confirm-delete" type="button" class="btn btn-danger">Delete address</button>
+          <button id="cancel-delete" type="button" class="btn btn-secondary">Cancel</button>
+        </div>
       </div>
     </section>
+
+    <!-- Cart status & Order items summary -->
     <p id="status" role="status">Loading your cart...</p>
     <section id="summary" aria-label="Order summary"></section>
+
+    <!-- Vouchers & Test Vouchers section (#136, US16) -->
     <section id="vouchers" hidden aria-labelledby="vouchers-heading">
       <h2 id="vouchers-heading">Vouchers and total</h2>
-      <p>Each shop accepts one shop voucher. Platform and free-shipping vouchers apply to the whole order.</p>
+      <p class="vouchers-intro">Each shop accepts one shop voucher. Platform and free-shipping vouchers apply to the whole order.</p>
+
+      <!-- Test Vouchers Quick-Apply Helper -->
+      <div id="test-vouchers-helper" class="test-vouchers-panel">
+        <div class="test-vouchers-header">
+          <h3 class="test-vouchers-title">Available Test Vouchers (Mã giảm giá thử nghiệm)</h3>
+          <p class="test-vouchers-hint">Click &ldquo;Apply&rdquo; on any test voucher to instantly apply and test calculations:</p>
+        </div>
+        <div class="test-vouchers-grid">
+          <!-- Platform Vouchers -->
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge platform">Platform 10%</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">PLATFORM10</code>
+              <span class="test-voucher-desc">10% off (max 50k, min 100k)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="platform" data-code="PLATFORM10">Apply</button>
+          </div>
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge platform">Platform -50k</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">SAVE50K</code>
+              <span class="test-voucher-desc">50.000₫ off (min order 300k)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="platform" data-code="SAVE50K">Apply</button>
+          </div>
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge platform">Platform 20%</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">PLATFORM20</code>
+              <span class="test-voucher-desc">20% off (max 100k, min 500k)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="platform" data-code="PLATFORM20">Apply</button>
+          </div>
+
+          <!-- Free Shipping Vouchers -->
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge shipping">Free Ship</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">FREESHIP</code>
+              <span class="test-voucher-desc">100% Free Shipping on all orders</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="shipping" data-code="FREESHIP">Apply</button>
+          </div>
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge shipping">Free Ship VIP</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">FREESHIPVIP</code>
+              <span class="test-voucher-desc">Free Shipping on orders &ge; 500k</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="shipping" data-code="FREESHIPVIP">Apply</button>
+          </div>
+
+          <!-- Shop Vouchers -->
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge shop">Shop 15%</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">SHOP15</code>
+              <span class="test-voucher-desc">15% off for Demo Seller (min 150k)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-code="SHOP15">Apply</button>
+          </div>
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge shop">Shop -30k</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">SHOP30K</code>
+              <span class="test-voucher-desc">30.000₫ off for Demo Seller (min 200k)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-code="SHOP30K">Apply</button>
+          </div>
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge shop">Shop 2 -20k</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">WELCOME20K</code>
+              <span class="test-voucher-desc">20.000₫ off for Shop 2 (no min)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-code="WELCOME20K">Apply</button>
+          </div>
+        </div>
+      </div>
+
       <div id="shop-vouchers"></div>
       <div class="voucher-slot">
         <label for="voucher-platform">Platform voucher
-          <input id="voucher-platform" type="text" maxlength="32" autocomplete="off" aria-describedby="voucher-platform-error">
+          <input id="voucher-platform" type="text" maxlength="32" autocomplete="off" aria-describedby="voucher-platform-error" placeholder="e.g. PLATFORM10">
         </label>
-        <button id="voucher-platform-apply" type="button">Apply</button>
-        <button id="voucher-platform-remove" type="button">Remove</button>
+        <button id="voucher-platform-apply" type="button" class="btn btn-primary">Apply</button>
+        <button id="voucher-platform-remove" type="button" class="btn btn-secondary">Remove</button>
         <span class="field-error" id="voucher-platform-error"></span>
       </div>
       <div class="voucher-slot">
         <label for="voucher-shipping">Free-shipping voucher
-          <input id="voucher-shipping" type="text" maxlength="32" autocomplete="off" aria-describedby="voucher-shipping-error">
+          <input id="voucher-shipping" type="text" maxlength="32" autocomplete="off" aria-describedby="voucher-shipping-error" placeholder="e.g. FREESHIP">
         </label>
-        <button id="voucher-shipping-apply" type="button">Apply</button>
-        <button id="voucher-shipping-remove" type="button">Remove</button>
+        <button id="voucher-shipping-apply" type="button" class="btn btn-primary">Apply</button>
+        <button id="voucher-shipping-remove" type="button" class="btn btn-secondary">Remove</button>
         <span class="field-error" id="voucher-shipping-error"></span>
       </div>
       <p id="quote-status" role="status" tabindex="-1"></p>
-      <button id="refresh-quote" type="button" hidden>Recalculate total</button>
+      <button id="refresh-quote" type="button" class="btn btn-outline" hidden>Recalculate total</button>
       <section id="price-breakdown" aria-label="Price breakdown"></section>
     </section>
+
+    <!-- Checkout Order Placement Form -->
     <form id="checkout-form" hidden>
       <fieldset id="manual-delivery">
         <legend>Enter delivery information manually</legend>
-        <p>Fields marked * are required.</p>
+        <p class="form-required-note">Fields marked * are required.</p>
         <label for="checkout-recipient_name">Recipient name *
           <input id="checkout-recipient_name" name="recipient_name" type="text" required maxlength="100" aria-describedby="checkout-recipient_name-error" autocomplete="name">
           <span class="field-error" id="checkout-recipient_name-error"></span>
@@ -112,20 +238,58 @@
           <span class="field-error" id="checkout-phone_number-error"></span>
         </label>
       </fieldset>
+
       <fieldset id="payment-methods" aria-describedby="payment-method-help checkout-payment_method-error">
         <legend>Payment method *</legend>
-        <p id="payment-method-help">Choose how this order will be recorded. Online methods are demo tracking only; no payment is processed here.</p>
-        <label><input type="radio" name="payment_method" value="COD" required checked> Cash on delivery (pay on delivery)</label>
-        <label><input type="radio" name="payment_method" value="VIETQR"> VietQR (demo)</label>
-        <label><input type="radio" name="payment_method" value="WALLET"> Wallet (demo)</label>
-        <label><input type="radio" name="payment_method" value="CARD"> Card (demo)</label>
+        <p id="payment-method-help">Choose how this order will be recorded. Online methods are demo tracking only; no real charge is processed.</p>
+        <div class="payment-options-grid">
+          <label class="payment-option-card">
+            <input type="radio" name="payment_method" value="COD" required checked>
+            <div class="payment-option-content">
+              <strong>Cash on delivery (COD)</strong>
+              <span>Pay with cash upon delivery</span>
+            </div>
+          </label>
+          <label class="payment-option-card">
+            <input type="radio" name="payment_method" value="VIETQR">
+            <div class="payment-option-content">
+              <strong>VietQR Transfer</strong>
+              <span>Fast QR code bank transfer (demo)</span>
+            </div>
+          </label>
+          <label class="payment-option-card">
+            <input type="radio" name="payment_method" value="WALLET">
+            <div class="payment-option-content">
+              <strong>Digital Wallet</strong>
+              <span>Pay with digital wallet balance (demo)</span>
+            </div>
+          </label>
+          <label class="payment-option-card">
+            <input type="radio" name="payment_method" value="CARD">
+            <div class="payment-option-content">
+              <strong>Credit / Debit Card</strong>
+              <span>International card payment (demo)</span>
+            </div>
+          </label>
+        </div>
         <span class="field-error" id="checkout-payment_method-error"></span>
       </fieldset>
-      <button id="confirm">Confirm order</button>
+
+      <div class="checkout-submit-wrap">
+        <button id="confirm" class="btn btn-primary btn-submit-order">Confirm order &rarr;</button>
+      </div>
     </form>
+
     <p id="error" role="alert" tabindex="-1"></p>
-    <button id="retry" type="button" hidden>Retry</button>
-    <p><a href="/cart">Back to cart</a> &middot; <a href="/products">Continue shopping</a></p>
+    <button id="retry" type="button" class="btn btn-outline" hidden>Retry</button>
+
+    <nav class="checkout-footer-nav" aria-label="Checkout secondary navigation">
+      <a href="/cart" class="footer-nav-link">&larr; Back to cart</a>
+      <span class="footer-nav-sep">&middot;</span>
+      <a href="/products" class="footer-nav-link">Continue shopping</a>
+      <span class="footer-nav-sep">&middot;</span>
+      <a href="/orders" class="footer-nav-link">View my orders</a>
+    </nav>
   </main>
 </body>
 </html>

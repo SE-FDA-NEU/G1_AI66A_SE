@@ -15,6 +15,7 @@ from src.models.product import Product
 from src.models.product_metadata import ProductMetadata
 from src.models.seller_order import SellerOrder
 from src.models.user import User
+from src.models.voucher import Voucher
 
 DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
 DEMO_BUYER_EMAIL = "user@example.com"
@@ -354,6 +355,150 @@ DEMO_ORDERS = (
     ("CANCELLED", "P-DEMO-CANCEL", 1),
 )
 
+# Demo vouchers with diverse codes, scopes, and discount types for checkout testing
+DEMO_VOUCHERS: list[dict] = [
+    # --- Platform vouchers (applies to total order) ---
+    {
+        "code": "PLATFORM10",
+        "scope": "PLATFORM",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 1000,  # 10% (in basis points)
+        "max_discount": 50_000,
+        "min_order_value": 100_000,
+        "usage_limit": 100,
+        "per_user_limit": 2,
+    },
+    {
+        "code": "SAVE50K",
+        "scope": "PLATFORM",
+        "discount_type": "FIXED_AMOUNT",
+        "discount_value": 50_000,
+        "max_discount": None,
+        "min_order_value": 300_000,
+        "usage_limit": 50,
+        "per_user_limit": 1,
+    },
+    {
+        "code": "PLATFORM20",
+        "scope": "PLATFORM",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 2000,  # 20%
+        "max_discount": 100_000,
+        "min_order_value": 500_000,
+        "usage_limit": 30,
+        "per_user_limit": 1,
+    },
+    # --- Free-shipping vouchers (platform scope, FREE_SHIPPING type) ---
+    {
+        "code": "FREESHIP",
+        "scope": "PLATFORM",
+        "discount_type": "FREE_SHIPPING",
+        "discount_value": 0,
+        "max_discount": None,
+        "min_order_value": 0,
+        "usage_limit": 200,
+        "per_user_limit": 3,
+    },
+    {
+        "code": "FREESHIPVIP",
+        "scope": "PLATFORM",
+        "discount_type": "FREE_SHIPPING",
+        "discount_value": 0,
+        "max_discount": None,
+        "min_order_value": 500_000,
+        "usage_limit": 50,
+        "per_user_limit": 1,
+    },
+    # --- Shop vouchers (seller-scoped, applies to seller order) ---
+    # Demo Seller 1 (demo.seller@marketplace.local)
+    {
+        "code": "SHOP15",
+        "scope": "SHOP",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 1500,  # 15%
+        "max_discount": 75_000,
+        "min_order_value": 150_000,
+        "usage_limit": 50,
+        "per_user_limit": 1,
+        "_seller_email": DEMO_SELLER_EMAIL,
+    },
+    {
+        "code": "SHOP30K",
+        "scope": "SHOP",
+        "discount_type": "FIXED_AMOUNT",
+        "discount_value": 30_000,
+        "max_discount": None,
+        "min_order_value": 200_000,
+        "usage_limit": 40,
+        "per_user_limit": 1,
+        "_seller_email": DEMO_SELLER_EMAIL,
+    },
+    # Seller 2 (seller@example.com)
+    {
+        "code": "SHOP2DEAL",
+        "scope": "SHOP",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 500,  # 5%
+        "max_discount": 20_000,
+        "min_order_value": 50_000,
+        "usage_limit": 100,
+        "per_user_limit": 2,
+        "_seller_email": "seller@example.com",
+    },
+    {
+        "code": "WELCOME20K",
+        "scope": "SHOP",
+        "discount_type": "FIXED_AMOUNT",
+        "discount_value": 20_000,
+        "max_discount": None,
+        "min_order_value": 0,
+        "usage_limit": None,
+        "per_user_limit": 1,
+        "_seller_email": "seller@example.com",
+    },
+]
+
+
+def seed_demo_vouchers(session: Session, users: dict[str, User]) -> int:
+    """Upsert demo vouchers by code; skip any code that already exists.
+
+    Returns the number of vouchers newly inserted.
+    """
+    now = datetime.now(UTC)
+    starts = datetime(2026, 1, 1, tzinfo=UTC)
+    ends = datetime(2027, 12, 31, 23, 59, 59, tzinfo=UTC)
+    inserted = 0
+    for entry in DEMO_VOUCHERS:
+        code = entry["code"]
+        if session.exec(select(Voucher).where(Voucher.code == code)).first():
+            continue
+        seller_id: int | None = None
+        if entry.get("_seller_email"):
+            seller = users.get(entry["_seller_email"])
+            if seller is None:
+                continue
+            seller_id = seller.id
+        voucher = Voucher(
+            code=code,
+            scope=entry["scope"],
+            seller_id=seller_id,
+            discount_type=entry["discount_type"],
+            discount_value=entry["discount_value"],
+            max_discount=entry.get("max_discount"),
+            min_order_value=entry.get("min_order_value", 0),
+            usage_limit=entry.get("usage_limit"),
+            per_user_limit=entry.get("per_user_limit"),
+            used_count=0,
+            is_active=True,
+            starts_at=starts,
+            ends_at=ends,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(voucher)
+        inserted += 1
+    return inserted
+
 
 def _seed_demo_scenarios(session: Session) -> bool:
     """Install scenarios and marker in the caller's transaction; preserve edits on rerun."""
@@ -445,7 +590,17 @@ def _seed_demo_scenarios(session: Session) -> bool:
                         created_at=DEMO_DATE,
                     )
                 )
+    seed_demo_vouchers(session, users)
     return True
+
+
+def seed_vouchers() -> int:
+    """Standalone seeding function for demo vouchers."""
+    init_db()
+    with Session(engine) as session, session.begin():
+        users = seed_users(session)
+        inserted = seed_demo_vouchers(session, users)
+    return inserted
 
 
 def seed_demo_scenarios() -> bool:
@@ -454,8 +609,15 @@ def seed_demo_scenarios() -> bool:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed the catalog and optional P0 demo scenarios.")
-    parser.add_argument("--demo", action="store_true", help="Add carts and sample orders once")
+    parser = argparse.ArgumentParser(
+        description="Seed the catalog, demo scenarios, and test vouchers."
+    )
+    parser.add_argument(
+        "--demo", action="store_true", help="Add carts, sample orders, and vouchers once"
+    )
+    parser.add_argument(
+        "--vouchers", action="store_true", help="Add test vouchers with different codes"
+    )
     args = parser.parse_args()
     counts, created, total = _run_seed(catalog=True, demo=args.demo)
     _print_catalog(counts)
@@ -464,6 +626,9 @@ def main() -> None:
             "Demo scenarios: added" if created else "Demo scenarios: already installed (unchanged)"
         )
         print(f"Products after demo seed: {total}")
+    if args.vouchers:
+        num = seed_vouchers()
+        print(f"Test vouchers: {num} newly inserted ({len(DEMO_VOUCHERS)} total available)")
 
 
 if __name__ == "__main__":
