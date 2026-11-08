@@ -122,8 +122,8 @@
       <!-- Test Vouchers Quick-Apply Helper -->
       <div id="test-vouchers-helper" class="test-vouchers-panel">
         <div class="test-vouchers-header">
-          <h3 class="test-vouchers-title">Available Test Vouchers (Mã giảm giá thử nghiệm)</h3>
-          <p class="test-vouchers-hint">Click &ldquo;Apply&rdquo; on any test voucher to instantly apply and test calculations:</p>
+          <h3 class="test-vouchers-title">Demo Reference Vouchers (Mã giảm giá tham khảo thử nghiệm)</h3>
+          <p class="test-vouchers-hint">Sample reference vouchers for local development and testing. Click &ldquo;Apply&rdquo; to test calculation rules (the server validates order minimums, dates, and shop matching upon applying):</p>
         </div>
         <div class="test-vouchers-grid">
           <!-- Platform Vouchers -->
@@ -131,7 +131,7 @@
             <span class="test-voucher-badge platform">Platform 10%</span>
             <div class="test-voucher-body">
               <code class="test-voucher-code">PLATFORM10</code>
-              <span class="test-voucher-desc">10% off (max 50k, min 100k)</span>
+              <span class="test-voucher-desc">10% off (max 50k, min order 100k)</span>
             </div>
             <button type="button" class="test-voucher-apply" data-type="platform" data-code="PLATFORM10">Apply</button>
           </div>
@@ -147,7 +147,7 @@
             <span class="test-voucher-badge platform">Platform 20%</span>
             <div class="test-voucher-body">
               <code class="test-voucher-code">PLATFORM20</code>
-              <span class="test-voucher-desc">20% off (max 100k, min 500k)</span>
+              <span class="test-voucher-desc">20% off (max 100k, min order 500k)</span>
             </div>
             <button type="button" class="test-voucher-apply" data-type="platform" data-code="PLATFORM20">Apply</button>
           </div>
@@ -172,28 +172,36 @@
 
           <!-- Shop Vouchers -->
           <div class="test-voucher-item">
-            <span class="test-voucher-badge shop">Shop 15%</span>
+            <span class="test-voucher-badge shop">Shop 1 (Demo Seller) 15%</span>
             <div class="test-voucher-body">
               <code class="test-voucher-code">SHOP15</code>
               <span class="test-voucher-desc">15% off for Demo Seller (min 150k)</span>
             </div>
-            <button type="button" class="test-voucher-apply" data-type="shop" data-code="SHOP15">Apply</button>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-seller-id="1" data-seller-name="Demo Seller" data-code="SHOP15">Apply</button>
           </div>
           <div class="test-voucher-item">
-            <span class="test-voucher-badge shop">Shop -30k</span>
+            <span class="test-voucher-badge shop">Shop 1 (Demo Seller) -30k</span>
             <div class="test-voucher-body">
               <code class="test-voucher-code">SHOP30K</code>
               <span class="test-voucher-desc">30.000₫ off for Demo Seller (min 200k)</span>
             </div>
-            <button type="button" class="test-voucher-apply" data-type="shop" data-code="SHOP30K">Apply</button>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-seller-id="1" data-seller-name="Demo Seller" data-code="SHOP30K">Apply</button>
           </div>
           <div class="test-voucher-item">
-            <span class="test-voucher-badge shop">Shop 2 -20k</span>
+            <span class="test-voucher-badge shop">Shop 2 (Seller 2) 5%</span>
+            <div class="test-voucher-body">
+              <code class="test-voucher-code">SHOP2DEAL</code>
+              <span class="test-voucher-desc">5% off for Seller 2 (min 50k)</span>
+            </div>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-seller-id="2" data-seller-name="Seller 2" data-code="SHOP2DEAL">Apply</button>
+          </div>
+          <div class="test-voucher-item">
+            <span class="test-voucher-badge shop">Shop 2 (Seller 2) -20k</span>
             <div class="test-voucher-body">
               <code class="test-voucher-code">WELCOME20K</code>
-              <span class="test-voucher-desc">20.000₫ off for Shop 2 (no min)</span>
+              <span class="test-voucher-desc">20.000₫ off for Seller 2 (no min)</span>
             </div>
-            <button type="button" class="test-voucher-apply" data-type="shop" data-code="WELCOME20K">Apply</button>
+            <button type="button" class="test-voucher-apply" data-type="shop" data-seller-id="2" data-seller-name="Seller 2" data-code="WELCOME20K">Apply</button>
           </div>
         </div>
       </div>

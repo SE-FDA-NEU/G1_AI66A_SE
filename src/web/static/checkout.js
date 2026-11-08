@@ -3,9 +3,23 @@ const form = document.getElementById("checkout-form");
 const PHONE_ERROR = "Phone number must contain 7 to 15 digits. Use only +, spaces, (), or - as separators.";
 function normalizePhoneNumber(value) { return value.trim().replace(/ {2,}/g, " "); }
 function phoneValidationError(value) {
-  const normalized = normalizePhoneNumber(value);
+  const normalized = normalizePhoneNumber(value || "");
   const digits = normalized.match(/[0-9]/g) || [];
   return /^[+0-9 ()-]+$/.test(normalized) && digits.length >= 7 && digits.length <= 15 ? "" : PHONE_ERROR;
+}
+function detailedAddressValidationError(value, maxLength = 1000) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Enter this required field.";
+  if (trimmed.length < 3) return "Detailed address must be at least 3 characters.";
+  if (trimmed.length > maxLength) return `Address cannot exceed ${maxLength} characters.`;
+  if (!/[^\s\u0000-\u001f\u007f-\u009f]/.test(trimmed)) return "Enter an address with visible characters.";
+  return "";
+}
+function recipientNameValidationError(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Enter this required field.";
+  if (!/[^\s\u0000-\u001f\u007f-\u009f]/.test(trimmed)) return "Enter a name with visible characters.";
+  return "";
 }
 const statusText = document.getElementById("status");
 const errorText = document.getElementById("error");
@@ -180,7 +194,10 @@ form.addEventListener("submit", event => {
   else {
     body = Object.fromEntries(["recipient_name", "delivery_address", "phone_number"].map(name => [name,name === "phone_number" ? normalizePhoneNumber(form.elements[name].value) : form.elements[name].value.trim()]));
     const errors = {};
-    for (const name of ["recipient_name", "delivery_address"]) if (!body[name]) errors[name] = ["Enter this required field."];
+    const nameErr = recipientNameValidationError(body.recipient_name);
+    if (nameErr) errors.recipient_name = [nameErr];
+    const addrErr = detailedAddressValidationError(body.delivery_address, 1000);
+    if (addrErr) errors.delivery_address = [addrErr];
     const phoneError = phoneValidationError(body.phone_number);
     if (phoneError) errors.phone_number = [phoneError];
     if (Object.keys(errors).length) { showFields(form, "checkout", errors); message("Please correct the highlighted fields."); return; }
@@ -344,9 +361,18 @@ addressForm.addEventListener("submit", event => {
   if (!addressForm.reportValidity()) return;
   clearFields(addressForm, "address");
   const phone_number = normalizePhoneNumber(addressForm.elements.phone_number.value);
+  const errors = {};
   const phoneError = phoneValidationError(phone_number);
-  if (phoneError) {
-    showFields(addressForm, "address", {phone_number: [phoneError]});
+  if (phoneError) errors.phone_number = [phoneError];
+  const addrError = detailedAddressValidationError(addressForm.elements.detailed_address.value, 500);
+  if (addrError) errors.detailed_address = [addrError];
+  const nameError = recipientNameValidationError(addressForm.elements.recipient_name.value);
+  if (nameError) errors.recipient_name = [nameError];
+  for (const name of ["province", "district", "ward"]) {
+    if (!addressForm.elements[name].value.trim()) errors[name] = ["Enter this required field."];
+  }
+  if (Object.keys(errors).length) {
+    showFields(addressForm, "address", errors);
     addressStatus.textContent = "Please correct the highlighted fields.";
     return;
   }
@@ -540,20 +566,40 @@ function initTestVouchers() {
       if (type === "platform") {
         const inp = document.getElementById("voucher-platform");
         if (inp) inp.value = code;
+        message("");
         changeVoucher("platform_voucher", code);
       } else if (type === "shipping") {
         const inp = document.getElementById("voucher-shipping");
         if (inp) inp.value = code;
+        message("");
         changeVoucher("shipping_voucher", code);
       } else if (type === "shop") {
-        const shopSlots = document.getElementById("shop-vouchers")?.querySelectorAll?.("input") || [];
-        if (shopSlots.length > 0) {
-          const target = shopSlots[0];
-          target.value = code;
-          const field = `shop_vouchers.${(target.id || "").replace("voucher-shop-", "")}`;
-          changeVoucher(field, code);
+        const sellerId = button.getAttribute?.("data-seller-id") || button["data-seller-id"];
+        const sellerName = button.getAttribute?.("data-seller-name") || button["data-seller-name"] || (sellerId ? `Shop ${sellerId}` : "this shop");
+
+        let targetInp = null;
+        let targetSellerId = null;
+
+        if (sellerId) {
+          const sid = Number(sellerId);
+          if (shopNames.has(sid) || shopNames.has(sellerId)) {
+            targetInp = document.getElementById(`voucher-shop-${sellerId}`);
+            if (targetInp) targetSellerId = sellerId;
+          }
         } else {
-          message("Select an item in your cart to use shop vouchers.");
+          const shopSlots = document.getElementById("shop-vouchers")?.querySelectorAll?.("input") || [];
+          if (shopSlots.length === 1) {
+            targetInp = shopSlots[0];
+            targetSellerId = (targetInp.id || "").replace("voucher-shop-", "");
+          }
+        }
+
+        if (targetInp && targetSellerId) {
+          targetInp.value = code;
+          message("");
+          changeVoucher(`shop_vouchers.${targetSellerId}`, code);
+        } else {
+          message(`Voucher '${code}' is for ${sellerName}, which is not in your current cart selection.`);
         }
       }
     });
