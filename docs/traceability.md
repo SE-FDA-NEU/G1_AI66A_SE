@@ -669,3 +669,21 @@ legacy fallback, reload/retry behavior, responsive layouts and ownership denial.
 
 Exclusions: payment selection/display, pricing changes, new API fields, migrations,
 third-party map rendering and seller-dashboard changes.
+
+## Seller purchase controls (#220)
+
+Requirement: sellers browsing the catalogue/product detail must not be offered
+Cart or Add to Cart. `products.html`/`products.js` apply role-aware Cart navigation;
+`product-detail.html`/`product-detail.js` combine role, stock and submission state,
+block non-Buyer mutations and ignore previous-account responses. Existing
+`BuyerUser` enforcement remains authoritative for direct cart/checkout requests.
+
+Contracts: [US01 navigation](us01-browse-product-catalog.md#purchase-navigation-by-role-220),
+[US02 purchase controls](us02-view-product-detail.md#purchase-controls-by-role-220),
+[US03 authorization](us03-cart.md#buyer-only-access-and-purchase-entry-points-220).
+The [single verification matrix](testing-task-notes.md#issue-220-seller-purchase-controls)
+links role/ownership, Guest/Buyer continuity, stock/variant changes, duplicate and
+stale requests, mobile rendering, and direct-API refusal without writes.
+
+Exclusions: new roles/APIs, database migrations, pricing or stock-policy changes,
+and unrelated seller/admin screen redesign.

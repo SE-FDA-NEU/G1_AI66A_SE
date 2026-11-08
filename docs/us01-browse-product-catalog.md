@@ -94,3 +94,15 @@
 - [ ] UI/UX Mockups are attached (Figma link).
 - [x] API contract is defined.
 - [x] Acceptance criteria cover edge cases (loading, empty, error).
+
+## Purchase navigation by role (#220)
+
+The catalogue's Cart link starts hidden until page initialization determines the
+current session. It is hidden for signed-in sellers and administrators. Buyers
+retain Cart navigation; guests retain the existing login-to-purchase flow.
+Logout, cross-tab account changes and restored-page navigation refresh the link.
+Product browsing and seller-management navigation remain available for sellers.
+
+The product-detail purchase rule is specified in
+[US02](us02-view-product-detail.md#purchase-controls-by-role-220). Verification is
+recorded in the [single #220 test matrix](testing-task-notes.md#issue-220-seller-purchase-controls).
