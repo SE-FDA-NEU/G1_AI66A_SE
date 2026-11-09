@@ -564,3 +564,50 @@ the new suite. To regenerate fixture screenshots, set
 Local execution, remote CI, clean-clone verification and human acceptance require
 their own evidence. Runtime authorization, cart/checkout business rules, migrations
 and unrelated screen redesign are outside this UI fix.
+
+## Issue #227: unread notification badge
+
+Requirement: [#227](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/227).
+Contract: [US15 unread navigation badge](us15-review-notifications.md#unread-navigation-badge-227).
+Reuse the existing notification list and single-read API; add a count-only endpoint,
+atomic mark-all action, shared bell/badge on existing Notifications links and read
+synchronization. Notification creation, schema changes and live push are excluded.
+
+| ID | Partition / action | Expected result | Verification |
+|---|---|---|---|
+| N227-01 | 0, 1, 99, 100, 125 unread messages | Exact private API count; hidden/number/99+ badge; exact accessible total | `tests/test_notification_badge.py`, `tests/notification_badge_ui.mjs`, `tests/test_notification_badge_browser.py` |
+| N227-02 | Guest or another recipient | Guest gets 401; own counts/read mutations only; foreign read gets 404 without writes | API and browser tests |
+| N227-03 | Read one, open its related page, read all | Badge decreases/disappears; read timestamps persisted; repeated read preserves original timestamps | Browser flows and fresh-session database assertions |
+| N227-04 | More than 100 unread, or newest 100 already read | Mark-all includes older unread messages and remains enabled while the total is positive | API and browser tests |
+| N227-05 | Mark-all commit fails | Every unread row remains unchanged, including within the rolled-back session | Injected service commit failure |
+| N227-06 | API count/read error followed by retry | No false count or unread-state loss; readable feedback and retry works | DOM/controller checks and explicit browser 503 transport doubles |
+| N227-07 | Duplicate pending read; account switch before old response | One mutation; old result cannot replace current account state or unlock a newer mutation | Held browser response; DOM badge request ignores abort deliberately |
+| N227-08 | Read in another tab, including overlapping reads; logout; restored/visible page | Refresh current recipient count after each commit, even if another tab refreshed the list while a read was pending; hide logged-out badge | Browser cross-tab/storage tests and controller event checks |
+| N227-09 | Existing legacy/session token | Same authenticated count and mark-all behavior | Two browser storage cases |
+| N227-10 | 390px and 1280px layouts with 99+ | No viewport overflow; bell badge fits; navigation target at least 44px high | Browser geometry and screenshots |
+| N227-11 | Any existing HTML link to Notifications | Shared badge controller included | Automatic page inventory assertion |
+
+With Python 3.12, README dependencies and installed Chrome/Edge:
+
+```powershell
+python -m pip install playwright
+$env:DEBUG = 'false'
+python -m pytest tests/test_notification_badge.py tests/test_notification_badge_browser.py tests/test_order_notifications.py tests/test_us15_reviews_notifications.py tests/test_seller_access.py tests/test_purchase_roles_browser.py tests/test_catalog_browser.py tests/test_ui_docs_contract.py tests/test_ui_styling.py -q
+node tests/notification_badge_ui.mjs
+node tests/notifications_browser.mjs
+node --check src/web/static/notification-badge.js
+node --check src/web/static/notifications.js
+python -m ruff check src tests/test_notification_badge.py tests/test_notification_badge_browser.py
+git diff --check
+```
+
+Browser tests run production assets and FastAPI handlers against per-test SQLite
+files. Named held responses and 503 errors are explicit transport doubles. No
+production database is used. Existing pytest discovery runs the browser suite;
+CI's page-script step also runs the badge controller checks.
+
+Set `$env:NOTIFICATION_BADGE_ARTIFACTS = 'docs/images/issue227'` to regenerate
+[mobile](images/issue227/notification-badge-390.png) and
+[desktop](images/issue227/notification-badge-1280.png) screenshots from fake data.
+Run results belong in the PR. Human acceptance, teammate review, remote CI and
+clean-clone execution require separate evidence.

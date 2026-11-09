@@ -58,6 +58,33 @@ Notifications are private to their recipient and are available from the shared
 - The center displays the newest 100 notifications and the total unread count. A
   recipient can mark their own notification as read; other accounts cannot access it.
 
+### Unread navigation badge (#227)
+
+Existing Notifications navigation links display a bell with a recipient-specific
+unread badge. The badge is hidden for guests and zero unread messages, displays
+the exact count from 1 through 99, and displays `99+` above 99. The link's accessible
+name and live announcement retain the exact total. Shared styling keeps the badge
+compact on desktop and mobile; the Notifications text remains alongside the icon.
+
+The count is loaded on page entry, returning focus/visibility, restored pages and
+read changes. A successful **Mark as read**, normal **Open related page** click,
+or **Mark all as read** refreshes the count in the current tab and signals other
+open tabs to refresh their own account's count. Failed reads retain unread state
+and allow retry; failed count requests keep navigation available with an
+unavailable-count label. Logout hides the badge; previous-account responses cannot
+replace the current account's count or notification list. Existing local/legacy
+and session token storage remains supported.
+
+The count API returns only `{"unread_count": N}` and counts all unread rows, not
+just the newest 100 shown in the center. Mark-all uses the authenticated user ID,
+updates only that recipient's unread rows with one UTC timestamp in one service-owned
+transaction, and returns the remaining count after commit. Repeated reads preserve
+existing read times. A failed mark-all transaction rolls back every affected row.
+
+No database migration, new notification event, polling service, WebSocket delivery
+or unrelated navigation redesign is introduced. Verification and screenshots are
+linked from the [#227 regression matrix](testing-task-notes.md#issue-227-unread-notification-badge).
+
 ## API
 
 | Method | Path | Access | Purpose |
@@ -67,6 +94,8 @@ Notifications are private to their recipient and are available from the shared
 | `POST` | `/api/v1/products/{productCode}/reviews` | Buyer | Submit one verified-purchase review |
 | `PATCH` | `/api/v1/seller/reviews/{reviewId}/reply` | Seller | Create or update the seller reply |
 | `GET` | `/api/v1/notifications` | Authenticated | List own notifications and unread count |
+| `GET` | `/api/v1/notifications/unread-count` | Authenticated | Count all own unread notifications |
+| `POST` | `/api/v1/notifications/mark-all-read` | Authenticated | Mark all own unread notifications as read; return remaining count |
 | `PATCH` | `/api/v1/notifications/{notificationId}/read` | Authenticated | Mark own notification as read |
 
 SQLite startup migration adds `product_metadata.review_count` to existing databases
