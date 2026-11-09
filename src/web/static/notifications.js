@@ -5,9 +5,28 @@ const error = document.getElementById("notifications-error");
 const retry = document.getElementById("notifications-retry");
 const list = document.getElementById("notifications-list");
 const logout = document.getElementById("notifications-logout");
+const sellerNavigation = [...document.querySelectorAll("[data-seller-nav]")];
+
+function getStoredToken() {
+  return localStorage.getItem("access_token") || localStorage.getItem("token");
+}
+
+async function configureNavigation(token) {
+  sellerNavigation.forEach((link) => { link.hidden = true; });
+  try {
+    const response = await fetch("/api/v1/auth/me", {
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+    const user = response.ok ? await response.json() : null;
+    const isSeller = user?.role === "seller";
+    sellerNavigation.forEach((link) => { link.hidden = !isSeller; });
+  } catch {
+    // Keep seller controls hidden when identity cannot be verified.
+  }
+}
 
 function tokenOrLogin() {
-  const token = localStorage.getItem("access_token");
+  const token = getStoredToken();
   if (token) return token;
   window.location.replace(`/login?return_to=${encodeURIComponent("/notifications")}`);
   return null;
@@ -16,6 +35,7 @@ function tokenOrLogin() {
 async function loadNotifications() {
   const token = tokenOrLogin();
   if (!token) return;
+  await configureNavigation(token);
   status.hidden = false;
   status.textContent = "Loading notifications…";
   error.hidden = true;
@@ -26,6 +46,7 @@ async function loadNotifications() {
     });
     if (response.status === 401) {
       localStorage.removeItem("access_token");
+      localStorage.removeItem("token");
       tokenOrLogin();
       return;
     }
@@ -84,6 +105,7 @@ function createNotification(notification) {
 retry.addEventListener("click", loadNotifications);
 logout.addEventListener("click", () => {
   localStorage.removeItem("access_token");
+  localStorage.removeItem("token");
   window.location.replace("/login?return_to=%2Fnotifications");
 });
 loadNotifications();

@@ -63,6 +63,10 @@ let accountId = null;
 let ready = false;
 let pending = false;
 
+function storedToken() {
+  return localStorage.getItem("access_token") || localStorage.getItem("token");
+}
+
 function timeoutSignal() {
   return typeof AbortSignal !== "undefined" && AbortSignal.timeout
     ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -79,7 +83,7 @@ function setDisabled(value) {
 
 /** Stop for good once the stored token is no longer the one this page was loaded with. */
 function accountChanged() {
-  if (!contextChanged && localStorage.getItem("access_token") === contextToken) return false;
+  if (!contextChanged && storedToken() === contextToken) return false;
   contextChanged = true;
   ready = false;
   setDisabled(true);
@@ -273,7 +277,7 @@ async function init() {
   if (contextChanged) return;
   ready = false;
   setDisabled(true);
-  contextToken = localStorage.getItem("access_token");
+  contextToken = storedToken();
   elements.accountRetry.hidden = true;
   elements.accountStatus.textContent = "Checking your account…";
   if (!contextToken) {
@@ -403,6 +407,6 @@ elements.createAnother.addEventListener("click", () => {
 elements.accountRetry.addEventListener("click", init);
 elements.reload.addEventListener("click", () => location.reload());
 window.addEventListener("storage", (event) => {
-  if (event.key === "access_token" || event.key === null) accountChanged();
+  if (event.key === "access_token" || event.key === "token" || event.key === null) accountChanged();
 });
 init();

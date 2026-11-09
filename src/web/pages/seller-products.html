@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/base.css">
   <link rel="stylesheet" href="/static/products.css">
   <link rel="stylesheet" href="/static/admin-portal.css">
+  <script src="/static/seller-access.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -58,7 +59,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const tbody = document.getElementById('seller-products-tbody');
-      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token') || sessionStorage.getItem('access_token');
       if (!token) {
         window.location.href = '/login?next=/seller/products';
         return;
