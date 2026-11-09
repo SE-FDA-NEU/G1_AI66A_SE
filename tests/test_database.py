@@ -63,6 +63,65 @@ def test_init_and_seed_commands_on_sqlite_file(tmp_path: Path) -> None:
     assert "Added: 0 products" in run_python(["-m", "src.seed"], db_path)
     assert run_python(["-c", API_TOTAL_SCRIPT], db_path).strip() == str(expected)
 
+
+def test_seed_never_deletes_another_sellers_legacy_product(tmp_path: Path) -> None:
+    """Catalog cleanup is scoped to the demo seller, even for an unreferenced P-* code."""
+    db_path = tmp_path / "seller-owned-catalog.db"
+    run_python(["-m", "src.database"], db_path)
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute(
+            "INSERT INTO users "
+            "(id, name, email, role, status, password_hash, created_at) "
+            "VALUES (99, 'Other Seller', 'other-seller@test.local', 'seller', 'ACTIVE', '', "
+            "'2026-10-01 00:00:00')"
+        )
+        connection.execute(
+            "INSERT INTO products "
+            "(code, seller_id, name, description, price, stock_quantity, reserved_stock, "
+            "image_url, is_active, version) "
+            "VALUES ('P-OTHER-UNOWNED', 99, 'Other seller listing', 'Keep me', 100000, "
+            "5, 0, 'https://example.test/other.jpg', 1, 1)"
+        )
+        connection.commit()
+
+    run_python(["-m", "src.seed"], db_path)
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        preserved = connection.execute(
+            "SELECT seller_id, name, is_active FROM products WHERE code = 'P-OTHER-UNOWNED'"
+        ).fetchone()
+    assert preserved == (99, "Other seller listing", 1)
+
+
+def test_seed_catalog_uses_source_matched_aula_names_and_images() -> None:
+    products = {product.code: product for product in build_products()}
+
+    assert products["P-100"].name == "AULA S13 Wired Gaming Mouse - Black"
+    assert products["P-101"].name == "AULA S100 Pro Mechanical Keyboard - 3 Mode Red Switch"
+    assert products["P-100"].image_url.startswith("https://hanoicomputercdn.com/")
+    assert products["P-101"].image_url.startswith("https://cdn-files.hacom.vn/")
+    assert products["MIX-031"].name == "Logitech HD C270 Webcam"
+    assert products["MIX-032"].name == "Logitech HD C310 Webcam"
+    assert products["MIX-033"].name.startswith("ORICO BT2U3-10AB-GY")
+    assert products["MIX-034"].name.startswith("Ergotek L234")
+    assert products["MON-035"].name.startswith("AOC 24B36X")
+    assert products["MON-036"].name.startswith("AOC 27B30H")
+    assert products["PHONE-037"].name.startswith("Samsung Galaxy A17")
+    assert products["PHONE-038"].name.startswith("Samsung Galaxy A17")
+    assert products["TAB-039"].name.startswith("Xiaomi Pad 7")
+    assert products["TAB-040"].name.startswith("Xiaomi Pad 7")
+    assert products["LAP-041"].name.startswith("ASUS VivoBook")
+    assert products["LAP-042"].name.startswith("Lenovo V14")
+    assert products["LAP-043"].name.startswith("HP Pavilion")
+    assert products["PHONE-044"].name.startswith("Apple iPhone 15")
+    assert products["TAB-045"].name.startswith("Apple iPad A16")
+    assert products["MON-046"].name.startswith("LG 27MK600M-B")
+    assert products["MON-047"].name.startswith("LG 24MK600M-B")
+    assert products["MON-035"].image_url.startswith("https://")
+    assert products["PHONE-037"].image_url.startswith("https://")
+    assert products["TAB-039"].image_url.startswith("https://")
+
 def test_check_db_connection_handles_database_error(monkeypatch) -> None:
     """Database connection failures should be handled without crashing."""
 
@@ -105,7 +164,7 @@ def test_legacy_database_migration_adds_password_hash(tmp_path: Path) -> None:
         assert "password_hash" not in col_names
 
     output = run_python(["-m", "src.seed"], db_path)
-    assert "Added: 45 products" in output
+    assert f"Added: {len(build_products())} products" in output
 
     with closing(sqlite3.connect(db_path)) as connection:
         col_names = [col[1] for col in connection.execute("PRAGMA table_info(users)").fetchall()]

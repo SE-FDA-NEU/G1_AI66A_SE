@@ -15,6 +15,7 @@ credentials.json
 *.db-journal
 *.db-wal
 *.db-shm
+src/web/static/uploads/
 .pytest_temp*/
 
 # Python

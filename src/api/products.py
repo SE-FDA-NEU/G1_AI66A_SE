@@ -2,8 +2,10 @@
 
 import logging
 from collections import defaultdict
+from html import escape
 
 from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
@@ -64,6 +66,13 @@ class ProductResponse(BaseModel):
     has_variants: bool = False
 
 
+def public_product_image_url(product: Product) -> str:
+    """Return a usable image URL, including a fallback for legacy/missing assets."""
+    if product.image_url and not product.image_url.startswith("/images/"):
+        return product.image_url
+    return f"/api/v1/products/{product.code}/image"
+
+
 def get_category_and_descendant_ids(session: Session, category_id: int) -> list[int]:
     """Retrieve the specified category and all descendant category IDs recursively."""
     target = session.get(Category, category_id)
@@ -112,8 +121,8 @@ def product_response(
         name=product.name,
         description=product.description,
         price=float(display_price),
-        thumbnail_url=product.image_url,
-        image_url=product.image_url,
+        thumbnail_url=public_product_image_url(product),
+        image_url=public_product_image_url(product),
         stock_quantity=available_stock,
         stock_status=(
             "out_of_stock"
@@ -128,6 +137,43 @@ def product_response(
         review_count=int(meta.review_count if meta else 0),
         sales_count=int(meta.sales_count if meta and meta.sales_count is not None else 0),
         has_variants=has_variants,
+    )
+
+
+@router.get("/{product_code}/image", include_in_schema=False)
+def get_product_image(
+    session: SessionDep,
+    product_code: str = Path(min_length=1, max_length=20),
+) -> Response:
+    """Render a deterministic local catalog image when a listing has no usable asset."""
+    product = session.exec(
+        select(Product).where(Product.code == product_code, Product.is_active.is_(True))
+    ).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product image not found.")
+
+    name = escape(product.name)
+    code = escape(product.code)
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"
+  role="img" aria-labelledby="title desc">
+  <title id="title">{name}</title>
+  <desc id="desc">Product image for {name}</desc>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop stop-color="#e0f2fe"/><stop offset="1" stop-color="#dbeafe"/>
+  </linearGradient></defs>
+  <rect width="800" height="600" rx="32" fill="url(#bg)"/>
+  <rect x="80" y="80" width="640" height="300" rx="24" fill="#ffffff" opacity=".9"/>
+  <circle cx="400" cy="230" r="92" fill="#2563eb" opacity=".16"/>
+  <path d="M350 270h100l-18-88h-64z" fill="#2563eb" opacity=".8"/>
+  <text x="400" y="470" text-anchor="middle" font-family="Arial, sans-serif"
+    font-size="34" font-weight="700" fill="#0f172a">{name}</text>
+  <text x="400" y="515" text-anchor="middle" font-family="Arial, sans-serif"
+    font-size="20" fill="#475569">{code}</text>
+</svg>'''
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 

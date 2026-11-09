@@ -4,6 +4,9 @@
 const PAGE_PATH = "/seller/products/new";
 const LOGIN_URL = `/login?return_to=${encodeURIComponent(PAGE_PATH)}`;
 const CREATE_URL = "/api/v1/seller/products";
+const UPLOAD_URL = "/api/v1/seller/products/upload-image";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const REQUEST_TIMEOUT_MS = 10000;
 const DRAFT_KEY = "seller-product-draft";
 const FIELDS = ["name", "description", "price", "stock_quantity", "image_url"];
@@ -50,6 +53,7 @@ const elements = {
   createdStock: document.getElementById("created-stock"),
   viewProduct: document.getElementById("view-product"),
   createAnother: document.getElementById("create-another"),
+  imageFile: document.getElementById("product-image-file"),
 };
 
 // The token that loaded this page; every request uses it, never a newer one.
@@ -189,6 +193,8 @@ function isHttpUrl(value) {
 
 function readForm() {
   const errors = {};
+  const selectedFile = elements.imageFile.files && elements.imageFile.files[0];
+  const imageUrl = selectedFile ? form.elements.image_url.value.trim() : readText("image_url", errors);
   const body = {
     name: readText("name", errors),
     description: readText("description", errors),
@@ -202,10 +208,33 @@ function readForm() {
       min: "Stock quantity must be 0 or more.",
       max: "Stock quantity must be at most 1.000.000.",
     }),
-    image_url: readText("image_url", errors),
+    image_url: imageUrl,
   };
-  if (!errors.image_url && !isHttpUrl(body.image_url)) errors.image_url = [IMAGE_URL_MESSAGE];
+  if (!selectedFile && !errors.image_url && !isHttpUrl(body.image_url)) {
+    errors.image_url = [IMAGE_URL_MESSAGE];
+  }
+  if (selectedFile) {
+    if (!ALLOWED_IMAGE_TYPES.has(selectedFile.type)) {
+      errors.image_url = ["Uploaded image must be JPEG, PNG, or WebP."];
+    } else if (selectedFile.size > MAX_IMAGE_BYTES) {
+      errors.image_url = ["Uploaded image must be no larger than 5 MB."];
+    }
+  }
   return { body, errors };
+}
+
+async function uploadImage(file) {
+  const response = await fetch(UPLOAD_URL, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": file.type, "X-File-Name": file.name },
+    body: file,
+    signal: timeoutSignal(),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.data?.image_url) {
+    throw new Error(payload?.error?.message || "The image could not be uploaded.");
+  }
+  return payload.data.image_url;
 }
 
 /** Keep the typed values across a login, for the same account only. */
@@ -330,6 +359,13 @@ async function submitProduct() {
   setDisabled(true);
   elements.submitStatus.textContent = "Creating listing...";
   try {
+    const selectedFile = elements.imageFile.files && elements.imageFile.files[0];
+    if (selectedFile) {
+      elements.submitStatus.textContent = "Uploading image...";
+      body.image_url = await uploadImage(selectedFile);
+      if (accountChanged()) return;
+    }
+    elements.submitStatus.textContent = "Creating listing...";
     // A lost response may follow a committed insert, so a failed POST is never resent here.
     const response = await fetch(CREATE_URL, {
       method: "POST",

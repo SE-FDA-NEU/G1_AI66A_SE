@@ -662,7 +662,7 @@ def test_required_form_fields_marked_with_asterisk() -> None:
         "Description *",
         "Price (₫) *",
         "Stock quantity *",
-        "Image URL *",
+        "Image URL or upload *",
     ]:
         assert f">{label}</label>" in seller_html, f"Missing asterisk in seller label: {label}"
 
