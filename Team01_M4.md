@@ -18,9 +18,9 @@ Submitted by:   Nguyen Quang Minh
 
 ![Project board](docs/images/m4/Project_Board_Current_2026-11-02.jpg)
 
-## Page 3 — Output of `python -m pytest tests/test_m4_p0.py -v`
+## Page 3 — Output of `python -m pytest -v` (full suite, middle omitted)
 
-![pytest output](docs/images/m4/pytest-m4.png)
+![pytest output](docs/images/m4/pytest-full.png)
 
 ---
 

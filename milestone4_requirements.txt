@@ -1,0 +1,128 @@
+1. Objective
+Milestone 3 proved that people can use your app. Milestone 4 proves that it keeps working when you change it: every P0 story is checked by automated tests that a machine can run in seconds, after every change.
+
+A test that cannot fail is not a test. Before you commit a test, break the rule on purpose — change <= to <, or 3 hours to 4 — and run the tests. If nothing turns red, the test is not checking what you think. Put the code back, then commit.
+
+2. What to write
+One new document: docs/testing.md in your team repository. Markdown only. The tests themselves go in tests/.
+
+docs/SETUP.md must still work — add how to run the tests.
+
+Four sections, in this order. Numbers in bold are minimums.
+
+Section	Minimum	What it must contain
+1. What we test, and why	1 table	For each layer (services, repository, routes, interface): what kind of test it gets, or why it gets none. Then two or three sentences on risk: which parts you tested most, and why those.
+2. Test cases for every P0 story	every P0 story
+3 test cases each	A table: ID · Story · Input · Expected result · Kind. Every P0 story has at least three test cases: at least one normal case that succeeds, at least one error case where a business rule refuses the input, and — if the rule has a number in it (a limit, a time, an amount) — boundary cases on both sides of that number.
+3. Automated tests	every test case in section 2	Every test case in section 2 is a pytest test in tests/, with its ID in the test name or a comment. One command runs them all. Tests run without a server and without your real database (use a fake repository or a temporary database). Show the command and a screenshot of the output.
+4. What the tests found	1 entry	A bug your tests found: the issue, the fix, and the test that now guards it. If your tests found none, show one rule you broke on purpose and the red test output it produced.
+The rule that decides most of your mark
+
+At the Sprint 4 Review session, the instructor clones your repository onto a machine that has never seen your project and runs these checks:
+
+Check	What the instructor does	Pass when
+1. Setup	Clone and follow docs/SETUP.md	the app runs with no errors
+2. Tests run	Type pytest on that machine	all tests pass, with no hand edits
+3. Every P0 story	Pick a P0 story in docs/testing.md	it has 3 or more test cases, including an error case
+4. Boundary	Read one test for a rule with a number limit	it checks both sides of the limit
+5. Traceable	Pick one test case ID in the table	its pytest test exists and passes
+Test this yourselves before the deadline: clone into a new folder and run pytest. Tests that only pass on one laptop usually read a file that was never committed, or depend on today's date.
+
+3. Worked examples
+Same example topic as before — StudyRoom, booking a study desk in the library. Copy the level of detail, not the words.
+
+3.1 What we test, and why
+Layer	Test	Why
+src/booking.py (services)	unit tests with a fake repository	all the business rules live here; this is where a mistake costs most
+src/db.py (repository)	a few tests on a temporary SQLite file	checks the SQL and the database constraints
+src/app.py (routes)	2 tests with the Flask test client	only that each route returns the right status code
+interface	none automated	already checked with real users; it changes too often for automated tests
+3.2 Test cases for every P0 story
+Two of the four P0 stories are shown. The other two (see and cancel my booking; check in) follow the same pattern.
+
+ID	Story	Input	Expected	Kind
+TC-01	US01 Find a free desk	18:00 → 20:00, 24 desks, none booked	200, 24 desks listed	normal
+TC-02	US01 Find a free desk	18:00 → 20:00, desk A12 already booked	200, A12 not in the list	normal
+TC-03	US01 Find a free desk	end 17:00 is before start 18:00	400, "invalid range"	error
+TC-04	US02 Book a desk	A12, 18:00 → 20:59 (2:59)	201, booking saved	boundary, just below
+TC-05	US02 Book a desk	A12, 18:00 → 21:00 (3:00)	201, booking saved	boundary, on the limit
+TC-06	US02 Book a desk	A12, 18:00 → 21:01 (3:01)	422, nothing saved	boundary, just above
+TC-07	US02 Book a desk	student already has an active booking	409, nothing saved	error
+3.3 Automated tests
+tests/test_booking.py — one test per test case, the ID in the name or comment:
+
+import pytest
+from datetime import datetime, timedelta
+from src.booking import duration_ok, create_booking, BookingError
+from tests.fakes import FakeBookingRepo
+START = datetime(2026, 12, 7, 18, 0)
+
+@pytest.mark.parametrize("minutes, ok", [
+    (179, True),    # TC-04  2:59
+    (180, True),    # TC-05  3:00 is allowed
+    (181, False),   # TC-06  3:01
+])
+def test_booking_length(minutes, ok):
+    assert duration_ok(START, START + timedelta(minutes=minutes)) == ok
+
+def test_tc07_second_active_booking_is_refused():
+    repo = FakeBookingRepo(active={"s01": 7})
+    with pytest.raises(BookingError) as err:
+        create_booking(repo, "s01", "A12", START, START + timedelta(hours=2))
+    assert err.value.status == 409
+    assert repo.saved == []
+Run them all: python -m pytest -v — 18 passed in 0.27 s (screenshot below).
+
+3.4 What the tests found
+Bug #71 — a 27-hour booking was accepted. duration_ok used (end - start).seconds, which ignores whole days, so 1 day and 3 hours looked like 3 hours. Found by test_booking_longer_than_a_day. Fixed in PR #72 with total_seconds(); the test stays as a regression test.
+
+4. Required state of your repository
+Item	Minimum
+Merged pull requests in Sprint 4	4, each reviewed by someone else
+Issues closed in Sprint 4	5
+Per member: merged PR · review given · issue closed	≥1 each
+Per member: tests written	≥1 test in tests/ written by each member
+docs/SETUP.md — still works on a new machine	includes how to run the tests
+[Chore] Refine backlog for Sprint 4 → PO, closed	1
+[Chore] Sprint 4 wrap-up → SM, closed	1
+docs/sprint-log.md — Sprint 4 section	committed · completed · velocity
+Scrum Master — a different person from Sprint 3	named in README
+Optional — docs/retro.md, Sprint 4 retrospective	one action, one owner
+Minimum bar
+
+PDF submitted by the deadline with the full cover block
+docs/testing.md has all four sections, in order
+tests/ on main contains tests, and at least one passes
+docs/sprint-log.md records committed, completed and velocity for Sprint 4
+The project board opens from the link you submitted
+docs/SETUP.md is still on main
+5. Submission workflow
+One member creates a branch, e.g. docs/m4-testing
+Commit docs/testing.md on that branch
+Open a Pull Request into main
+Another member reviews and approves, leaving at least one substantive comment
+Merge the Pull Request into main
+Export the merged testing.md to PDF and submit on the LMS
+Use the Review changes button, not the comment box at the bottom of the page — a plain comment is not recorded as a review.
+
+The tests themselves arrive through their own pull requests during the sprint.
+
+6. What to submit here
+One file. File name: Team<NN>_M4.pdf — for example Team03_M4.pdf
+
+Team:           Team 03 — <your product name>
+Topic:          <your assigned topic>
+Members:        Nguyen Van A (ID), Tran Thi B (ID), ...
+Product Owner:  @github-username
+Scrum Master:   @github-username   (Sprint 4 — must differ from Sprint 3)
+
+Repository:     https://github.com/<org>/<repo>;
+Project board:  https://github.com/orgs/<org>/projects/<n>;
+Setup guide:    https://github.com/<org>/<repo>/blob/main/docs/SETUP.md
+
+Submitted by:   Nguyen Van A
+Page 2 — two screenshots of your project board, one right after Sprint Planning and one on the day you submit.
+
+Page 3 — one screenshot of the full output of python -m pytest -v, with every test name visible.
+
+If the PDF and the repository disagree, the repository is authoritative.

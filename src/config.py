@@ -91,7 +91,7 @@ except ImportError:
             description="Host address",
         )
         APP_PORT: int = Field(
-            default_factory=lambda: int(os.getenv("APP_PORT", "8000")),
+            default_factory=lambda: int(os.getenv("APP_PORT", "8080")),
             description="Port number",
         )
         DATABASE_URL: str = Field(
