@@ -50,6 +50,16 @@ IMAGE_TYPES = {
 }
 
 
+def has_valid_image_signature(content_type: str, body: bytes, signature: bytes) -> bool:
+    """Validate the container marker, including the WebP form inside RIFF."""
+    if content_type == "image/webp":
+        if len(body) < 12 or not body.startswith(signature) or body[8:12] != b"WEBP":
+            return False
+        riff_size = int.from_bytes(body[4:8], "little")
+        return riff_size >= 4 and riff_size + 8 <= len(body)
+    return body.startswith(signature)
+
+
 @router.post("/upload-image", status_code=status.HTTP_201_CREATED)
 async def upload_product_image(request: Request, seller: SellerUser) -> dict[str, dict[str, str]]:
     """Store one seller-uploaded image and return its static URL.
@@ -65,21 +75,40 @@ async def upload_product_image(request: Request, seller: SellerUser) -> dict[str
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=error_detail("ERR_VALIDATION", "Only JPEG, PNG, and WebP images are supported."),
         )
-    body = await request.body()
-    if not body or len(body) > MAX_PRODUCT_IMAGE_BYTES:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > MAX_PRODUCT_IMAGE_BYTES:
+                raise ValueError
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=error_detail("ERR_VALIDATION", "Image must be between 1 byte and 5 MB."),
+            ) from None
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_PRODUCT_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=error_detail("ERR_VALIDATION", "Image must be between 1 byte and 5 MB."),
+            )
+        body.extend(chunk)
+    if not body:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=error_detail("ERR_VALIDATION", "Image must be between 1 byte and 5 MB."),
         )
     extension, signature = image_type
-    if not body.startswith(signature):
+    body_bytes = bytes(body)
+    if not has_valid_image_signature(content_type, body_bytes, signature):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=error_detail("ERR_VALIDATION", "The uploaded bytes are not a valid image."),
         )
     PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid4().hex}.{extension}"
-    (PRODUCT_IMAGE_DIR / filename).write_bytes(body)
+    (PRODUCT_IMAGE_DIR / filename).write_bytes(body_bytes)
     del seller  # Authentication and seller authorization are enforced by the dependency.
     return {"data": {"image_url": f"/static/uploads/products/{filename}"}}
 

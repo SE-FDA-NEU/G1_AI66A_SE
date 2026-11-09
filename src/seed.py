@@ -503,12 +503,13 @@ def get_or_create_demo_seller(session: Session) -> User:
     return seed_users(session)[DEMO_SELLER_EMAIL]
 
 
-def cleanup_legacy_catalog(session: Session, source_codes: set[str]) -> None:
-    """Remove unused legacy fixtures while preserving anything referenced by history."""
+def cleanup_legacy_catalog(session: Session, source_codes: set[str], seller_id: int) -> None:
+    """Remove unused demo-seller fixtures while preserving every other seller's data."""
     legacy_products = session.exec(
         select(Product).where(
             Product.code.not_in(source_codes),
             (Product.code.like("P-%")),
+            Product.seller_id == seller_id,
         )
     ).all()
     for product in legacy_products:
@@ -585,7 +586,7 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
             existing.description = seeded.description
             existing.image_url = seeded.image_url
             session.add(existing)
-    cleanup_legacy_catalog(session, set(sample_codes))
+    cleanup_legacy_catalog(session, set(sample_codes), seller.id)
     seeded_products = session.exec(
         select(Product).where(Product.code.in_(sample_codes)).order_by(Product.id.asc())
     ).all()

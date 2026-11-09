@@ -666,6 +666,39 @@ def test_buyer_cannot_upload_a_product_image(api, engine):
     assert response.status_code == 403
 
 
+def test_seller_upload_accepts_a_webp_container_with_a_webp_fourcc(api, engine):
+    webp = b"RIFF" + (4).to_bytes(4, "little") + b"WEBP"
+    response = api.post(
+        f"{URL}/upload-image",
+        content=webp,
+        headers={**headers(engine), "Content-Type": "image/webp"},
+    )
+
+    assert response.status_code == 201, response.text
+    served = api.get(response.json()["data"]["image_url"])
+    assert served.content == webp
+
+
+def test_seller_upload_rejects_a_non_webp_riff_container(api, engine):
+    response = api.post(
+        f"{URL}/upload-image",
+        content=b"RIFF" + (4).to_bytes(4, "little") + b"NOPE",
+        headers={**headers(engine), "Content-Type": "image/webp"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_seller_upload_rejects_oversized_body(api, engine):
+    response = api.post(
+        f"{URL}/upload-image",
+        content=b"\x89PNG\r\n\x1a\n" + b"x" * (5 * 1024 * 1024),
+        headers={**headers(engine), "Content-Type": "image/png"},
+    )
+
+    assert response.status_code == 422
+
+
 # Task 3: the created listing in the catalog, detail page, cart and checkout
 
 

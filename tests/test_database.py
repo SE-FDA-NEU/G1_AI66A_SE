@@ -64,6 +64,36 @@ def test_init_and_seed_commands_on_sqlite_file(tmp_path: Path) -> None:
     assert run_python(["-c", API_TOTAL_SCRIPT], db_path).strip() == str(expected)
 
 
+def test_seed_never_deletes_another_sellers_legacy_product(tmp_path: Path) -> None:
+    """Catalog cleanup is scoped to the demo seller, even for an unreferenced P-* code."""
+    db_path = tmp_path / "seller-owned-catalog.db"
+    run_python(["-m", "src.database"], db_path)
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        connection.execute(
+            "INSERT INTO users "
+            "(id, name, email, role, status, password_hash, created_at) "
+            "VALUES (99, 'Other Seller', 'other-seller@test.local', 'seller', 'ACTIVE', '', "
+            "'2026-10-01 00:00:00')"
+        )
+        connection.execute(
+            "INSERT INTO products "
+            "(code, seller_id, name, description, price, stock_quantity, reserved_stock, "
+            "image_url, is_active, version) "
+            "VALUES ('P-OTHER-UNOWNED', 99, 'Other seller listing', 'Keep me', 100000, "
+            "5, 0, 'https://example.test/other.jpg', 1, 1)"
+        )
+        connection.commit()
+
+    run_python(["-m", "src.seed"], db_path)
+
+    with closing(sqlite3.connect(db_path)) as connection:
+        preserved = connection.execute(
+            "SELECT seller_id, name, is_active FROM products WHERE code = 'P-OTHER-UNOWNED'"
+        ).fetchone()
+    assert preserved == (99, "Other seller listing", 1)
+
+
 def test_seed_catalog_uses_source_matched_aula_names_and_images() -> None:
     products = {product.code: product for product in build_products()}
 
