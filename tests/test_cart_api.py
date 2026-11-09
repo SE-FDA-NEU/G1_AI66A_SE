@@ -24,6 +24,7 @@ from tests.cart_db import (
     change_product,
     create_cart_engine,
     stored_lines,
+    stored_stock,
 )
 
 CART_ENDPOINTS = [
@@ -99,11 +100,19 @@ def test_invalid_token_is_refused(api: TestClient) -> None:
 
 
 @pytest.mark.parametrize(("method", "path", "body"), CART_ENDPOINTS)
-def test_seller_has_no_cart(api: TestClient, method: str, path: str, body: dict | None) -> None:
+def test_seller_has_no_cart(
+    api: TestClient, engine: Engine, method: str, path: str, body: dict | None
+) -> None:
+    add_product(engine, "P-100", stock=10)
+    assert add_item(api, "P-100", 2, BUYER).status_code == 201
+    before_lines = stored_lines(engine, BUYER_ID)
+    before_stock = stored_stock(engine, "P-100")
     response = api.request(method, path, json=body, headers=bearer(SELLER_ID, "seller"))
 
     assert response.status_code == 403
     assert error_code(response) == "ERR_BUYER_REQUIRED"
+    assert stored_lines(engine, BUYER_ID) == before_lines
+    assert stored_stock(engine, "P-100") == before_stock
 
 
 def test_buyer_without_lines_gets_an_empty_cart(api: TestClient) -> None:

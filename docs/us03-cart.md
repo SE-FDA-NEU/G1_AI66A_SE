@@ -226,4 +226,18 @@ Given the requested quantity exceeds available stock, the update is rejected wit
 
 Covered by Sections 4, 6 and 8.
 
+## Buyer-only access and purchase entry points (#220)
+
+Every cart API uses the existing `BuyerUser` guard. A signed-in seller receives
+403 `ERR_BUYER_REQUIRED` for reads, additions, updates, removals and selection
+changes, preserving cart contents and stock. Direct navigation to `/cart` retains
+the existing buyer-only error state; hiding links does not replace this guard.
+
+The catalogue and product-detail pages hide purchase entry points for sellers and
+administrators, while preserving Buyer and Guest flows described in
+[US02](us02-view-product-detail.md#purchase-controls-by-role-220). This fix changes
+no API contract, role model, pricing, stock mutation or database schema.
+
+Verification: [#220 test matrix](testing-task-notes.md#issue-220-seller-purchase-controls).
+
 ---
