@@ -5,6 +5,9 @@ P0 test cases of section 2: `python -m pytest tests/test_m4_p0.py -v`.
 Per-task regression notes written earlier in the project are kept in
 [testing-task-notes.md](testing-task-notes.md).
 
+The role-based catalogue/detail purchase regression for #220 is documented in
+[its verification matrix](testing-task-notes.md#issue-220-seller-purchase-controls).
+
 ## 1. What we test, and why
 
 | Layer | Test | Why |

@@ -41,6 +41,7 @@ const elements = {
   sellerNewProductLink: document.getElementById("seller-new-product-link"),
   sellerOrdersLink: document.getElementById("seller-orders-link"),
   adminPortalLink: document.getElementById("admin-portal-link"),
+  cartLink: document.getElementById("cart-link"),
 };
 
 let currentPage = 1;
@@ -79,6 +80,7 @@ function configureNavigation() {
   const isSeller = Boolean(user && user.role === "seller");
   const isBuyer = Boolean(user && user.role === "buyer");
   const isAdmin = Boolean(user && user.role === "admin");
+  if (elements.cartLink) elements.cartLink.hidden = Boolean(user && !isBuyer);
 
   if (elements.buyerOrdersLink) {
     elements.buyerOrdersLink.hidden = !isBuyer;
@@ -100,6 +102,11 @@ if (elements.logoutButton) {
     configureNavigation();
   });
 }
+
+window.addEventListener?.("storage", event => {
+  if (event.key === "access_token" || event.key === null) configureNavigation();
+});
+window.addEventListener?.("pageshow", configureNavigation);
 
 /** Show exactly one of the loading / success / empty / error regions. */
 function showState(state, message) {
