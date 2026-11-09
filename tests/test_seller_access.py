@@ -35,3 +35,15 @@ def test_non_seller_guard_redirects_known_non_seller_tokens() -> None:
 
     assert 'payload.role !== "seller"' in guard
     assert 'window.location.replace("/products")' in guard
+    assert 'localStorage.getItem("access_token") || localStorage.getItem("token")' in guard
+
+
+def test_notifications_seller_controls_start_hidden_until_seller_identity_is_verified(client) -> None:
+    response = client.get("/notifications")
+
+    assert response.status_code == 200
+    assert 'id="notifications-seller-new-product-link"' in response.text
+    assert 'id="notifications-seller-orders-link"' in response.text
+    assert 'data-seller-nav' in response.text
+    assert 'data-seller-nav href="/seller/products/new" hidden' in response.text
+    assert 'data-seller-nav href="/seller/orders" hidden' in response.text

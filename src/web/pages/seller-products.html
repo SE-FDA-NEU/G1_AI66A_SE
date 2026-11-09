@@ -59,7 +59,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const tbody = document.getElementById('seller-products-tbody');
-      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token') || sessionStorage.getItem('access_token');
       if (!token) {
         window.location.href = '/login?next=/seller/products';
         return;

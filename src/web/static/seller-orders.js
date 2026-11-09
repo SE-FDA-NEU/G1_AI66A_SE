@@ -55,12 +55,17 @@ let currentPage = 1;
 /** A missing or rejected token goes to login and comes back here afterwards. */
 function goToLogin() {
   localStorage.removeItem("access_token");
+  localStorage.removeItem("token");
   window.location.replace(LOGIN_URL);
+}
+
+function storedToken() {
+  return localStorage.getItem("access_token") || localStorage.getItem("token");
 }
 
 /** Send one request with the stored token; resolves to null when the page leaves for login. */
 async function request(url, options = {}) {
-  const token = localStorage.getItem("access_token");
+  const token = storedToken();
   if (!token) {
     goToLogin();
     return null;
@@ -207,6 +212,7 @@ elements.previous.addEventListener("click", () => loadOrders(currentPage - 1));
 elements.next.addEventListener("click", () => loadOrders(currentPage + 1));
 elements.logout.addEventListener("click", () => {
   localStorage.removeItem("access_token");
+  localStorage.removeItem("token");
   window.location.href = "/login?return_to=/seller/orders";
 });
 loadOrders();
