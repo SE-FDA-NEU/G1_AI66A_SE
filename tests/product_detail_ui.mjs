@@ -148,6 +148,8 @@ assert.equal(page.get("review-eligibility-retry").hidden, true);
 
 page = setup({eligible: [{order_item_id: 42, quantity: 1}]});
 await settle();
+assert.equal(page.get("review-form-section").hidden, false,
+  "Eligible Buyers retain the purchase-review section (#225)");
 assert.equal(page.get("review-form").hidden, false);
 page.get("review-order-item").value = "42";
 await page.get("review-form").dispatch("submit");
@@ -159,6 +161,14 @@ assert.equal(page.get("review-form-status").textContent, "Your verified-purchase
 
 page = setup({role: "seller"});
 await settle();
+assert.equal(page.get("review-form-section").hidden, true,
+  "Seller sees customer reviews without the Buyer purchase-review section (#225)");
+assert.equal(page.calls.some(call => call.url.endsWith("/reviewable-items")), false);
+await page.get("review-form").dispatch("submit");
+await settle();
+assert.equal(page.calls.some(call => call.options.method === "POST"), false,
+  "Forcing the hidden Seller purchase-review form cannot submit a review");
+assert.equal(page.get("review-form-section").hidden, true);
 const staleReplyForm = page.reviewList.children[0].querySelectorAll(".seller-reply-form")[0];
 assert.ok(staleReplyForm, "The owning seller has reply controls");
 await page.get("logout-button").dispatch("click");
@@ -174,11 +184,20 @@ let resolveIdentity;
 const delayedIdentity = new Promise(resolve => { resolveIdentity = resolve; });
 page = setup({role: "seller", pendingIdentity: delayedIdentity});
 await settle();
+assert.equal(page.get("review-form-section").hidden, true,
+  "The purchase-review section stays hidden while identity is being verified");
 await page.get("logout-button").dispatch("click");
 resolveIdentity(success({id: 7, role: "seller"}));
 await settle();
 assert.equal(page.reviewList.querySelectorAll(".seller-reply-form").length, 0,
   "A pending identity response cannot restore reply controls after logout");
+assert.equal(page.get("review-form-section").hidden, false,
+  "Logout restores the guest login prompt even after a stale Seller response");
+
+page = setup({role: "admin"});
+await settle();
+assert.equal(page.get("review-form-section").hidden, true,
+  "The purchase-review section is Buyer-only for all authenticated roles");
 
 page = setup({token: null, reviewRows: [{...review,
   media_urls: ["https://example.com/photo.jpg", "https://example.com/clip.mp4",
