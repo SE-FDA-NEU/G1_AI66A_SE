@@ -10,9 +10,9 @@ const confirmationSource = await readFile(new URL("../src/web/static/confirmatio
 const body = {recipient_name:"Buyer", delivery_address:"123 Main", phone_number:"0912345678", payment_method:"VIETQR"};
 export function setup(responses, saved = null, script = checkoutSource, addressResponses = []) {
   const nodes = new Map();
-  const element = () => ({hidden:false, disabled:false, textContent:"", children:[],
+  const element = () => ({hidden:false, disabled:false, textContent:"", value:"", children:[],
     handlers:{}, append(...children) {this.children.push(...children);}, replaceChildren(...children) {this.children=children;},
-    querySelectorAll() {return [];}, setAttribute(name,value){this[name]=value;}, removeAttribute(name){delete this[name];},
+    querySelectorAll() {return [];}, setAttribute(name,value){this[name]=value;}, getAttribute(name){return this[name] ?? null;}, removeAttribute(name){delete this[name];},
     addEventListener(name, handler) {this.handlers[name]=handler;}, focus() {if (!this.disabled) this.focused=true;}});
   const fields = Object.keys(body).map(name => ({...element(),name,value:body[name],disabled:false}));
   for (const field of fields) fields[field.name] = field;
@@ -30,6 +30,37 @@ export function setup(responses, saved = null, script = checkoutSource, addressR
     ...(nodes.get("address-list")?.children || []).flatMap(card=>card.children.slice(1))].filter(Boolean);
   nodes.set("address-book",book);
 
+  const shopVouchers = element();
+  shopVouchers.querySelectorAll = (selector) => {
+    if (selector === "input") {
+      return (shopVouchers.children || []).flatMap(slot => (slot.children || []).filter(c => c.id && c.id.startsWith("voucher-shop-")));
+    }
+    return [];
+  };
+  nodes.set("shop-vouchers", shopVouchers);
+
+  const helper = element();
+  const makeBtn = (type, code, sellerId = null, sellerName = null) => {
+    const btn = element();
+    btn.className = "test-voucher-apply";
+    btn["data-type"] = type;
+    btn["data-code"] = code;
+    if (sellerId) btn["data-seller-id"] = sellerId;
+    if (sellerName) btn["data-seller-name"] = sellerName;
+    return btn;
+  };
+  const testBtns = [
+    makeBtn("platform", "PLATFORM10"),
+    makeBtn("shipping", "FREESHIP"),
+    makeBtn("shop", "SHOP15", "1", "Demo Seller"),
+    makeBtn("shop", "SHOP2DEAL", "2", "Seller 2"),
+  ];
+  helper.querySelectorAll = (selector) => {
+    if (selector === ".test-voucher-apply") return testBtns;
+    return [];
+  };
+  nodes.set("test-vouchers-helper", helper);
+
   const storage = new Map(saved ? [["checkout:2",JSON.stringify(saved)]] : []);
   const calls=[], navigations=[];
   const auth = {token:"token"};
@@ -37,6 +68,10 @@ export function setup(responses, saved = null, script = checkoutSource, addressR
     document:{getElementById(id) {
       for (const card of nodes.get("address-list")?.children || []) {
         const control = [card, ...card.children].find(node => node.id === id);
+        if (control) return control;
+      }
+      for (const slot of nodes.get("shop-vouchers")?.children || []) {
+        const control = [slot, ...slot.children].find(node => node.id === id);
         if (control) return control;
       }
       if (!nodes.has(id)) nodes.set(id,element());
@@ -237,3 +272,84 @@ test=setup([user,shopCart,new Error("timeout")]); await tick(); await tick();
 assert.equal(test.nodes.get("confirm").disabled,true);
 assert.equal(test.nodes.get("refresh-quote").hidden,false);
 console.log("#136 voucher checks passed: quote gate, apply/remove, rejection, stale response, stale quote.");
+
+// Quick Apply tests: 1-shop cart, multi-shop cart, missing shop in cart
+const demoCart = {payload:{data:{cart_total:200000,selected_total:200000,items:[{name:"Mouse",quantity:1,
+  line_total:200000,availability:"available",is_selected:true,seller_id:1,seller_name:"Demo Seller"}]}}};
+const demoQuote = quoted({seller_orders:[{seller_id:1,items:[],subtotal:200000,shop_discount:0,platform_discount:0,
+  shipping_fee:20000,shipping_discount:0,total_amount:220000,shop_voucher:null}]});
+
+// 1. Single-shop cart: Quick apply platform, shipping, and matched shop voucher
+test = setup([user, demoCart, demoQuote, quoted(), quoted(), quoted()]); await tick(); await tick();
+const [btnPlatform, btnShipping, btnShop1, btnShop2] = test.nodes.get("test-vouchers-helper").querySelectorAll(".test-voucher-apply");
+
+btnPlatform.handlers.click(); await tick();
+assert.equal(test.nodes.get("voucher-platform").value, "PLATFORM10");
+assert.equal(JSON.parse(test.calls.at(-1).options.body).platform_voucher, "PLATFORM10");
+
+btnShipping.handlers.click(); await tick();
+assert.equal(test.nodes.get("voucher-shipping").value, "FREESHIP");
+assert.equal(JSON.parse(test.calls.at(-1).options.body).shipping_voucher, "FREESHIP");
+
+btnShop1.handlers.click(); await tick();
+assert.equal(test.nodes.get("voucher-shop-1").value, "SHOP15");
+assert.deepEqual(JSON.parse(test.calls.at(-1).options.body).shop_vouchers, [{seller_id:1, code:"SHOP15"}]);
+
+// 2. Missing shop voucher in cart: warning displayed, existing shop voucher input untouched
+const callsBeforeMismatch = test.calls.length;
+btnShop2.handlers.click(); await tick();
+assert.equal(test.calls.length, callsBeforeMismatch, "No quote request sent for missing shop");
+assert.equal(test.nodes.get("voucher-shop-1").value, "SHOP15", "Unrelated shop input remains unchanged");
+assert.match(test.nodes.get("error").textContent, /Voucher 'SHOP2DEAL' is for Seller 2, which is not in your current cart selection\./);
+
+// 3. Multi-shop cart: shop voucher routes specifically to the matching shop slot
+const multiCart = {payload:{data:{cart_total:300000,selected_total:300000,items:[
+  {name:"Mouse",quantity:1,line_total:200000,availability:"available",is_selected:true,seller_id:1,seller_name:"Demo Seller"},
+  {name:"Pad",quantity:1,line_total:100000,availability:"available",is_selected:true,seller_id:2,seller_name:"Seller 2"},
+]}}};
+const multiQuote = quoted({seller_orders:[
+  {seller_id:1,items:[],subtotal:200000,shop_discount:0,platform_discount:0,shipping_fee:20000,shipping_discount:0,total_amount:220000,shop_voucher:null},
+  {seller_id:2,items:[],subtotal:100000,shop_discount:0,platform_discount:0,shipping_fee:20000,shipping_discount:0,total_amount:120000,shop_voucher:null},
+]});
+test = setup([user, multiCart, multiQuote, quoted()]); await tick(); await tick();
+const multiBtns = test.nodes.get("test-vouchers-helper").querySelectorAll(".test-voucher-apply");
+const btnShop2Multi = multiBtns[3]; // SHOP2DEAL (seller 2)
+btnShop2Multi.handlers.click(); await tick();
+assert.equal(test.nodes.get("voucher-shop-2").value, "SHOP2DEAL");
+assert.equal(test.nodes.get("voucher-shop-1").value, "");
+assert.deepEqual(JSON.parse(test.calls.at(-1).options.body).shop_vouchers, [{seller_id:2, code:"SHOP2DEAL"}]);
+console.log("Quick Apply checks passed: single shop, multi shop, missing shop rejection.");
+
+// Phone number and detailed address validation
+// A. Checkout manual delivery validation
+test = setup([user, shopCart, quoted()]); await tick(); await tick();
+test.nodes.get("checkout-form").elements.phone_number.value = "12345"; // too short (< 7 digits)
+test.nodes.get("checkout-form").elements.delivery_address.value = "   "; // whitespace only
+const callsBeforeVal = test.calls.length;
+test.nodes.get("checkout-form").handlers.submit({preventDefault(){}}); await tick();
+assert.equal(test.calls.length, callsBeforeVal, "Form must not submit with invalid fields");
+assert.equal(test.nodes.get("checkout-form").elements.phone_number["aria-invalid"], "true");
+assert.equal(test.nodes.get("checkout-form").elements.delivery_address["aria-invalid"], "true");
+assert.match(test.nodes.get("checkout-phone_number-error").textContent, /7 to 15 digits/);
+assert.match(test.nodes.get("checkout-delivery_address-error").textContent, /Enter this required field|specific address/);
+assert.match(test.nodes.get("error").textContent, /Please correct the highlighted fields\./);
+
+// B. Address book form validation
+test = setup([user, shopCart, quoted()]); await tick(); await tick();
+const addrForm = test.nodes.get("address-form");
+addrForm.elements.phone_number.value = "not-a-number";
+addrForm.elements.detailed_address.value = "ab"; // < 3 characters
+addrForm.elements.province.value = "Hanoi";
+addrForm.elements.district.value = "Ba Dinh";
+addrForm.elements.ward.value = "Phuc Xa";
+addrForm.elements.recipient_name.value = "Test User";
+const callsBeforeAddr = test.calls.length;
+addrForm.handlers.submit({preventDefault(){}}); await tick();
+assert.equal(test.calls.length, callsBeforeAddr, "Address form must not submit with invalid fields");
+assert.equal(addrForm.elements.phone_number["aria-invalid"], "true");
+assert.equal(addrForm.elements.detailed_address["aria-invalid"], "true");
+assert.match(test.nodes.get("address-phone_number-error").textContent, /7 to 15 digits/);
+assert.match(test.nodes.get("address-detailed_address-error").textContent, /at least 3 characters/);
+assert.match(test.nodes.get("address-status").textContent, /Please correct the highlighted fields\./);
+console.log("Address and phone validation checks passed for checkout manual delivery and address form.");
+
