@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from src.models.notification import Notification
 from src.models.order_history import OrderHistory
+from src.repositories import notifications as notification_repository
 
 
 def create_notification(
@@ -55,14 +56,22 @@ def list_notifications(session: Session, recipient_user_id: int) -> tuple[list[N
         .order_by(Notification.created_at.desc(), Notification.id.desc())
         .limit(100)
     ).all()
-    unread_count = session.exec(
-        select(func.count(Notification.id))
-        .where(
-            Notification.recipient_user_id == recipient_user_id,
-            Notification.read_at.is_(None),
-        )
-    ).one()
-    return notifications, unread_count
+    return notifications, count_unread_notifications(session, recipient_user_id)
+
+
+def count_unread_notifications(session: Session, recipient_user_id: int) -> int:
+    return notification_repository.count_unread(session, recipient_user_id)
+
+
+def mark_all_notifications_read(session: Session, recipient_user_id: int) -> int:
+    """Read all of this recipient's unread rows, preserving previous read times."""
+    try:
+        notification_repository.mark_all_read(session, recipient_user_id, datetime.now(UTC))
+        session.commit()
+    except SQLAlchemyError:
+        session.rollback()
+        raise
+    return count_unread_notifications(session, recipient_user_id)
 
 
 def mark_notification_read(
