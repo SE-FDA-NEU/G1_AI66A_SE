@@ -10,10 +10,14 @@ from sqlmodel import Session
 
 from src.models.cart_item import CartItem
 from src.models.order import Order
+from src.models.product import Product
+from src.models.user import User
 from tests import test_atomic_cancellation as cancellation
-from tests.cart_db import BUYER_ID, add_product, change_product
+from tests.cart_db import BUYER_ID, SELLER_ID, add_product, change_product
 from tests.test_checkout import headers
 from tests.test_checkout_vouchers import add_voucher, place, quote, seed_example
+
+OTHER_SELLER_ID = 4
 
 sync_api = pytest.importorskip("playwright.sync_api")
 expect = sync_api.expect
@@ -73,6 +77,37 @@ def plain_order(api, engine):
         session.add(CartItem(buyer_id=BUYER_ID, product_id=product_id, quantity=1))
         session.commit()
     response = place(api, engine, {}, key="summary-plain")
+    assert response.status_code == 201, response.text
+    return response.json()["data"]["id"]
+
+
+def multi_item_single_seller_order(api, engine):
+    """One seller order carrying two distinct line items (issue #223)."""
+    first = add_product(engine, "SUMMARY-MULTI-1", price=70_000)
+    second = add_product(engine, "SUMMARY-MULTI-2", price=40_000)
+    with Session(engine) as session:
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=first, quantity=1))
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=second, quantity=3))
+        session.commit()
+    response = place(api, engine, {}, key="summary-multi-item")
+    assert response.status_code == 201, response.text
+    return response.json()["data"]["id"]
+
+
+def multi_seller_order(api, engine):
+    """A single parent order split across two sellers (issue #223)."""
+    first = add_product(engine, "SUMMARY-MS-A", price=70_000)
+    second = add_product(engine, "SUMMARY-MS-B", price=40_000)
+    with Session(engine) as session:
+        session.add(
+            User(id=OTHER_SELLER_ID, name="Shop MS", email="shop-ms@test.local", role="seller")
+        )
+        session.flush()
+        session.get(Product, second).seller_id = OTHER_SELLER_ID
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=first, quantity=1))
+        session.add(CartItem(buyer_id=BUYER_ID, product_id=second, quantity=2))
+        session.commit()
+    response = place(api, engine, {}, key="summary-multi-seller")
     assert response.status_code == 201, response.text
     return response.json()["data"]["id"]
 
@@ -248,3 +283,47 @@ def test_another_buyer_cannot_see_order_summary(browser, api, engine):
         expect(view.page.locator("#items-card")).to_be_hidden()
     finally:
         view.close()
+
+
+def test_order_detail_shows_every_item_from_a_single_seller_order(browser, api, engine):
+    """Issue #223: a seller order with 2+ distinct items must render every row."""
+    order_id = multi_item_single_seller_order(api, engine)
+    view = OrderPage(browser, api, engine)
+    try:
+        view.open(order_id)
+        rows = view.page.locator("#items-list table tbody tr")
+        expect(rows).to_have_count(2)
+        expect(rows.nth(0)).to_contain_text("SUMMARY-MULTI-1")
+        expect(rows.nth(1)).to_contain_text("SUMMARY-MULTI-2")
+        assert view.errors == []
+    finally:
+        view.close()
+
+
+def test_order_detail_scopes_items_to_the_viewing_seller_in_a_multi_seller_order(
+    browser, api, engine
+):
+    """Issue #223: buyer sees every item; each seller sees only their own sub-order."""
+    order_id = multi_seller_order(api, engine)
+
+    buyer_view = OrderPage(browser, api, engine)
+    try:
+        buyer_view.open(order_id)
+        buyer_rows = buyer_view.page.locator("#items-list table tbody tr")
+        expect(buyer_rows).to_have_count(2)
+        expect(buyer_view.page.locator("#items-list")).to_contain_text("SUMMARY-MS-A")
+        expect(buyer_view.page.locator("#items-list")).to_contain_text("SUMMARY-MS-B")
+        assert buyer_view.errors == []
+    finally:
+        buyer_view.close()
+
+    seller_view = OrderPage(browser, api, engine, buyer_id=SELLER_ID)
+    try:
+        seller_view.open(order_id)
+        seller_rows = seller_view.page.locator("#items-list table tbody tr")
+        expect(seller_rows).to_have_count(1)
+        expect(seller_rows.first).to_contain_text("SUMMARY-MS-A")
+        expect(seller_view.page.locator("#items-list")).not_to_contain_text("SUMMARY-MS-B")
+        assert seller_view.errors == []
+    finally:
+        seller_view.close()

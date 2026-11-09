@@ -337,6 +337,194 @@ def test_end_date_includes_the_selected_day(
     assert response.json()["meta"]["total"] == 1
 
 
+@pytest.fixture
+def multi_item_seller_order_data():
+    """One seller order with 2 distinct items, alongside another seller's order (issue #223)."""
+    with Session(engine) as session:
+        session.exec(delete(OrderHistory))
+        session.exec(delete(Notification))
+        session.exec(delete(OrderItem))
+        session.exec(delete(SellerOrder))
+        session.exec(delete(Order))
+        session.exec(delete(Product).where(Product.code.like("US08M-%")))
+        session.exec(delete(User).where(User.email.like("us08m-%@example.com")))
+
+        seller_a = User(
+            name="US08M Seller A",
+            email="us08m-seller-a@example.com",
+            role="seller",
+            password_hash=hash_password("password"),
+        )
+        seller_b = User(
+            name="US08M Seller B",
+            email="us08m-seller-b@example.com",
+            role="seller",
+            password_hash=hash_password("password"),
+        )
+        buyer = User(
+            name="US08M Buyer",
+            email="us08m-buyer@example.com",
+            role="buyer",
+            password_hash=hash_password("password"),
+        )
+        session.add_all([seller_a, seller_b, buyer])
+        session.flush()
+
+        product_a1 = Product(
+            code="US08M-A1", seller_id=seller_a.id, name="Seller A product 1",
+            price=100, stock_quantity=5,
+        )
+        product_a2 = Product(
+            code="US08M-A2", seller_id=seller_a.id, name="Seller A product 2",
+            price=150, stock_quantity=5,
+        )
+        product_b = Product(
+            code="US08M-B", seller_id=seller_b.id, name="Seller B product",
+            price=200, stock_quantity=5,
+        )
+        session.add_all([product_a1, product_a2, product_b])
+        session.flush()
+
+        parent = Order(
+            buyer_id=buyer.id,
+            total_amount=100 * 2 + 150 + 200,
+            status="PENDING",
+            recipient_name="US08M Buyer",
+            delivery_address="Test address",
+            phone_number="0123456789",
+            created_at=datetime.now(UTC),
+        )
+        session.add(parent)
+        session.flush()
+        seller_order_a = SellerOrder(order_id=parent.id, seller_id=seller_a.id, status="PENDING")
+        seller_order_b = SellerOrder(order_id=parent.id, seller_id=seller_b.id, status="PENDING")
+        session.add_all([seller_order_a, seller_order_b])
+        session.flush()
+        session.add_all(
+            [
+                OrderItem(
+                    seller_order_id=seller_order_a.id,
+                    product_id=product_a1.id,
+                    quantity=2,
+                    unit_price=100,
+                ),
+                OrderItem(
+                    seller_order_id=seller_order_a.id,
+                    product_id=product_a2.id,
+                    quantity=1,
+                    unit_price=150,
+                ),
+                OrderItem(
+                    seller_order_id=seller_order_b.id,
+                    product_id=product_b.id,
+                    quantity=1,
+                    unit_price=200,
+                ),
+            ]
+        )
+        session.commit()
+        result = {
+            "seller_a": seller_a.email,
+            "seller_b": seller_b.email,
+            "buyer": buyer.email,
+            "seller_order_a": seller_order_a.id,
+            "order_id": parent.id,
+        }
+
+    yield result
+
+    with Session(engine) as session:
+        session.exec(delete(OrderHistory))
+        session.exec(delete(Notification))
+        session.exec(delete(OrderItem))
+        session.exec(delete(SellerOrder))
+        session.exec(delete(Order))
+        session.exec(delete(Product).where(Product.code.like("US08M-%")))
+        session.exec(delete(User).where(User.email.like("us08m-%@example.com")))
+        session.commit()
+
+
+def test_seller_order_listing_includes_every_item_in_a_single_seller_order(
+    client: TestClient,
+    multi_item_seller_order_data,
+) -> None:
+    """Issue #223: a seller order with 2 items must list both, not just the first."""
+    token = _token(client, multi_item_seller_order_data["seller_a"])
+
+    response = client.get(
+        "/api/v1/seller/orders",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["total"] == 1
+    codes = [item["product_code"] for item in body["data"][0]["items"]]
+    assert codes == ["US08M-A1", "US08M-A2"]
+
+
+def test_order_detail_includes_every_item_for_the_buyer_across_sellers(
+    client: TestClient,
+    multi_item_seller_order_data,
+) -> None:
+    """Issue #223: the buyer must see all items from every seller in the parent order."""
+    token = _token(client, multi_item_seller_order_data["buyer"])
+
+    response = client.get(
+        f"/api/v1/orders/{multi_item_seller_order_data['order_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    codes = [item["product_code"] for item in response.json()["data"]["items"]]
+    assert codes == ["US08M-A1", "US08M-A2", "US08M-B"]
+
+
+def test_order_detail_scopes_a_seller_to_their_own_sub_order_items(
+    client: TestClient,
+    multi_item_seller_order_data,
+) -> None:
+    """Issue #223: a seller must see both of their own items, never another seller's."""
+    token = _token(client, multi_item_seller_order_data["seller_a"])
+
+    response = client.get(
+        f"/api/v1/orders/{multi_item_seller_order_data['order_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    codes = [item["product_code"] for item in response.json()["data"]["items"]]
+    assert codes == ["US08M-A1", "US08M-A2"]
+
+
+def test_order_detail_rejects_an_unrelated_seller(
+    client: TestClient,
+    multi_item_seller_order_data,
+) -> None:
+    """Issue #223 permission check: a seller with no sub-order on this order is denied."""
+    with Session(engine) as session:
+        unrelated = User(
+            name="US08M Unrelated Seller",
+            email="us08m-unrelated@example.com",
+            role="seller",
+            password_hash=hash_password("password"),
+        )
+        session.add(unrelated)
+        session.commit()
+
+    try:
+        token = _token(client, "us08m-unrelated@example.com")
+        response = client.get(
+            f"/api/v1/orders/{multi_item_seller_order_data['order_id']}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 404
+    finally:
+        with Session(engine) as session:
+            session.exec(delete(User).where(User.email == "us08m-unrelated@example.com"))
+            session.commit()
+
+
 def select_history():
     from sqlmodel import select
 
