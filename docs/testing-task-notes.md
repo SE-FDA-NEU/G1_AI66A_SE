@@ -564,3 +564,44 @@ the new suite. To regenerate fixture screenshots, set
 Local execution, remote CI, clean-clone verification and human acceptance require
 their own evidence. Runtime authorization, cart/checkout business rules, migrations
 and unrelated screen redesign are outside this UI fix.
+
+## Issue #225: seller review interface
+
+Requirement: [#225](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/225), clarified by
+the existing [US15 role contract](us15-review-notifications.md#seller-review-interface-225).
+Seller retains Customer reviews and owner replies; Review a purchase belongs to
+Buyer. This is a visibility fix on product details, with no API or schema change.
+
+| ID | Action / partition | Expected result | Verification |
+|---|---|---|---|
+| R225-01 | Owning Seller, desktop/mobile | Customer reviews and reply remain; entire Buyer review section hidden; no eligibility request; reply/time persisted; no overflow | `tests/test_review_roles_browser.py` with real APIs and per-test SQLite |
+| R225-02 | Other Seller or Admin | Public reviews readable; no purchase-review section or owner reply; direct Buyer API requests rejected without writes | Browser, HTTP and database assertions |
+| R225-03 | Eligible Buyer submits last eligible purchase | Review persisted for that Buyer; success feedback remains visible and form closes | Browser and fresh-session database assertion |
+| R225-04 | Buyer -> Seller -> Buyer -> logout | Entire section follows account; private draft cleared; guest login prompt restored | Browser account-switch sequence |
+| R225-05 | Delayed Buyer eligibility response after switching to Seller | Old response cannot restore Buyer controls | Held real API response |
+| R225-06 | Seller identity is loading or temporarily unavailable | Buyer review section remains hidden | Held response / explicit 503 transport double |
+| R225-07 | Buyer identity check fails, then retry succeeds | Visible recoverable error and restored Buyer form | 503 transport double followed by real API |
+| R225-08 | Expired session or page restored with another account | Guest login prompt or correct current role replaces old purchase-review UI; old account draft cleared | Browser expired JWT / persisted pageshow event |
+
+Run with Python 3.12, README dependencies and installed Chrome/Edge:
+
+```powershell
+python -m pip install playwright
+$env:DEBUG = 'false'
+python -m pytest tests/test_review_roles_browser.py tests/test_purchase_roles_browser.py tests/test_review_media.py tests/test_us15_reviews_notifications.py tests/test_product_detail.py tests/test_ui_docs_contract.py tests/test_ui_styling.py -q
+node tests/product_detail_ui.mjs
+node tests/product_detail_variants.mjs
+node --check src/web/static/product-detail.js
+python -m ruff check src tests/test_review_roles_browser.py
+git diff --check
+```
+
+The browser fixture reuses the production-page/API transport from #220 and uses
+isolated fake orders, users and reviews. It uses `BROWSER_PATH`, installed
+Chrome/Edge or Playwright Chromium. Existing pytest CI discovery includes these
+tests. To capture Seller screenshots at 390px/1280px, set
+`$env:REVIEW_ROLE_ARTIFACTS = 'docs/images/issue225'` before running the browser suite.
+Captured examples: [Seller mobile](images/issue225/seller-reviews-390.png),
+[Seller desktop](images/issue225/seller-reviews-1280.png).
+Run results belong in the PR; local execution does not establish remote CI,
+independent review, human acceptance or clean-clone verification.

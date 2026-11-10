@@ -7,6 +7,8 @@ Per-task regression notes written earlier in the project are kept in
 
 The role-based catalogue/detail purchase regression for #220 is documented in
 [its verification matrix](testing-task-notes.md#issue-220-seller-purchase-controls).
+The Seller review-interface regression for #225 is documented in
+[its verification matrix](testing-task-notes.md#issue-225-seller-review-interface).
 
 ## 1. What we test, and why
 

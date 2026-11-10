@@ -92,6 +92,24 @@ Owning sellers have labelled reply controls with validation, draft recovery and
 save feedback; other sellers have none. Reply times use API UTC timestamps and
 are displayed in the viewer's local time. Missing timestamps are omitted.
 
+### Seller review interface (#225)
+
+On product details, Seller accounts see only **Customer reviews**, including the
+existing reply controls on their own products. The entire **Review a purchase**
+section (heading, purchase selector, submission action and Buyer-only guidance)
+stays hidden for authenticated non-Buyers. It also stays hidden while account
+verification is pending; Seller accounts do not request Buyer review eligibility.
+Other sellers can read reviews but cannot reply on behalf of the product owner.
+
+Eligible Buyers retain the purchase-review form and its validation, retry and
+success/empty feedback. Guests and expired sessions retain the login prompt.
+Account changes, logout and restored pages refresh the role-dependent UI; an old
+eligibility response cannot restore the Buyer form for a new Seller session.
+The existing Buyer/Seller API authorization remains authoritative. No review,
+reply, rating, eligibility rule, schema or notification behavior is removed.
+
+Verification: [#225 regression matrix](testing-task-notes.md#issue-225-seller-review-interface).
+
 ### Minimal media persistence extension
 
 The #130 API had only `media_url`; #131 explicitly requires `images_json`, so this

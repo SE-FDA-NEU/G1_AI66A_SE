@@ -467,6 +467,7 @@ async function loadReviews() {
           authRevision += 1;
           currentIdentity = null;
           configureNavigation();
+          loadReviewForm();
         }
         else if (isCurrentAuth(token, revision)) {
           elements.reviewsError.textContent = "Seller reply controls could not be checked.";
@@ -789,7 +790,8 @@ async function loadReviewForm({ preserveStatus = false } = {}) {
   const isCurrentForm = () => requestId === eligibilityRevision && isCurrentAuth(token, revision);
   reviewFormAuth = null;
   elements.reviewEligibilityRetry.hidden = true;
-  elements.reviewFormSection.hidden = false;
+  // Keep Buyer-only content hidden until the server verifies this account.
+  elements.reviewFormSection.hidden = Boolean(token);
   elements.reviewForm.hidden = true;
   elements.reviewLoginPrompt.hidden = Boolean(token);
   if (!preserveStatus) elements.reviewFormStatus.textContent = "";
@@ -804,7 +806,9 @@ async function loadReviewForm({ preserveStatus = false } = {}) {
     if (identityResponse.status === 401) {
       localStorage.removeItem("access_token");
       authRevision += 1;
+      elements.reviewFormSection.hidden = false;
       elements.reviewLoginPrompt.hidden = false;
+      elements.reviewFormStatus.textContent = "";
       configureNavigation();
       return;
     }
@@ -814,9 +818,10 @@ async function loadReviewForm({ preserveStatus = false } = {}) {
     const identity = await identityResponse.json();
     if (!isCurrentForm()) return;
     if (identity.role !== "buyer") {
-      elements.reviewFormStatus.textContent = "Only buyer accounts can submit product reviews.";
+      elements.reviewFormStatus.textContent = "";
       return;
     }
+    elements.reviewFormSection.hidden = false;
     const response = await reviewRequest(
       `/api/v1/products/${encodeURIComponent(code)}/reviewable-items`,
       { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } },
@@ -842,6 +847,8 @@ async function loadReviewForm({ preserveStatus = false } = {}) {
     }
   } catch (error) {
     if (!isCurrentForm()) return;
+    const user = getUserFromToken();
+    elements.reviewFormSection.hidden = Boolean(user && user.role !== "buyer");
     const message = error instanceof Error ? error.message : "Unable to check completed purchases.";
     elements.reviewFormStatus.textContent = preserveStatus && elements.reviewFormStatus.textContent
       ? `${elements.reviewFormStatus.textContent} ${message}` : message;
@@ -940,4 +947,15 @@ window.addEventListener?.("storage", (event) => {
   loadReviewForm();
 });
 
-window.addEventListener?.("pageshow", configureNavigation);
+window.addEventListener?.("pageshow", (event) => {
+  configureNavigation();
+  if (event.persisted) {
+    if (reviewFormAuth && reviewFormAuth.token !== localStorage.getItem("access_token")) {
+      elements.reviewComment.value = "";
+      elements.reviewMediaUrl.value = "";
+    }
+    authRevision += 1;
+    loadReviews();
+    loadReviewForm();
+  }
+});
