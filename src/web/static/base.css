@@ -200,6 +200,17 @@ header a[aria-current="page"] {
   background: var(--color-accent-subtle);
 }
 
+.site-nav a.site-nav__brand {
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-right: auto;
+}
+
+.site-nav a.site-nav__brand:hover {
+  color: var(--color-accent);
+}
+
 .site-nav button,
 .site-nav .button,
 header button {

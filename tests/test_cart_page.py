@@ -50,6 +50,7 @@ def test_cart_page_offers_empty_error_and_checkout_actions(client: TestClient) -
     elements = parse_cart_page(client)
 
     assert "Your cart is empty." in html
+    assert '<a class="site-nav__brand" href="/products">Mini Marketplace</a>' in html
     assert '<a class="button" href="/products">Continue shopping</a>' in html
     assert elements["cart-empty-total"][0] == "strong"
     assert elements["cart-retry"][0] == "button"
@@ -76,6 +77,25 @@ def test_cart_script_sends_the_token_and_returns_to_the_cart_after_login(
 
 def test_catalog_cart_link_waits_for_role_initialization(client: TestClient) -> None:
     assert '<a id="cart-link" href="/cart" hidden>Cart</a>' in client.get("/products").text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/login",
+        "/notifications",
+        "/products",
+        "/products/example",
+        "/seller/analytics",
+        "/seller/orders",
+        "/seller/products/new",
+    ],
+)
+def test_shared_navigation_offers_homepage_brand_link(client: TestClient, path: str) -> None:
+    response = client.get(path)
+
+    assert response.status_code == 200
+    assert '<a class="site-nav__brand" href="/products">Mini Marketplace</a>' in response.text
 
 
 @pytest.mark.parametrize(
