@@ -848,6 +848,7 @@ implementation"). This table lists every code the code raises, checked by
 | `401 Unauthorized` | `ERR_AUTH_REQUIRED` | No bearer token | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_TOKEN` | A malformed, expired or no longer valid token (there is no separate expired-token code) | All protected routes |
 | `401 Unauthorized` | `ERR_INVALID_CREDENTIALS` | Wrong email or password | Login |
+| `401 Unauthorized` | `ERR_GOOGLE_INVALID` | Google credential cannot be verified | Google sign-in |
 | `403 Forbidden` | `ERR_SELLER_REQUIRED` | A buyer calls a seller route | Seller products, seller orders |
 | `403 Forbidden` | `ERR_BUYER_REQUIRED` | A seller calls a buyer route | Cart, orders |
 | `403 Forbidden` | `ERR_RESOURCE_OWNER` | A seller changes another seller's sub-order | Seller orders |
@@ -873,6 +874,8 @@ implementation"). This table lists every code the code raises, checked by
 | `409 Conflict` | `ERR_REVIEW_ALREADY_EXISTS` | The order item already has a review | Reviews |
 | `409 Conflict` | `ERR_CONCURRENCY_CONFLICT` | Requests kept colliding (cart line, checkout, product code, seller order) | Cart, orders, seller products, seller orders |
 | `409 Conflict` | `ERR_IDEMPOTENCY_CONFLICT` | The checkout key was used with another buyer or body | Orders |
+| `409 Conflict` | `ERR_EMAIL_IN_USE` | An existing account has the Google email and is not linked | Google sign-in |
+| `409 Conflict` | `ERR_GOOGLE_CONFLICT` | Concurrent identity creation prevents sign-in | Google sign-in |
 | `409 Conflict` | `ERR_VOUCHER_NOT_APPLICABLE` | A requested item voucher yields zero discount, including a zero post-shop basis for platform allocation | US16 pricing service; HTTP mapping belongs to quote/checkout integration |
 | `409 Conflict` | `ERR_INVALID_PAYMENT_STATE` | Cancellation finds a payment state other than `PAID`, `UNPAID` or `FAILED`; payment reconciliation is required before cancellation, and no cancellation effects are committed | Buyer and seller order cancellation |
 | `409 Conflict` | `ERR_VOUCHER_SCOPE_MISMATCH` | Scope or discount type does not match requested slot, or shop voucher belongs to another seller | Vouchers, checkout |
@@ -887,6 +890,8 @@ implementation"). This table lists every code the code raises, checked by
 | `422 Unprocessable Entity` | `ERR_CATEGORY_PARENT` | The requested parent category does not exist or is inactive | Categories |
 | `422 Unprocessable Entity` | `ERR_CATEGORY_HIERARCHY` | A category update would create a hierarchy cycle | Categories |
 | `500 Internal Server Error` | `ERR_DATABASE_FAILURE` | A database failure; the response never contains SQL | All routes |
+| `503 Service Unavailable` | `ERR_GOOGLE_DISABLED` | Google sign-in has not been configured | Google sign-in |
+| `503 Service Unavailable` | `ERR_GOOGLE_UNAVAILABLE` | Google's identity service is unavailable | Google sign-in |
 | `400 Bad Request` | `ERR_PARENT_NOT_FOUND` | Parent category does not exist | Admin categories |
 | `400 Bad Request` | `ERR_CATEGORY_CYCLE` | Category parent assignment would cause a cycle | Admin categories |
 | `400 Bad Request` | `ERR_INVALID_DATES` | Voucher end date is before start date | Admin vouchers |
