@@ -704,3 +704,46 @@ The following Sprint 3 items were tracked and confirmed resolved before Sprint 4
 | @QuangMinhQu | Yes | Pending | Pending |
 | @teddywristh | Yes | Pending | Pending |
 | @minhnm162 | Yes | Pending | Pending |
+
+---
+
+## Sprint 5 — wrap-up in progress
+
+Snapshot checked 2026-11-12 (Asia/Shanghai). The Sprint 5 commitment, story
+points and final board state need confirmation from the team; the following
+recent GitHub activity is evidence, not a verified Sprint 5 commitment list.
+[#245](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/245) is the open
+wrap-up issue, assigned to @MinhQuangQu. Confirm the Sprint 5 Scrum Master and
+dates before final submission.
+
+### Known work and next steps
+
+| Item | Verified state | Handoff / next step |
+|---|---|---|
+| #238 / PR #241 | Closed / merged | Firebase frontend Hosting configuration exists. |
+| #239, #240 / PR #242 | Closed / merged | SQLite and tunnel demo exist; verify remaining acceptance checks listed in PR #242. |
+| #243 / PR #244 | Open / ready for review | Review Google sign-in, test real Google accounts and agree safe linking for existing users. |
+| #245 | Open | Finish this handoff, verify sprint membership and capture the board with access. |
+| Main CI | Latest checked run failed | Investigate [run 43056597333](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43056597333); rerun after a reviewed fix. |
+| M5 release | Not verified | Complete green CI, protected main, stable hosted `/health`, v1.0 and team review before submission. |
+
+The project board is [Project 6](https://github.com/orgs/SE-FDA-NEU/projects/6/views/1?layout=board).
+An authenticated API snapshot on 2026-11-12 returned 121 items: 118 Done,
+2 Todo and 1 In Progress. These are **whole-board counts**, not Sprint 5
+velocity. No item returned a Sprint value; confirm iteration assignments before
+calculating a commitment. The board shows #238–#240 Done, #243 In Progress and
+#245 Todo. An authenticated screenshot is **pending**; an old board image must
+not be represented as the Sprint 5 end state.
+
+### Velocity across five sprints
+
+| Sprint | Committed points | Completed points | Velocity | Evidence |
+|---|---:|---:|---:|---|
+| 1 | 39 | 39 | 39 | Sprint 1 section above |
+| 2 | 33 | 33 | 33 | Sprint 2 section above; includes technical tasks |
+| 3 | 35 | 35 | 35 | Sprint 3 section above; excludes 11 supporting hours |
+| 4 | 14 | Pending | Pending | Existing Sprint 4 section contains `[EDIT]` |
+| 5 | Pending | Pending | Pending | Await sprint assignments and sprint review |
+
+The counts above preserve the existing sprint-log convention; they are not proof
+that story points and technical task estimates are interchangeable.

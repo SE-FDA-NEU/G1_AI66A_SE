@@ -1,3 +1,12 @@
+https://mini-marketplace-se--demo-st26hys4.web.app
+
+> **Preview, not the final M5 release:** availability depends on the demo host
+> and tunnel; this preview expires, is not automatically deployed from `main`,
+> and its `/health` route does not yet reach the backend. See
+> [operations](docs/operations.md) for the actual status.
+
+[![CI](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/workflows/ci.yml)
+
 # Team Project - Mini Marketplace
 
 A mini marketplace where sellers can list products, buyers can add products to cart and place orders, with order management and basic sales analytics.
