@@ -132,7 +132,7 @@ function setProductImage(imageUrl, altText) {
   elements.image.addEventListener("error", () => {
     elements.image.src = PLACEHOLDER_IMAGE;
   }, { once: true });
-  elements.image.src = imageUrl || PLACEHOLDER_IMAGE;
+  elements.image.src = (window.marketplaceImageUrl?.(imageUrl) || imageUrl) || PLACEHOLDER_IMAGE;
 }
 
 function getPreservedQuantity() {

@@ -210,7 +210,7 @@ function createLineImage(item) {
   image.height = THUMBNAIL_SIZE_PX;
   // Missing or broken images fall back to the placeholder once (no retry loop).
   image.addEventListener("error", () => { image.src = PLACEHOLDER_IMAGE; }, { once: true });
-  image.src = item.image_url || PLACEHOLDER_IMAGE;
+  image.src = (window.marketplaceImageUrl?.(item.image_url) || item.image_url) || PLACEHOLDER_IMAGE;
   return image;
 }
 
