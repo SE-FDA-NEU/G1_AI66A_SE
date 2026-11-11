@@ -997,7 +997,7 @@ The walking skeleton implements the guest-facing product discovery flow (US01):
   - Returns a standard envelope containing `data` (list of product summaries) and `meta` (pagination metadata: `current_page`, `limit`, `total`, `total_pages`).
 - **Health Verification Routes:** `GET /health` and `GET /api/v1/health`
   - Defined in `src/api/health.py`.
-  - Executes `SELECT 1` against the database through `check_db_connection()` to confirm database accessibility.
+  - Executes `SELECT 1` against the database through `check_db_connection()` to confirm database accessibility; `/health` returns 200 with `database: connected` or 503 with `database: disconnected` and `status: unavailable`.
 
 ### 4.2 Database Table Used
 

@@ -25,6 +25,16 @@ def test_health_endpoint(client: TestClient) -> None:
     assert "environment" in data
 
 
+def test_health_returns_service_unavailable_when_database_disconnected(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.setattr("src.api.health.check_db_connection", lambda: False)
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["database"] == "disconnected"
+
+
 def test_browser_root_enters_catalog_without_changing_json_status(client: TestClient) -> None:
     """P0 users can start at /; API clients keep the original status contract."""
     browser = client.get("/", headers={"Accept": "text/html"}, follow_redirects=False)
