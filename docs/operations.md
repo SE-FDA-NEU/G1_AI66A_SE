@@ -22,10 +22,9 @@ offline interrupt the site.
 `.github/workflows/ci.yml` detects the stack, installs Python dependencies,
 runs pytest/coverage and browser-script checks, and scans tracked files for
 secrets. The Node job is conditional on a package manifest. Ruff is currently
-warning-only. The [last completed main run at the time of checking](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43056597333)
-failed in Python tests, taking about 8 minutes 13 seconds; a newer
-[run](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43063328416) was
-in progress. The
+warning-only. The [latest checked main run](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43063328416)
+failed with 16 Python tests. The preceding run took about 8 minutes 13 seconds.
+The
 [last green main run found](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/42495790436)
 was on 2026-11-08. It is not the latest commit. Verify required PR review and
 green checks in repository settings; branch-protection access returned 404 and
