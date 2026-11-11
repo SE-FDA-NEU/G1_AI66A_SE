@@ -700,6 +700,24 @@ stale requests, mobile rendering, and direct-API refusal without writes.
 Exclusions: new roles/APIs, database migrations, pricing or stock-policy changes,
 and unrelated seller/admin screen redesign.
 
+## Seller review interface (#225)
+
+Requirement: Seller should have one review area on product details. The
+[US15 contract](us15-review-notifications.md#seller-review-interface-225) retains
+Customer reviews and owner replies, and hides the entire Buyer purchase-review
+section for Seller/non-Buyer accounts. `product-detail.js::loadReviewForm` verifies
+identity before exposing Buyer content and ignores old eligibility responses.
+Account/logout and restored-page handlers refresh the role-dependent view.
+
+The [single verification matrix](testing-task-notes.md#issue-225-seller-review-interface)
+maps Seller ownership/replies, Buyer submission, account transitions, pending/error
+states and mobile layout to DOM checks and real-browser/API/database regressions.
+Existing server-side Buyer and owner-Seller guards remain authoritative.
+
+Exclusions: deleting public reviews or owner replies, changing review eligibility,
+schema/migrations, notifications and unrelated seller pages. Human acceptance,
+teammate review and remote CI require separate evidence.
+
 ## Unread notification badge (#227)
 
 Requirement: show the current recipient's unread total on the navigation bell,
