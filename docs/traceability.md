@@ -717,3 +717,23 @@ Existing server-side Buyer and owner-Seller guards remain authoritative.
 Exclusions: deleting public reviews or owner replies, changing review eligibility,
 schema/migrations, notifications and unrelated seller pages. Human acceptance,
 teammate review and remote CI require separate evidence.
+
+## Unread notification badge (#227)
+
+Requirement: show the current recipient's unread total on the navigation bell,
+hide zero, cap the visible text at 99+, and update it after reading notifications.
+[US15](us15-review-notifications.md#unread-navigation-badge-227) defines the count and
+read contracts. `GET /api/v1/notifications/unread-count` and
+`POST /api/v1/notifications/mark-all-read` use authenticated identity through the
+notification service and recipient-scoped repository. The service owns the
+mark-all transaction; existing list and single-read contracts remain compatible.
+
+`notification-badge.js` decorates existing Notifications links and rejects stale
+account responses. `notifications.js` signals successful reads, supports mark-all
+and marks a notification before normal related-page navigation. The
+[single verification matrix](testing-task-notes.md#issue-227-unread-notification-badge)
+links count boundaries, ownership/rollback, idempotence, multi-tab/session changes,
+error recovery and responsive rendering to API, controller and browser tests.
+
+Exclusions: notification creation rules, migrations, new navigation destinations,
+real-time push delivery, independent user acceptance and unverified CI results.
