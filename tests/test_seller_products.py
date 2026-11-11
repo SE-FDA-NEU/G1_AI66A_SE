@@ -650,10 +650,29 @@ def test_seller_can_upload_a_product_image(api, engine):
 
     assert response.status_code == 201, response.text
     image_url = response.json()["data"]["image_url"]
-    assert image_url.startswith("/static/uploads/products/")
+    # Product creation requires an absolute http(s) image_url (see is_http_url); a
+    # relative path here would upload fine but fail listing creation with a 422.
+    assert image_url.startswith("http://testserver/static/uploads/products/")
     served = api.get(image_url)
     assert served.status_code == 200
     assert served.content.startswith(b"\x89PNG")
+
+
+def test_an_uploaded_image_can_be_used_to_create_a_listing(api, engine):
+    upload = api.post(
+        f"{URL}/upload-image",
+        content=b"\x89PNG\r\n\x1a\nminimal-test-image",
+        headers={**headers(engine), "Content-Type": "image/png"},
+    )
+    assert upload.status_code == 201, upload.text
+    image_url = upload.json()["data"]["image_url"]
+
+    response = api.post(
+        URL, json={**VALID, "image_url": image_url}, headers=headers(engine)
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["data"]["image_url"] == image_url
 
 
 def test_buyer_cannot_upload_a_product_image(api, engine):
@@ -675,7 +694,9 @@ def test_seller_upload_accepts_a_webp_container_with_a_webp_fourcc(api, engine):
     )
 
     assert response.status_code == 201, response.text
-    served = api.get(response.json()["data"]["image_url"])
+    image_url = response.json()["data"]["image_url"]
+    assert image_url.startswith("http://testserver/static/uploads/products/")
+    served = api.get(image_url)
     assert served.content == webp
 
 

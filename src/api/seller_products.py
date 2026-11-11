@@ -110,7 +110,10 @@ async def upload_product_image(request: Request, seller: SellerUser) -> dict[str
     filename = f"{uuid4().hex}.{extension}"
     (PRODUCT_IMAGE_DIR / filename).write_bytes(body_bytes)
     del seller  # Authentication and seller authorization are enforced by the dependency.
-    return {"data": {"image_url": f"/static/uploads/products/{filename}"}}
+    # Product creation requires an absolute http(s) image_url; a relative path here
+    # would be accepted by this endpoint but rejected (422) by product creation.
+    absolute_url = str(request.base_url).rstrip("/") + f"/static/uploads/products/{filename}"
+    return {"data": {"image_url": absolute_url}}
 
 
 @inventory_router.get("", response_model=SellerInventoryListResponse)
