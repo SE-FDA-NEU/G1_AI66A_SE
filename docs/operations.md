@@ -8,9 +8,10 @@ of a completed release or the availability required through the grading date.
 The [Firebase Hosting preview](https://mini-marketplace-se--demo-st26hys4.web.app)
 serves static assets; a Cloudflare Quick Tunnel forwards API requests to FastAPI
 and SQLite on the demo host. Follow [deployment.md](deployment.md) and
-[demo-sqlite.md](demo-sqlite.md). The current preview was manually deployed; a
-merge into `main` does not trigger deployment. Before release, the team must
-implement and verify a CI-gated deploy and decide on stable hosting. Roll back a
+[demo-sqlite.md](demo-sqlite.md). The current preview was manually deployed.
+This branch adds a CI-gated live Hosting deploy, but it is not active on `main`
+or verified until the branch is merged, credentials configured and a run passes.
+The team must also decide on stable backend hosting. Roll back a
 broken frontend using Firebase Hosting's previous release, and roll back backend
 code by redeploying a previously verified commit; restore data only from a
 verified backup after stopping writes. Preview expiration and the machine being
@@ -21,8 +22,10 @@ offline interrupt the site.
 `.github/workflows/ci.yml` detects the stack, installs Python dependencies,
 runs pytest/coverage and browser-script checks, and scans tracked files for
 secrets. The Node job is conditional on a package manifest. Ruff is currently
-warning-only. The [latest checked main run](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43056597333)
-failed in Python tests, taking about 8 minutes 13 seconds; the
+warning-only. The [last completed main run at the time of checking](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43056597333)
+failed in Python tests, taking about 8 minutes 13 seconds; a newer
+[run](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43063328416) was
+in progress. The
 [last green main run found](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/42495790436)
 was on 2026-11-08. It is not the latest commit. Verify required PR review and
 green checks in repository settings; branch-protection access returned 404 and
@@ -45,11 +48,11 @@ response time and assign alert thresholds and owners; no alerts are verified.
 | Item | Layer | What could happen | Plan |
 |---|---|---|---|
 | Latest main CI fails | tests | Broken changes can reach manual preview | #245: triage failed seed counts, snapshots and required labels; obtain a green run. |
-| Manual deployment | infrastructure | URL does not match a CI-approved main commit | #245: configure and verify deploy-after-green before release. |
+| Deploy pipeline unverified | infrastructure | URL does not match a CI-approved main commit | #245: merge and verify deploy-after-green before release. |
 | Quick Tunnel and local host | infrastructure | Website API becomes unavailable or URL changes | #245: agree stable endpoint, monitoring and recovery procedure. |
 | Hosted `/health` missing | infrastructure | External readiness check cannot validate service | #245: route a same-origin probe to the backend and verify 200/503 publicly. |
 | SQLite and uploads on one machine | data | Hardware loss or inconsistent backup loses data | #245: test database and upload backup/restore together. |
-| Google sign-in account linking | code | Existing password users cannot use Google with the same email | #243: agree and implement a safe authenticated linking flow. |
+| Google sign-in account linking | code | Existing password users cannot use Google with the same email | #245: carry forward a safe authenticated linking flow; #243 was closed. |
 | M5 evidence incomplete | docs | Submission can misrepresent release readiness | #245: obtain board evidence, CI, tag and team confirmation. |
 
 ## 5. Maintenance plan

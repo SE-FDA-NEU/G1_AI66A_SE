@@ -722,9 +722,9 @@ dates before final submission.
 |---|---|---|
 | #238 / PR #241 | Closed / merged | Firebase frontend Hosting configuration exists. |
 | #239, #240 / PR #242 | Closed / merged | SQLite and tunnel demo exist; verify remaining acceptance checks listed in PR #242. |
-| #243 / PR #244 | Open / ready for review | Review Google sign-in, test real Google accounts and agree safe linking for existing users. |
+| #243 / PR #244 | Closed / merged | Google sign-in is merged; test real Google accounts and agree safe linking for existing users. |
 | #245 | Open | Finish this handoff, verify sprint membership and capture the board with access. |
-| Main CI | Latest checked run failed | Investigate [run 43056597333](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43056597333); rerun after a reviewed fix. |
+| Main CI | Latest checked run in progress | Check [run 43063328416](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43063328416); the preceding main run failed. |
 | M5 release | Not verified | Complete green CI, protected main, stable hosted `/health`, v1.0 and team review before submission. |
 
 The project board is [Project 6](https://github.com/orgs/SE-FDA-NEU/projects/6/views/1?layout=board).

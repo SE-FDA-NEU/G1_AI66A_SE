@@ -7,8 +7,9 @@ Release v1.0: Pending — not created
 Latest green CI run on main: <https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/42495790436>  
 Test accounts: see the first screen of README.md
 
-**Draft — not ready for submission.** The latest main CI run failed; the green
-run linked above is older. The URL is a temporary preview whose backend depends
+**Draft — not ready for submission.** The last completed main CI run failed and
+a newer run was in progress at the last check; the green run linked above is
+older. The URL is a temporary preview whose backend depends
 on a local machine; `/health` on that Hosting URL returns 404. Release v1.0,
 the final Scrum Master confirmation and end-of-sprint board evidence are still
 pending. See [docs/operations.md](docs/operations.md) and

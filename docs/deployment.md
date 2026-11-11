@@ -61,7 +61,32 @@ for example `/does-not-exist`, must show the custom 404 page.
 
 ## Production deployment
 
-After human review of the preview and the generated file list:
+The repository workflow defines a live Hosting deployment for pushes to `main`
+after its required Python tests, applicable Node checks, and secret scan pass.
+It refuses a stale main commit and requires these GitHub Actions settings:
+
+| Kind | Name | Purpose |
+|---|---|---|
+| Repository variable | `MARKETPLACE_API_ORIGIN` | Public HTTPS origin of the backend tunnel, without a path. |
+| Repository secret | `FIREBASE_SERVICE_ACCOUNT` | Firebase service-account JSON with Hosting deployment permissions. |
+
+Set the variable under **Settings → Secrets and variables → Actions → Variables**,
+and the secret under **Secrets**; never place the JSON key in Git or frontend
+assets. Firebase's [GitHub integration guide](https://firebase.google.com/docs/hosting/github-integration)
+describes creating the service account. Grant only permissions needed for live
+Hosting deployment; the CLI may also need API Keys Viewer. Verify permissions in
+the target project. After the backend URL changes, update the variable and
+rerun the successful CI workflow for the current main commit. Configure backend
+`CORS_ORIGINS` and the Google OAuth client's authorized JavaScript origins for
+the live frontend domain separately.
+
+The workflow publishes **frontend assets only** to the live Hosting channel.
+The backend process, tunnel and SQLite stay on the demo host, and a Quick Tunnel
+can still go offline or change hostname. The job exists on this branch but is
+not active on `main` until reviewed and merged; successful deployment has not
+been verified until an Actions run and the live URL are checked.
+
+For an explicitly reviewed manual recovery, use:
 
 ```powershell
 python scripts/export_frontend.py
@@ -72,6 +97,10 @@ The production URL is normally `https://mini-marketplace-se.web.app` (and the
 Firebase-provided `firebaseapp.com` alias). Record the actual URL and
 screenshots as verification evidence; this repository does not claim a deploy
 or browser review that has not been performed.
+
+Only tag the commit actually running at the release URL after the main CI and
+deploy jobs succeed and the app is verified. A tag alone does not deploy the
+backend or prove that the site remains available.
 
 ## API and tunnel (#240)
 
