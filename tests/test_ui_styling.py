@@ -662,9 +662,11 @@ def test_required_form_fields_marked_with_asterisk() -> None:
         "Description *",
         "Price (₫) *",
         "Stock quantity *",
-        "Image URL or upload *",
     ]:
         assert f">{label}</label>" in seller_html, f"Missing asterisk in seller label: {label}"
+    assert "<legend>Image URL or upload *</legend>" in seller_html
+    assert '<label for="product-image">Image URL</label>' in seller_html
+    assert '<label for="product-image-file">Upload image</label>' in seller_html
 
     # 2. Login form
     login_html = LOGIN_HTML.read_text(encoding="utf-8")

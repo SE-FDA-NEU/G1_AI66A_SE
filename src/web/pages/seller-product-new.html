@@ -71,15 +71,16 @@
         </div>
       </div>
 
-      <div class="form-field">
-        <label for="product-image">Image URL or upload *</label>
+      <fieldset class="form-field product-image-fields" aria-describedby="image_url-hint image_url-error">
+        <legend>Image URL or upload *</legend>
+        <label for="product-image">Image URL</label>
         <input id="product-image" name="image_url" type="url" maxlength="2048" autocomplete="off" placeholder="https://example.com/product.jpg" aria-describedby="image_url-hint image_url-error">
         <p id="image_url-hint" class="field-hint">Use an absolute http:// or https:// link, or choose a JPEG, PNG, or WebP image up to 5 MB.</p>
         <label for="product-image-file">Upload image</label>
         <input id="product-image-file" name="image_file" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="image-file-hint image_url-error">
         <p id="image-file-hint" class="field-hint">The file is stored under a generated name and attached to this listing after upload.</p>
         <p id="image_url-error" class="field-error" hidden></p>
-      </div>
+      </fieldset>
 
       <p class="field-hint">New listings are created active. A listing with stock 0 stays out of the catalog until it has stock.</p>
 
