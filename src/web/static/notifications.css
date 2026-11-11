@@ -10,6 +10,10 @@
   list-style: none;
 }
 
+#notifications-mark-all {
+  margin-block-end: 1rem;
+}
+
 .notification {
   display: grid;
   gap: 0.65rem;
