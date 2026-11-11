@@ -124,7 +124,7 @@ step is required for the project's SQLite setup.
 python -m src.seed
 ```
 
-The seed creates the SQLite database, runs automatic migrations, and loads development accounts (seller and buyer) with hashed passwords alongside the 45 sample products. On a new database it prints `Added: 45 products` and `Total products: 45`. Running it again adds none.
+The seed creates the SQLite database, runs automatic migrations, and loads development accounts (seller and buyer) with hashed passwords alongside the 47 sample products. On a new database it prints `Added: 47 products` and `Total products: 47`. Running it again adds none.
 
 For the full P0 demonstration dataset (#84), run:
 
@@ -132,8 +132,8 @@ For the full P0 demonstration dataset (#84), run:
 python -m src.seed --demo
 ```
 
-On a fresh database this adds six scenario products to the 45-item catalog (51
-stored, 50 purchasable), a populated primary-buyer cart, an empty alternate-buyer
+On a fresh database this adds six scenario products to the 47-item catalog (53
+stored, 52 purchasable), a populated primary-buyer cart, an empty alternate-buyer
 cart, and four sample orders: PENDING, PROCESSING, COMPLETED and CANCELLED.
 Re-running `--demo` preserves the installed scenarios and later user changes.
 See [demo data and fresh-machine checks](docs/SETUP.md#8-sprint-3-demo-data-and-fresh-machine-check-84).

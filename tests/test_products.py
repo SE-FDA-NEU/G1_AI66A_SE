@@ -174,8 +174,8 @@ def test_list_products_whitespace_search_matches_all_available_products(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["meta"]["total"] == 45
-    assert len(body["data"]) == 45
+    assert body["meta"]["total"] == 47
+    assert len(body["data"]) == 47
 
 
 def test_list_products_clamps_page_beyond_last_result_page(client: TestClient) -> None:
@@ -188,11 +188,11 @@ def test_list_products_clamps_page_beyond_last_result_page(client: TestClient) -
     body = response.json()
     assert body["meta"]["current_page"] == 3
     assert body["meta"]["total_pages"] == 3
-    assert len(body["data"]) == 5
+    assert len(body["data"]) == 7
 
 
 def test_list_products_seeded_page_boundaries(client: TestClient) -> None:
-    """The seeded catalog has the expected 20/20/5 page distribution."""
+    """The seeded catalog has the expected 20/20/7 page distribution."""
     seed_products()
 
     pages = [
@@ -200,7 +200,7 @@ def test_list_products_seeded_page_boundaries(client: TestClient) -> None:
         for page in (1, 2, 3)
     ]
 
-    assert [len(page["data"]) for page in pages] == [20, 20, 5]
+    assert [len(page["data"]) for page in pages] == [20, 20, 7]
     assert pages[0]["meta"]["total_pages"] == 3
 
 
@@ -217,8 +217,8 @@ def test_seed_is_idempotent_and_available_in_api(
 
     body = response.json()
 
-    assert body["meta"]["total"] == 45
-    assert len(body["data"]) == 45
+    assert body["meta"]["total"] == 47
+    assert len(body["data"]) == 47
 
     codes = [product["code"] for product in body["data"]]
 

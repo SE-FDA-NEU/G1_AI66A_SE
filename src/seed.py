@@ -31,6 +31,7 @@ GENERATED_PRODUCT_CODE_PATTERN = re.compile(
 DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
 DEMO_BUYER_EMAIL = "user@example.com"
 DEFAULT_DEV_PASSWORD = "password"
+SEED_SQLITE_BUSY_TIMEOUT_MS = 30_000
 
 SEED_CATEGORIES = [
     {"id": 1, "name": "Electronics", "slug": "electronics", "parent_slug": None},
@@ -494,7 +495,9 @@ def seed_product_metadata(
                 return cat_id
         return office_desk_id  # Office & Desk default
 
-    sample_codes = {p.code for p in products}
+    # The supplied list can include user-created products; only catalog fixtures
+    # may receive synthetic metrics and timestamps.
+    sample_codes = {p.code for p in build_products()}
 
     for index, product in enumerate(products):
         if product.id is None:
@@ -654,7 +657,9 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
             existing.description = seeded.description
             existing.image_url = seeded.image_url
             session.add(existing)
-    cleanup_legacy_catalog(session, set(sample_codes), seller.id)
+    # Scenario fixtures have a different lifecycle from the base catalog.
+    preserved_codes = set(sample_codes) | {row[0] for row in DEMO_PRODUCTS}
+    cleanup_legacy_catalog(session, preserved_codes, seller.id)
     seeded_products = session.exec(
         select(Product).where(Product.code.in_(sample_codes)).order_by(Product.id.asc())
     ).all()
@@ -686,6 +691,11 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
 
 def _run_seed(catalog: bool, demo: bool):
     """Migrate first; serialize SQLite writers and commit all requested fixtures once."""
+    if engine.dialect.name == "sqlite":
+        # Concurrent first-time seeds must wait for the complete initialization
+        # and seed transaction instead of failing at SQLite's five-second default.
+        with engine.connect() as connection:
+            connection.exec_driver_sql(f"PRAGMA busy_timeout={SEED_SQLITE_BUSY_TIMEOUT_MS}")
     init_db()
     with Session(engine) as session, session.begin():
         # This project uses SQLite. Taking the write lock before checking marker
