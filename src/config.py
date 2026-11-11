@@ -40,6 +40,7 @@ try:
             description="Application secret key",
         )
         JWT_EXPIRATION_MINUTES: int = Field(default=60, ge=1)
+        GOOGLE_CLIENT_ID: str = Field(default="", description="Google OAuth web client ID")
         CORS_ORIGINS: Union[List[str], str] = Field(
             default=["*"],
             description="Allowed CORS origins list or string",
@@ -108,6 +109,7 @@ except ImportError:
             default_factory=lambda: int(os.getenv("JWT_EXPIRATION_MINUTES", "60")),
             ge=1,
         )
+        GOOGLE_CLIENT_ID: str = Field(default_factory=lambda: os.getenv("GOOGLE_CLIENT_ID", ""))
         CORS_ORIGINS: Union[List[str], str] = Field(
             default_factory=lambda: os.getenv("CORS_ORIGINS", "*"),
             description="Allowed CORS origins",

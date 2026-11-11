@@ -5,6 +5,7 @@ from src.models.base import Base
 from src.models.cart_item import CartItem
 from src.models.category import Category
 from src.models.category_audit_log import CategoryAuditLog
+from src.models.google_identity import GoogleIdentity
 from src.models.notification import Notification
 from src.models.order import Order
 from src.models.order_history import OrderHistory
@@ -25,6 +26,7 @@ from src.models.voucher_usage import VoucherUsage
 __all__ = [
     "Base",
     "User",
+    "GoogleIdentity",
     "UserAddress",
     "AccountAuditLog",
     "Category",
