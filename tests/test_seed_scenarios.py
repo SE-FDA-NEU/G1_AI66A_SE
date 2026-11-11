@@ -13,6 +13,8 @@ from src.models.order_item import OrderItem
 from src.models.product import Product
 from src.models.seller_order import SellerOrder
 from src.models.user import User
+from src.schemas.seller_products import ProductCreate
+from src.services.seller_products import create_product
 from tests.cart_db import enable_foreign_keys
 
 
@@ -124,6 +126,68 @@ def test_existing_non_demo_code_is_not_overwritten(seeded):
     with pytest.raises(RuntimeError, match="codes already exist"):
         seed.seed_demo_scenarios()
     assert snapshot(seeded) == before
+
+
+def _create_demo_seller_listing(engine) -> int:
+    """A real listing created through the Seller API, owned by the demo seller account.
+
+    Its code always matches generate_product_code()'s format (P- + 18 hex chars), which
+    also matches cleanup_legacy_catalog's "P-%" scan for retired seed fixtures.
+    """
+    with Session(engine) as session:
+        demo_seller = session.exec(
+            select(User).where(User.email == seed.DEMO_SELLER_EMAIL)
+        ).one()
+        created = create_product(
+            session,
+            demo_seller.id,
+            ProductCreate(
+                name="Seller's own listing",
+                description="Created by the demo seller through the real API, not seeded.",
+                price=199_000,
+                stock_quantity=3,
+                image_url="https://example.test/own-listing.jpg",
+            ),
+        )
+        return session.exec(select(Product).where(Product.code == created.code)).one().id
+
+
+def test_reseeding_preserves_an_unreferenced_listing_the_demo_seller_created(seeded):
+    """A P-* code the demo seller creates themselves must survive reseeding untouched.
+
+    cleanup_legacy_catalog scans the demo seller's "P-%" products to retire old seed
+    fixtures; without excluding generate_product_code()'s format, a real listing with no
+    orders/cart/variant/review would be deleted outright as if it were a retired fixture.
+    """
+    product_id = _create_demo_seller_listing(seeded)
+    seed.seed_products()
+    with Session(seeded) as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        assert product.name == "Seller's own listing"
+        assert product.is_active is True
+
+
+def test_reseeding_preserves_a_cart_referenced_listing_the_demo_seller_created(seeded):
+    """Same as above, but referenced by a cart: must stay active, not be deactivated."""
+    product_id = _create_demo_seller_listing(seeded)
+    with Session(seeded) as session:
+        buyer = session.exec(select(User).where(User.role == "buyer")).first()
+        product = session.get(Product, product_id)
+        session.add(
+            CartItem(
+                buyer_id=buyer.id,
+                product_id=product_id,
+                quantity=1,
+                price_at_add=product.price,
+            )
+        )
+        session.commit()
+    seed.seed_products()
+    with Session(seeded) as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        assert product.is_active is True
 
 
 def test_demo_cli_on_fresh_sqlite_and_rerun(tmp_path):

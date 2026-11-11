@@ -826,7 +826,7 @@ def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(dis
     from src.seed import DEMO_DATE, seed_categories, seed_product_metadata
 
     with Session(discovery_engine) as session:
-        seed_categories(session)
+        categories = seed_categories(session)
         # Create seller and an existing pre-discovery product
         seller = User(id=101, name="Existing Seller", email="seller101@test.local", role="seller")
         session.add(seller)
@@ -858,7 +858,7 @@ def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(dis
         session.commit()
 
         # Run seed_product_metadata on both
-        seed_product_metadata(session, [existing_prod, sample_prod])
+        seed_product_metadata(session, [existing_prod, sample_prod], categories)
         session.commit()
 
         meta_existing = session.get(ProductMetadata, existing_prod.id)
@@ -877,6 +877,42 @@ def test_catalog_seed_does_not_assign_synthetic_metrics_to_existing_products(dis
             else meta_sample.created_at
         )
         assert sample_created_utc <= DEMO_DATE
+
+
+def test_catalog_seed_categories_tolerates_admin_created_id_collision(discovery_engine):
+    """
+    An administrator can create a category (getting an autoincrement id) before a later
+    seed version adds a new standard category that reuses that same id (e.g. id 8 for
+    "Monitors"). Re-running the seed must not crash with a UNIQUE constraint violation,
+    and every caller must resolve category ids through the returned slug map rather than
+    the hardcoded ids in SEED_CATEGORIES, since the preferred id may already be taken.
+    """
+    from src.seed import SEED_CATEGORIES, seed_categories
+
+    monitors_seed_id = next(item["id"] for item in SEED_CATEGORIES if item["slug"] == "monitors")
+
+    with Session(discovery_engine) as session:
+        admin_category = Category(
+            id=monitors_seed_id, name="Admin Custom", slug="admin-custom", parent_id=None
+        )
+        session.add(admin_category)
+        session.commit()
+
+        categories = seed_categories(session)
+        session.commit()
+
+        # The admin's category keeps its id and is untouched.
+        assert session.get(Category, monitors_seed_id).slug == "admin-custom"
+
+        # "Monitors" still gets created, just under a different id than SEED_CATEGORIES says.
+        monitors = categories["monitors"]
+        assert monitors.id != monitors_seed_id
+        assert monitors.name == "Monitors"
+
+        # Re-running seeding again is idempotent and does not raise.
+        categories_again = seed_categories(session)
+        session.commit()
+        assert categories_again["monitors"].id == monitors.id
 
 
 def test_sort_newest_handles_null_timestamps_and_fallback_by_id(
