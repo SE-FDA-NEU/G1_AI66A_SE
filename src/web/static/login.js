@@ -37,8 +37,10 @@ async function setupGoogleSignIn() {
     script.async = true;
     script.onload = () => {
       google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential });
-      google.accounts.id.renderButton(document.getElementById("google-signin-button"), {
-        theme: "outline", size: "large", text: "signin_with",
+      const googleButton = document.getElementById("google-signin-button");
+      google.accounts.id.renderButton(googleButton, {
+        theme: "outline", size: "large", text: "continue_with",
+        width: Math.min(400, Math.floor(googleButton.getBoundingClientRect().width)),
       });
       googleStatus.textContent = "";
     };

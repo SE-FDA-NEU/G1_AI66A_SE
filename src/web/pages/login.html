@@ -6,6 +6,7 @@
   <title>Login | Mini Marketplace</title>
   <link rel="stylesheet" href="/static/base.css">
   <link rel="stylesheet" href="/static/products.css">
+  <link rel="stylesheet" href="/static/login.css">
   <script src="/static/backend-config.js"></script>
   <script src="/static/backend-runtime.js"></script>
   <script src="/static/login.js" defer></script>
@@ -18,17 +19,25 @@
       <a href="/products">Products</a>
       <a href="/notifications">Notifications</a>
     </nav>
-    <h1 class="catalog__title">Log in</h1>
-    <form id="login-form" class="login-form">
-      <p class="field-hint">Fields marked * are required.</p>
-      <label>Email * <input id="email" name="email" type="email" required autocomplete="email"></label>
-      <label>Password * <input id="password" name="password" type="password" required autocomplete="current-password"></label>
-      <button class="button" type="submit">Log in</button>
-      <p id="login-error" class="state__message" role="alert" hidden></p>
-    </form>
-    <section aria-label="Google sign in">
-      <div id="google-signin-button"></div>
-      <p id="google-signin-status" class="field-hint" role="status">Loading Google sign-in…</p>
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="login-card__header">
+        <span class="login-card__eyebrow">MINI MARKETPLACE</span>
+        <h1 id="login-title">Welcome back</h1>
+        <p>Log in to manage your orders and discover more.</p>
+      </div>
+      <form id="login-form" class="login-form">
+        <p class="field-hint login-form__hint">Fields marked * are required.</p>
+        <label>Email * <input id="email" name="email" type="email" required autocomplete="email"></label>
+        <label>Password * <input id="password" name="password" type="password" required autocomplete="current-password"></label>
+        <button class="button login-form__submit" type="submit">Log in</button>
+        <p id="login-error" class="state__message" role="alert" hidden></p>
+      </form>
+      <div class="login-divider" aria-hidden="true"><span>or</span></div>
+      <section class="login-google" aria-label="Google sign in">
+        <div id="google-signin-button"></div>
+        <p id="google-signin-status" class="login-google__status" role="status">Loading Google sign-in…</p>
+      </section>
+      <p class="login-card__footer">New to Mini Marketplace? Continue with Google to get started.</p>
     </section>
   </main>
 </body>

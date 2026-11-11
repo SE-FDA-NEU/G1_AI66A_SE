@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const code = fs.readFileSync('src/web/static/login.js', 'utf8');
 const status = { textContent: '' };
 const form = { addEventListener() {} };
-const button = {};
+const button = { getBoundingClientRect: () => ({ width: 320 }) };
 let googleCallback;
 let insertedScript;
 const elements = { 'login-form': form, 'login-error': {}, 'google-signin-status': status, 'google-signin-button': button };
