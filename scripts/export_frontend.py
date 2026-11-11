@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 from pathlib import Path
-
+from urllib.parse import urlsplit
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPOSITORY_ROOT / "src" / "web"
@@ -42,6 +44,12 @@ NOT_FOUND_PAGE = """<!doctype html>
 
 def export_frontend() -> list[Path]:
     """Create a clean, deterministic Hosting directory and return its files."""
+    origin = os.environ.get("MARKETPLACE_API_ORIGIN", "").strip().rstrip("/")
+    if origin:
+        parsed = urlsplit(origin)
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.path or parsed.query
+                or parsed.fragment or parsed.username or parsed.password):
+            raise ValueError("MARKETPLACE_API_ORIGIN must be an HTTPS origin without a path")
     if PUBLIC_ROOT.exists():
         shutil.rmtree(PUBLIC_ROOT)
     PUBLIC_ROOT.mkdir()
@@ -52,7 +60,12 @@ def export_frontend() -> list[Path]:
             raise FileNotFoundError(f"Frontend page is missing: {source}")
         shutil.copy2(source, PUBLIC_ROOT / page_name)
 
-    shutil.copytree(SOURCE_ROOT / "static", PUBLIC_ROOT / "static")
+    shutil.copytree(
+        SOURCE_ROOT / "static", PUBLIC_ROOT / "static", ignore=shutil.ignore_patterns("uploads")
+    )
+    (PUBLIC_ROOT / "static" / "backend-config.js").write_text(
+        "window.MARKETPLACE_API_ORIGIN = " + json.dumps(origin) + ";\n", encoding="utf-8"
+    )
     (PUBLIC_ROOT / "404.html").write_text(NOT_FOUND_PAGE, encoding="utf-8")
     return sorted(path.relative_to(PUBLIC_ROOT) for path in PUBLIC_ROOT.rglob("*"))
 

@@ -162,7 +162,7 @@ function createProductCard(product) {
   image.width = 300;
   image.height = 300;
   image.addEventListener("error", () => { image.src = PLACEHOLDER_IMAGE; }, { once: true });
-  image.src = product.thumbnail_url || PLACEHOLDER_IMAGE;
+  image.src = (window.marketplaceImageUrl?.(product.thumbnail_url) || product.thumbnail_url) || PLACEHOLDER_IMAGE;
 
   const body = document.createElement("div");
   body.className = "product-card__body";

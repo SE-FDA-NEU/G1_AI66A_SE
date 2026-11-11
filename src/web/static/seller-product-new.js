@@ -238,7 +238,8 @@ async function uploadImage(file) {
   if (!response.ok || !payload?.data?.image_url) {
     throw new Error(payload?.error?.message || "The image could not be uploaded.");
   }
-  return payload.data.image_url;
+  const uploaded = new URL(payload.data.image_url);
+  return window.MARKETPLACE_API_ORIGIN ? new URL(uploaded.pathname, window.MARKETPLACE_API_ORIGIN).href : uploaded.href;
 }
 
 /** Keep the typed values across a login, for the same account only. */
