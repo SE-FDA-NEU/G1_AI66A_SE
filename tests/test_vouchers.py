@@ -1122,3 +1122,29 @@ def test_migrate_voucher_constraints_on_existing_database(tmp_path: Path):
     with Session(engine) as session:
         assert session.get(Voucher, 1) is not None
 
+
+def test_seed_demo_vouchers_is_idempotent(db):
+    """Seed demo vouchers inserts new records initially and zero records on rerun."""
+    from src.seed import DEMO_VOUCHERS, seed_demo_vouchers, seed_users
+
+    with Session(db) as session:
+        users = seed_users(session)
+        first_count = seed_demo_vouchers(session, users)
+        session.commit()
+
+        assert first_count == len(DEMO_VOUCHERS)
+
+        # Rerun seed on the same database
+        second_count = seed_demo_vouchers(session, users)
+        session.commit()
+
+        assert second_count == 0
+
+        # Verify all seeded voucher codes are present
+        for entry in DEMO_VOUCHERS:
+            v = session.exec(select(Voucher).where(Voucher.code == entry["code"])).first()
+            assert v is not None
+            assert v.scope == entry["scope"]
+            assert v.discount_type == entry["discount_type"]
+
+

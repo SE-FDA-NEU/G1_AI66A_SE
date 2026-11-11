@@ -24,6 +24,10 @@ update this file should not be approved.
 
 **Access codes:** G = guest (not logged in) · U = authenticated user · A = admin
 
+Seller workspace browser pages also run `src/web/static/seller-access.js` before
+their page scripts. A known authenticated non-seller is redirected to
+`/products`; the seller-only API dependencies remain the server-side authority.
+
 **Spec PR:** the merged Milestone 1 pull request that specified the story. A
 merged spec PR means the story is specified, not built.
 
@@ -92,9 +96,9 @@ from `stock_quantity`: `out_of_stock` at 0, `low_stock` up to 5, otherwise
 
 | Requirement | Contract | Implementation | Verification |
 |---|---|---|---|
-| Catalog must contain many source-matched products across categories | Seeded seller listings use source-matched names and HTTPS image URLs from HACOM/HanoiComputer | `build_products()` creates 47 listings for `demo.seller@marketplace.local`; `seed_product_metadata()` maps keyboard/mouse, webcam, hub, stand, monitor, phone, tablet, and laptop products to categories, including Apple and LG | `test_seed_catalog_uses_source_matched_aula_names_and_images`; `python -m src.seed` output and DB inspection |
-| Do not destroy historical product references while removing unusable legacy data | Only unreferenced legacy rows owned by the demo seller may be deleted; referenced rows are deactivated and other sellers' rows are untouched | `cleanup_legacy_catalog()` in `src/seed.py` | `test_seed_never_deletes_another_sellers_legacy_product`; seed rerun retains order item rows and reports 47 active products |
-| Seller can upload a product image | Authenticated seller sends bounded raw image bytes; the server stops reading after 5 MB, validates the image container signature, and returns a generated static URL | `POST /api/v1/seller/products/upload-image`, seller form file input, static upload directory | `test_seller_can_upload_a_product_image`; WebP signature and oversized-body tests; `test_buyer_cannot_upload_a_product_image` |
+| Catalog must contain many source-matched products across categories | Seeded seller listings use source-matched names and HTTPS image URLs from HACOM/HanoiComputer; standard categories (including ones added after the original seven) are resolved by slug, never by a hardcoded id that may already be taken by an administrator-created category | `build_products()` creates 47 listings for `demo.seller@marketplace.local`; `seed_categories()` upserts `SEED_CATEGORIES` by slug and only uses the preferred id when it is still free; `seed_product_metadata()` resolves category ids through the returned slug map | `test_seed_catalog_uses_source_matched_aula_names_and_images`; `test_catalog_seed_categories_tolerates_admin_created_id_collision`; `python -m src.seed` output and DB inspection |
+| Do not destroy historical product references while removing unusable legacy data | Only unreferenced legacy rows owned by the demo seller may be deleted; referenced rows are deactivated, other sellers' rows are untouched, and a real listing the demo seller created through the Seller API (which also starts with `P-`) is never treated as a retired fixture | `cleanup_legacy_catalog()` in `src/seed.py` excludes any code matching `generate_product_code()`'s format before scanning "P-%" rows for cleanup | `test_seed_never_deletes_another_sellers_legacy_product`; `test_reseeding_preserves_an_unreferenced_listing_the_demo_seller_created`; `test_reseeding_preserves_a_cart_referenced_listing_the_demo_seller_created`; seed rerun retains order item rows and reports 47 active products |
+| Seller can upload a product image | Authenticated seller sends bounded raw image bytes; the server stops reading after 5 MB, validates the image container signature, and returns a generated **absolute** static URL (product creation rejects a relative `image_url`) | `POST /api/v1/seller/products/upload-image`, seller form file input, static upload directory | `test_seller_can_upload_a_product_image`; `test_an_uploaded_image_can_be_used_to_create_a_listing`; WebP signature and oversized-body tests; `test_buyer_cannot_upload_a_product_image` |
 
 ### Backend evidence for issue #49
 
@@ -718,3 +722,40 @@ Verification: `tests/test_firebase_export.py::test_export_contains_only_allowlis
 checks the generated artifact boundary. Exclusions: backend/API deployment,
 tunnel configuration, Firebase credentials, database files and frontend
 redesign.
+## Seller review interface (#225)
+
+Requirement: Seller should have one review area on product details. The
+[US15 contract](us15-review-notifications.md#seller-review-interface-225) retains
+Customer reviews and owner replies, and hides the entire Buyer purchase-review
+section for Seller/non-Buyer accounts. `product-detail.js::loadReviewForm` verifies
+identity before exposing Buyer content and ignores old eligibility responses.
+Account/logout and restored-page handlers refresh the role-dependent view.
+
+The [single verification matrix](testing-task-notes.md#issue-225-seller-review-interface)
+maps Seller ownership/replies, Buyer submission, account transitions, pending/error
+states and mobile layout to DOM checks and real-browser/API/database regressions.
+Existing server-side Buyer and owner-Seller guards remain authoritative.
+
+Exclusions: deleting public reviews or owner replies, changing review eligibility,
+schema/migrations, notifications and unrelated seller pages. Human acceptance,
+teammate review and remote CI require separate evidence.
+
+## Unread notification badge (#227)
+
+Requirement: show the current recipient's unread total on the navigation bell,
+hide zero, cap the visible text at 99+, and update it after reading notifications.
+[US15](us15-review-notifications.md#unread-navigation-badge-227) defines the count and
+read contracts. `GET /api/v1/notifications/unread-count` and
+`POST /api/v1/notifications/mark-all-read` use authenticated identity through the
+notification service and recipient-scoped repository. The service owns the
+mark-all transaction; existing list and single-read contracts remain compatible.
+
+`notification-badge.js` decorates existing Notifications links and rejects stale
+account responses. `notifications.js` signals successful reads, supports mark-all
+and marks a notification before normal related-page navigation. The
+[single verification matrix](testing-task-notes.md#issue-227-unread-notification-badge)
+links count boundaries, ownership/rollback, idempotence, multi-tab/session changes,
+error recovery and responsive rendering to API, controller and browser tests.
+
+Exclusions: notification creation rules, migrations, new navigation destinations,
+real-time push delivery, independent user acceptance and unverified CI results.

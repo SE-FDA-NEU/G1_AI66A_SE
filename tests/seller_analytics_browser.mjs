@@ -144,6 +144,10 @@ try {
   await waitFor('!document.getElementById("analytics-error").hidden');
   assert.equal(requests.length, beforeDenied + 1, "Buyer triggers identity check only");
   assert.equal(await evaluate('document.getElementById("analytics-report").hidden'), true);
+  await evaluate("localStorage.removeItem('access_token'); localStorage.setItem('token', 'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYnV5ZXIifQ.signature');");
+  await send("Page.navigate", {url: `${base}/seller/analytics`});
+  await waitFor('location.pathname === "/products"');
+  assert.equal(await evaluate('localStorage.getItem("token") !== null'), true);
   console.log("Native seller analytics checks passed: Chrome/Edge, 390/768/1280px, SVG/table, weighted metric, month/top filters, validation focus, retry, empty, legacy and buyer denial.");
 } finally {
   ws?.close(); browser.kill(); server.closeAllConnections(); server.close();

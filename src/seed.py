@@ -1,4 +1,5 @@
 import argparse
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text, update
@@ -17,23 +18,37 @@ from src.models.product_variant import ProductVariant
 from src.models.review import Review
 from src.models.seller_order import SellerOrder
 from src.models.user import User
+from src.models.voucher import Voucher
+from src.services.seller_products import CODE_PREFIX, CODE_RANDOM_BYTES
+
+# A code in this format was assigned by generate_product_code() for a real seller-created
+# listing (possibly created by the demo seller account itself) and is never a retired seed
+# fixture, even though it shares the "P-" prefix with legacy codes like "P-100".
+GENERATED_PRODUCT_CODE_PATTERN = re.compile(
+    rf"^{re.escape(CODE_PREFIX)}[0-9A-F]{{{CODE_RANDOM_BYTES * 2}}}$"
+)
 
 DEMO_SELLER_EMAIL = "demo.seller@marketplace.local"
 DEMO_BUYER_EMAIL = "user@example.com"
 DEFAULT_DEV_PASSWORD = "password"
 
 SEED_CATEGORIES = [
-    {"id": 1, "name": "Electronics", "slug": "electronics", "parent_id": None},
-    {"id": 2, "name": "Computer Peripherals", "slug": "peripherals", "parent_id": 1},
-    {"id": 3, "name": "Keyboards & Mice", "slug": "keyboards-mice", "parent_id": 2},
-    {"id": 4, "name": "Cables & Hubs", "slug": "cables-hubs", "parent_id": 2},
-    {"id": 5, "name": "Audio & Video", "slug": "audio-video", "parent_id": 1},
-    {"id": 8, "name": "Monitors", "slug": "monitors", "parent_id": 1},
-    {"id": 9, "name": "Phones", "slug": "phones", "parent_id": 1},
-    {"id": 10, "name": "Tablets", "slug": "tablets", "parent_id": 1},
-    {"id": 11, "name": "Laptops", "slug": "laptops", "parent_id": 1},
-    {"id": 6, "name": "Office & Desk", "slug": "office-desk", "parent_id": None},
-    {"id": 7, "name": "Stands & Ergonomics", "slug": "stands-ergonomics", "parent_id": 6},
+    {"id": 1, "name": "Electronics", "slug": "electronics", "parent_slug": None},
+    {"id": 2, "name": "Computer Peripherals", "slug": "peripherals", "parent_slug": "electronics"},
+    {"id": 3, "name": "Keyboards & Mice", "slug": "keyboards-mice", "parent_slug": "peripherals"},
+    {"id": 4, "name": "Cables & Hubs", "slug": "cables-hubs", "parent_slug": "peripherals"},
+    {"id": 5, "name": "Audio & Video", "slug": "audio-video", "parent_slug": "electronics"},
+    {"id": 8, "name": "Monitors", "slug": "monitors", "parent_slug": "electronics"},
+    {"id": 9, "name": "Phones", "slug": "phones", "parent_slug": "electronics"},
+    {"id": 10, "name": "Tablets", "slug": "tablets", "parent_slug": "electronics"},
+    {"id": 11, "name": "Laptops", "slug": "laptops", "parent_slug": "electronics"},
+    {"id": 6, "name": "Office & Desk", "slug": "office-desk", "parent_slug": None},
+    {
+        "id": 7,
+        "name": "Stands & Ergonomics",
+        "slug": "stands-ergonomics",
+        "parent_slug": "office-desk",
+    },
 ]
 
 SEED_USERS: list[dict[str, str]] = [
@@ -71,12 +86,37 @@ SEED_USERS: list[dict[str, str]] = [
 
 
 def seed_categories(session: Session) -> dict[str, Category]:
-    """Upsert standard category hierarchy by unique slug."""
+    """Upsert standard category hierarchy, resolved by slug.
+
+    An administrator can create a category before a later seed version adds a
+    new standard one (e.g. "Monitors"/id 8) that happens to reuse that id. The
+    preferred id is only used when it is still free; otherwise the row gets an
+    autoincrement id and callers must resolve ids through the returned map by
+    slug instead of the hardcoded values in SEED_CATEGORIES.
+    """
+    existing = {cat.slug: cat for cat in session.exec(select(Category)).all()}
+    taken_ids = {cat.id for cat in existing.values()}
     for item in SEED_CATEGORIES:
+        if item["slug"] in existing:
+            continue
+        parent_slug = item["parent_slug"]
+        values = {
+            "id": item["id"],
+            "name": item["name"],
+            "slug": item["slug"],
+            "parent_id": existing[parent_slug].id if parent_slug else None,
+        }
+        if values["id"] in taken_ids:
+            values.pop("id")
         session.exec(
-            insert(Category).values(**item).on_conflict_do_nothing(index_elements=["slug"])
+            insert(Category).values(**values).on_conflict_do_nothing(index_elements=["slug"])
         )
-    return {cat.slug: cat for cat in session.exec(select(Category)).all()}
+        session.flush()
+        inserted = session.exec(select(Category).where(Category.slug == item["slug"])).first()
+        if inserted:
+            existing[item["slug"]] = inserted
+            taken_ids.add(inserted.id)
+    return existing
 
 
 def make_product(
@@ -412,30 +452,47 @@ def build_products(seller_id: int = 1) -> list[Product]:
     return products
 
 
-def seed_product_metadata(session: Session, products: list[Product]) -> None:
+def seed_product_metadata(
+    session: Session, products: list[Product], categories: dict[str, Category]
+) -> None:
     """Populate discovery metadata, categories, ratings and sales for sample products.
 
     Synthetic ratings, sales counts, and demo timestamps are ONLY assigned to the sample
     catalog products. Any non-sample product without metadata receives clean default
     metadata (0.0 rating, 0 sales, current UTC timestamp).
+
+    `categories` must be the slug-keyed map returned by `seed_categories`: category ids
+    are not guaranteed to match SEED_CATEGORIES when an id was already taken.
     """
-    category_code_map = {"MON": 8, "PHONE": 9, "TAB": 10, "LAP": 11}
+    category_code_map = {
+        "MON": categories["monitors"].id,
+        "PHONE": categories["phones"].id,
+        "TAB": categories["tablets"].id,
+        "LAP": categories["laptops"].id,
+    }
     category_keyword_map = [
-        (("Monitor", "Screen", "Display"), 8),
-        (("Phone", "Galaxy", "iPhone"), 9),
-        (("Tablet", "Pad", "iPad"), 10),
-        (("Mouse", "Keyboard", "Keypad", "Wrist Rest"), 3),
-        (("Cable", "Hub", "Adapter", "Flash Drive", "Memory Card", "Case", "Organizer"), 4),
-        (("Webcam", "Speaker", "Earbuds", "Headphone", "Microphone", "Sound Card", "Light"), 5),
-        (("Stand", "Cooling Pad", "Tripod"), 7),
-        (("Power Bank", "Charging Pad"), 1),
+        (("Monitor", "Screen", "Display"), categories["monitors"].id),
+        (("Phone", "Galaxy", "iPhone"), categories["phones"].id),
+        (("Tablet", "Pad", "iPad"), categories["tablets"].id),
+        (("Mouse", "Keyboard", "Keypad", "Wrist Rest"), categories["keyboards-mice"].id),
+        (
+            ("Cable", "Hub", "Adapter", "Flash Drive", "Memory Card", "Case", "Organizer"),
+            categories["cables-hubs"].id,
+        ),
+        (
+            ("Webcam", "Speaker", "Earbuds", "Headphone", "Microphone", "Sound Card", "Light"),
+            categories["audio-video"].id,
+        ),
+        (("Stand", "Cooling Pad", "Tripod"), categories["stands-ergonomics"].id),
+        (("Power Bank", "Charging Pad"), categories["electronics"].id),
     ]
+    office_desk_id = categories["office-desk"].id
 
     def resolve_category(pname: str) -> int:
         for keywords, cat_id in category_keyword_map:
             if any(kw.lower() in pname.lower() for kw in keywords):
                 return cat_id
-        return 6  # Office & Desk default
+        return office_desk_id  # Office & Desk default
 
     sample_codes = {p.code for p in products}
 
@@ -504,7 +561,13 @@ def get_or_create_demo_seller(session: Session) -> User:
 
 
 def cleanup_legacy_catalog(session: Session, source_codes: set[str], seller_id: int) -> None:
-    """Remove unused demo-seller fixtures while preserving every other seller's data."""
+    """Remove unused demo-seller fixtures while preserving every other seller's data.
+
+    `Product.code.like("P-%")` also matches real listings created through the Seller
+    API, including ones created by the demo seller account itself. Those always use
+    generate_product_code()'s format and must be filtered out before anything here
+    is deleted or deactivated.
+    """
     legacy_products = session.exec(
         select(Product).where(
             Product.code.not_in(source_codes),
@@ -512,6 +575,11 @@ def cleanup_legacy_catalog(session: Session, source_codes: set[str], seller_id: 
             Product.seller_id == seller_id,
         )
     ).all()
+    legacy_products = [
+        product
+        for product in legacy_products
+        if not GENERATED_PRODUCT_CODE_PATTERN.match(product.code)
+    ]
     for product in legacy_products:
         has_order = (
             session.exec(select(OrderItem.id).where(OrderItem.product_id == product.id)).first()
@@ -541,7 +609,7 @@ def cleanup_legacy_catalog(session: Session, source_codes: set[str], seller_id: 
 
 
 def _seed_catalog(session: Session) -> tuple[int, int, int]:
-    seed_categories(session)
+    categories = seed_categories(session)
     seller = get_or_create_demo_seller(session)
     sample_products = build_products(seller_id=seller.id)
     added = 0
@@ -590,7 +658,7 @@ def _seed_catalog(session: Session) -> tuple[int, int, int]:
     seeded_products = session.exec(
         select(Product).where(Product.code.in_(sample_codes)).order_by(Product.id.asc())
     ).all()
-    seed_product_metadata(session, seeded_products)
+    seed_product_metadata(session, seeded_products, categories)
 
     # Initialize clean default metadata for any existing products without metadata
     existing_without_metadata = session.exec(
@@ -657,6 +725,150 @@ DEMO_ORDERS = (
     ("COMPLETED", "P-DEMO-COMPLETE", 3),
     ("CANCELLED", "P-DEMO-CANCEL", 1),
 )
+
+# Demo vouchers with diverse codes, scopes, and discount types for checkout testing
+DEMO_VOUCHERS: list[dict] = [
+    # --- Platform vouchers (applies to total order) ---
+    {
+        "code": "PLATFORM10",
+        "scope": "PLATFORM",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 1000,  # 10% (in basis points)
+        "max_discount": 50_000,
+        "min_order_value": 100_000,
+        "usage_limit": 100,
+        "per_user_limit": 2,
+    },
+    {
+        "code": "SAVE50K",
+        "scope": "PLATFORM",
+        "discount_type": "FIXED_AMOUNT",
+        "discount_value": 50_000,
+        "max_discount": None,
+        "min_order_value": 300_000,
+        "usage_limit": 50,
+        "per_user_limit": 1,
+    },
+    {
+        "code": "PLATFORM20",
+        "scope": "PLATFORM",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 2000,  # 20%
+        "max_discount": 100_000,
+        "min_order_value": 500_000,
+        "usage_limit": 30,
+        "per_user_limit": 1,
+    },
+    # --- Free-shipping vouchers (platform scope, FREE_SHIPPING type) ---
+    {
+        "code": "FREESHIP",
+        "scope": "PLATFORM",
+        "discount_type": "FREE_SHIPPING",
+        "discount_value": 0,
+        "max_discount": None,
+        "min_order_value": 0,
+        "usage_limit": 200,
+        "per_user_limit": 3,
+    },
+    {
+        "code": "FREESHIPVIP",
+        "scope": "PLATFORM",
+        "discount_type": "FREE_SHIPPING",
+        "discount_value": 0,
+        "max_discount": None,
+        "min_order_value": 500_000,
+        "usage_limit": 50,
+        "per_user_limit": 1,
+    },
+    # --- Shop vouchers (seller-scoped, applies to seller order) ---
+    # Demo Seller 1 (demo.seller@marketplace.local)
+    {
+        "code": "SHOP15",
+        "scope": "SHOP",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 1500,  # 15%
+        "max_discount": 75_000,
+        "min_order_value": 150_000,
+        "usage_limit": 50,
+        "per_user_limit": 1,
+        "_seller_email": DEMO_SELLER_EMAIL,
+    },
+    {
+        "code": "SHOP30K",
+        "scope": "SHOP",
+        "discount_type": "FIXED_AMOUNT",
+        "discount_value": 30_000,
+        "max_discount": None,
+        "min_order_value": 200_000,
+        "usage_limit": 40,
+        "per_user_limit": 1,
+        "_seller_email": DEMO_SELLER_EMAIL,
+    },
+    # Seller 2 (seller@example.com)
+    {
+        "code": "SHOP2DEAL",
+        "scope": "SHOP",
+        "discount_type": "PERCENTAGE",
+        "discount_value": 500,  # 5%
+        "max_discount": 20_000,
+        "min_order_value": 50_000,
+        "usage_limit": 100,
+        "per_user_limit": 2,
+        "_seller_email": "seller@example.com",
+    },
+    {
+        "code": "WELCOME20K",
+        "scope": "SHOP",
+        "discount_type": "FIXED_AMOUNT",
+        "discount_value": 20_000,
+        "max_discount": None,
+        "min_order_value": 0,
+        "usage_limit": None,
+        "per_user_limit": 1,
+        "_seller_email": "seller@example.com",
+    },
+]
+
+
+def seed_demo_vouchers(session: Session, users: dict[str, User]) -> int:
+    """Upsert demo vouchers by code; skip any code that already exists.
+
+    Returns the number of vouchers newly inserted.
+    """
+    now = datetime.now(UTC)
+    starts = datetime(2026, 1, 1, tzinfo=UTC)
+    ends = datetime(2027, 12, 31, 23, 59, 59, tzinfo=UTC)
+    inserted = 0
+    for entry in DEMO_VOUCHERS:
+        code = entry["code"]
+        if session.exec(select(Voucher).where(Voucher.code == code)).first():
+            continue
+        seller_id: int | None = None
+        if entry.get("_seller_email"):
+            seller = users.get(entry["_seller_email"])
+            if seller is None:
+                continue
+            seller_id = seller.id
+        voucher = Voucher(
+            code=code,
+            scope=entry["scope"],
+            seller_id=seller_id,
+            discount_type=entry["discount_type"],
+            discount_value=entry["discount_value"],
+            max_discount=entry.get("max_discount"),
+            min_order_value=entry.get("min_order_value", 0),
+            usage_limit=entry.get("usage_limit"),
+            per_user_limit=entry.get("per_user_limit"),
+            used_count=0,
+            is_active=True,
+            starts_at=starts,
+            ends_at=ends,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(voucher)
+        inserted += 1
+    return inserted
 
 
 def _seed_demo_scenarios(session: Session) -> bool:
@@ -727,7 +939,7 @@ def _seed_demo_scenarios(session: Session) -> bool:
                 unit_price=product.price,
             )
         )
-    seed_categories(session)
+    categories = seed_categories(session)
     demo_sales_map = {
         "P-DEMO-PENDING": 1,
         "P-DEMO-PROCESS": 2,
@@ -743,13 +955,23 @@ def _seed_demo_scenarios(session: Session) -> bool:
                 session.add(
                     ProductMetadata(
                         product_id=product.id,
-                        category_id=6,
+                        category_id=categories["office-desk"].id,
                         rating=4.0,
                         sales_count=demo_sales_map.get(code, 0),
                         created_at=DEMO_DATE,
                     )
                 )
+    seed_demo_vouchers(session, users)
     return True
+
+
+def seed_vouchers() -> int:
+    """Standalone seeding function for demo vouchers."""
+    init_db()
+    with Session(engine) as session, session.begin():
+        users = seed_users(session)
+        inserted = seed_demo_vouchers(session, users)
+    return inserted
 
 
 def seed_demo_scenarios() -> bool:
@@ -758,8 +980,15 @@ def seed_demo_scenarios() -> bool:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed the catalog and optional P0 demo scenarios.")
-    parser.add_argument("--demo", action="store_true", help="Add carts and sample orders once")
+    parser = argparse.ArgumentParser(
+        description="Seed the catalog, demo scenarios, and test vouchers."
+    )
+    parser.add_argument(
+        "--demo", action="store_true", help="Add carts, sample orders, and vouchers once"
+    )
+    parser.add_argument(
+        "--vouchers", action="store_true", help="Add test vouchers with different codes"
+    )
     args = parser.parse_args()
     counts, created, total = _run_seed(catalog=True, demo=args.demo)
     _print_catalog(counts)
@@ -768,6 +997,9 @@ def main() -> None:
             "Demo scenarios: added" if created else "Demo scenarios: already installed (unchanged)"
         )
         print(f"Products after demo seed: {total}")
+    if args.vouchers:
+        num = seed_vouchers()
+        print(f"Test vouchers: {num} newly inserted ({len(DEMO_VOUCHERS)} total available)")
 
 
 if __name__ == "__main__":
