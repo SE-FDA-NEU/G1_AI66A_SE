@@ -1,0 +1,32 @@
+{
+  "hosting": {
+    "public": "public",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      { "source": "/", "destination": "/products.html" },
+      { "source": "/products", "destination": "/products.html" },
+      { "source": "/products/**", "destination": "/product-detail.html" },
+      { "source": "/login", "destination": "/login.html" },
+      { "source": "/cart", "destination": "/cart.html" },
+      { "source": "/checkout", "destination": "/checkout.html" },
+      { "source": "/checkout/confirmation/**", "destination": "/confirmation.html" },
+      { "source": "/orders", "destination": "/order.html" },
+      { "source": "/orders/**", "destination": "/order.html" },
+      { "source": "/order/**", "destination": "/order.html" },
+      { "source": "/notifications", "destination": "/notifications.html" },
+      { "source": "/seller/orders", "destination": "/seller-orders.html" },
+      { "source": "/seller/analytics/**", "destination": "/seller-analytics.html" },
+      { "source": "/seller/analytics", "destination": "/seller-analytics.html" },
+      { "source": "/seller/products/new", "destination": "/seller-product-new.html" },
+      { "source": "/seller/products", "destination": "/seller-products.html" },
+      { "source": "/seller/vouchers", "destination": "/seller-vouchers.html" },
+      { "source": "/admin", "destination": "/admin-portal.html" },
+      { "source": "/admin/**", "destination": "/admin-portal.html" }
+    ]
+  }
+}
