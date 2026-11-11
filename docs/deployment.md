@@ -73,12 +73,63 @@ Firebase-provided `firebaseapp.com` alias). Record the actual URL and
 screenshots as verification evidence; this repository does not claim a deploy
 or browser review that has not been performed.
 
-## API dependency
+## API and tunnel (#240)
 
-The pages use relative `/api/v1/...` requests because the existing application
-serves frontend and API from one origin locally. Firebase Hosting serves the
-static pages only. To make authenticated data operations work in a hosted
-preview, the backend tunnel must expose the API under the same public origin
-or a separately agreed Hosting rewrite must be added after the tunnel URL and
-security policy are known. No tunnel URL, credential, or secret is committed
-here.
+Use the separate persistent demo database and backup procedure in
+[demo-sqlite.md](demo-sqlite.md). On the backend host, set `DATABASE_URL`,
+`DEBUG=false`, a private strong `SECRET_KEY`, and `APP_HOST=127.0.0.1` in the
+environment. Set `CORS_ORIGINS` to a JSON list of the exact Firebase frontend
+origins in use, for example `["https://mini-marketplace-se.web.app"]`; include
+the `firebaseapp.com` or preview origin only if used. Never put the secret in
+the frontend or Git. Restart the backend after configuration changes.
+
+On the initial demo host, the private `.env.demo` file contains these settings
+and points to `data/demo/marketplace.db`. Load it in Bash with `set -a; source
+.env.demo; set +a` before starting the backend. Keep that file private and
+back it up securely if the signing secret must survive a host replacement. The
+database and environment file are ignored by Git.
+
+Start `python -m src.main` and, in another terminal, start Cloudflare's
+`cloudflared tunnel --url http://127.0.0.1:8000`. The Quick Tunnel prints an
+HTTPS URL; it is public and changes when a new tunnel is created. Confirm both
+local and public `/health` report `database: connected`. Stop each process with
+Ctrl+C; restart the backend with the same database path, then restart the tunnel.
+Availability depends on both processes and the host remaining online. Protect
+demo accounts and data: CORS does not prevent non-browser clients from calling
+the public API. Quick Tunnel is for testing, not production.
+The demo seed contains publicly documented default credentials, including an
+administrator account; anyone who can reach the tunnel can use them. Use only
+disposable test data and restrict access or replace those credentials before
+placing sensitive data in the demo.
+
+Export and deploy using the printed tunnel origin (no trailing path), for example:
+
+```bash
+export MARKETPLACE_API_ORIGIN=https://example.trycloudflare.com
+python scripts/export_frontend.py
+firebase hosting:channel:deploy preview
+```
+
+PowerShell: `$env:MARKETPLACE_API_ORIGIN = 'https://example.trycloudflare.com'`.
+The export generates `static/backend-config.js` with this one public origin.
+When the tunnel URL changes, update this variable and export/deploy again.
+Without it, local development uses same-origin API calls. Uploaded files stay on
+the backend host and are excluded from Hosting export. The existing upload API
+stores absolute image URLs, so products uploaded through an old tunnel retain
+the old hostname: use a stable tunnel hostname or update those images through
+the application after a tunnel change. Do not silently rewrite historical URLs.
+
+Check preflight with the actual origin and tunnel URL:
+
+```bash
+curl -i -X OPTIONS "$MARKETPLACE_API_ORIGIN/api/v1/orders" \
+  -H 'Origin: https://mini-marketplace-se.web.app' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization,content-type,idempotency-key'
+```
+
+Confirm the response permits the specific origin, method and headers. Then test
+login, role authorization, catalog and images, cart/checkout and notifications
+from the actual Hosting URL in a browser; stop the tunnel and verify errors and
+recovery, then repeat on mobile. Record actual URLs and outcomes. Do not treat a
+successful export, `/health`, or automated tests as a completed hosted smoke test.

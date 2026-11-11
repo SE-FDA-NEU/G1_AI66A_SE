@@ -487,7 +487,7 @@ function renderOrder(order) {
     if (item.image_url) {
       const image = document.createElement("img");
       image.className = "order-item-image";
-      image.src = item.image_url;
+      image.src = window.marketplaceImageUrl?.(item.image_url) || item.image_url;
       image.alt = item.product_name;
       image.loading = "lazy";
       tdName.appendChild(image);

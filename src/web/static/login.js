@@ -40,7 +40,9 @@ form.addEventListener("submit", async (event) => {
     localStorage.setItem("access_token", payload.access_token);
     window.location.assign(getReturnDestination(payload.user?.role));
   } catch (reason) {
-    error.textContent = reason instanceof Error ? reason.message : "Unable to log in.";
+    error.textContent = reason instanceof TypeError
+      ? "Cannot reach the server. Check your connection and try again."
+      : reason instanceof Error ? reason.message : "Unable to log in. Please try again.";
     error.hidden = false;
   }
 });
