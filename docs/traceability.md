@@ -700,6 +700,28 @@ stale requests, mobile rendering, and direct-API refusal without writes.
 Exclusions: new roles/APIs, database migrations, pricing or stock-policy changes,
 and unrelated seller/admin screen redesign.
 
+## Firebase Hosting export (#230)
+
+Requirement: publish the existing browser frontend over Firebase Hosting with
+direct navigation for product/order detail, authentication, cart, checkout,
+notifications, seller and admin pages, while excluding backend and local data.
+
+Contract: `.firebaserc` selects project `mini-marketplace-se`; `firebase.json`
+maps browser routes to the corresponding static page and leaves unknown routes
+to `public/404.html`; `scripts/export_frontend.py` is the reproducible
+allow-list export contract. Deployment and verification steps are in
+[deployment.md](deployment.md).
+
+Implementation: the exporter copies only `src/web/pages` and `src/web/static`
+into the ignored `public/` directory and generates the not-found page. Hosting
+configuration and the expected public URL are version controlled; Firebase
+account/site creation, preview deployment, screenshots and human review remain
+external delivery evidence and are not claimed by this change.
+
+Verification: `tests/test_firebase_export.py::test_export_contains_only_allowlisted_frontend_files`
+checks the generated artifact boundary. Exclusions: backend/API deployment,
+tunnel configuration, Firebase credentials, database files and frontend
+redesign.
 ## Seller review interface (#225)
 
 Requirement: Seller should have one review area on product details. The
