@@ -17,8 +17,17 @@ def clean_detail_data():
     with Session(engine) as session:
         session.exec(delete(CartItem))
         session.exec(delete(Product))
-        session.exec(delete(User).where(User.id == 20))
+        session.exec(delete(User).where(User.id.in_([20, 21])))
         session.commit()
+        session.add(
+            User(
+                id=21,
+                name="Detail Seller",
+                email="detail.seller@marketplace.local",
+                role="seller",
+                password_hash=hash_password("password"),
+            )
+        )
         session.add(
             User(
                 id=20,
@@ -28,11 +37,12 @@ def clean_detail_data():
                 password_hash=hash_password("password"),
             )
         )
+        session.commit()  # parents must exist before products reference the seller
         session.add_all(
             [
                 Product(
                     code="DETAIL-1",
-                    seller_id=1,
+                    seller_id=21,
                     name="Detail product",
                     description="A full product description.",
                     price=125,
@@ -42,7 +52,7 @@ def clean_detail_data():
                 ),
                 Product(
                     code="EMPTY-1",
-                    seller_id=1,
+                    seller_id=21,
                     name="Empty product",
                     price=125,
                     stock_quantity=0,
@@ -50,7 +60,7 @@ def clean_detail_data():
                 ),
                 Product(
                     code="HIDDEN-1",
-                    seller_id=1,
+                    seller_id=21,
                     name="Hidden product",
                     price=125,
                     stock_quantity=5,
@@ -63,7 +73,7 @@ def clean_detail_data():
     with Session(engine) as session:
         session.exec(delete(CartItem))
         session.exec(delete(Product))
-        session.exec(delete(User).where(User.id == 20))
+        session.exec(delete(User).where(User.id.in_([20, 21])))
         session.commit()
 
 
