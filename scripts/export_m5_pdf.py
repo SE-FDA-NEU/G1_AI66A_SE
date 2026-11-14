@@ -34,6 +34,11 @@ p {{ margin: 0 0 14pt; }}
 a {{ color: #164c9d; overflow-wrap: anywhere; }}
 code {{ font-family: inherit; font-size: inherit; }}
 img {{ max-width: 100%; }}
+table {{ border-collapse: collapse; width: 100%; margin: 0 0 14pt; font-size: 10.5pt; line-height: 1.3; }}
+th, td {{ border: 1px solid #222; padding: 4pt 6pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
+th {{ background: #f0f0f0; }}
+tr {{ break-inside: avoid; }}
+thead {{ display: table-header-group; }}
 """
     with tempfile.TemporaryDirectory(prefix="marketplace-m5-") as tmp:
         path = Path(tmp) / "submission.html"
