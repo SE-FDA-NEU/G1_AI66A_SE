@@ -50,7 +50,7 @@ def test_demo_seed_accounts_stock_carts_and_order_consistency(seeded):
             assert row.password_hash != "password"
             assert verify_password("password", row.password_hash)
         products = {row.code: row for row in session.exec(select(Product)).all()}
-        assert len(products) == 51
+        assert len(products) == 53
         assert products["P-DEMO-OUT"].stock_quantity == 0
         lines = session.exec(select(CartItem)).all()
         assert len(lines) == 1 and lines[0].quantity == 2
@@ -199,12 +199,12 @@ def test_demo_cli_on_fresh_sqlite_and_rerun(tmp_path):
     path = tmp_path / "cli-demo.db"
     first_output = run_python(["-m", "src.seed", "--demo"], path)
     assert "Demo scenarios: added" in first_output
-    assert "Products after demo seed: 51" in first_output
+    assert "Products after demo seed: 53" in first_output
     assert "already installed (unchanged)" in run_python(["-m", "src.seed", "--demo"], path)
     with closing(sqlite3.connect(path)) as connection:
         for table, expected in [
             ("users", 5),
-            ("products", 51),
+            ("products", 53),
             ("cart_items", 1),
             ("orders", 4),
             ("seller_orders", 4),
@@ -251,7 +251,7 @@ def test_demo_accounts_cart_catalog_and_receipt_api(seeded):
                     client.get(f"/api/v1/orders/{orders[0].id}", headers=headers).status_code == 404
                 )
         catalog = client.get("/api/v1/products?limit=100").json()
-        assert catalog["meta"]["total"] == 50
+        assert catalog["meta"]["total"] == 52
         assert "P-DEMO-OUT" not in {row["code"] for row in catalog["data"]}
         detail = client.get("/api/v1/products/P-DEMO-OUT")
         assert detail.json()["stock_status"] == "out_of_stock"
@@ -275,7 +275,7 @@ def test_parallel_cli_seeding_on_fresh_database_is_idempotent(tmp_path, demo):
     with closing(sqlite3.connect(path)) as connection:
         assert connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 5
         assert connection.execute("SELECT COUNT(*) FROM products").fetchone()[0] == (
-            51 if demo else 45
+            53 if demo else 47
         )
         assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == (4 if demo else 0)
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
@@ -305,7 +305,7 @@ def test_cli_demo_transaction_rolls_back_catalog_and_users_too(tmp_path, monkeyp
             connection.execute(text("DROP TRIGGER fail_demo"))
         seed._run_seed(catalog=True, demo=True)
         with Session(value) as session:
-            assert len(session.exec(select(Product)).all()) == 51
+            assert len(session.exec(select(Product)).all()) == 53
             assert len(session.exec(select(Order)).all()) == 4
     finally:
         value.dispose()
@@ -320,7 +320,7 @@ def test_fresh_nested_database_path_with_spaces_and_unicode(tmp_path):
     path = tmp_path / "nested data" / "donn\u00e9es" / "demo.db"
     assert not path.parent.exists()
     output = run_python(["-m", "src.seed", "--demo"], path)
-    assert "Products after demo seed: 51" in output
+    assert "Products after demo seed: 53" in output
     assert path.is_file()
     assert "already installed" in run_python(["-m", "src.seed", "--demo"], path)
     with closing(sqlite3.connect(path)) as connection:
@@ -332,5 +332,5 @@ def test_explicit_migration_then_seed_on_fresh_database(tmp_path):
 
     path = tmp_path / "migrated.db"
     assert "initialization completed" in run_python(["-m", "src.database"], path)
-    assert "Products after demo seed: 51" in run_python(["-m", "src.seed", "--demo"], path)
+    assert "Products after demo seed: 53" in run_python(["-m", "src.seed", "--demo"], path)
     assert "already installed" in run_python(["-m", "src.seed", "--demo"], path)

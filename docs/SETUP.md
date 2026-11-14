@@ -122,12 +122,12 @@ model (`users`, `products`, `cart_items`, `orders`, `seller_orders`,
 `order_items`), applies lightweight schema migrations (such as adding
 `password_hash` if upgrading an existing SQLite database), and provisions
 standard development buyer and seller accounts with usable hashed passwords
-alongside the 45 sample products. Expected output on a new database:
+alongside the 47 sample products. Expected output on a new database:
 
 ```text
-Added: 45 products
-Total products: 45
-Active products: 45
+Added: 47 products
+Total products: 47
+Active products: 47
 ```
 
 If you explicitly enable `DEBUG=true`, SQLAlchemy also prints every SQL
@@ -137,7 +137,7 @@ statement as `INFO sqlalchemy.engine.Engine ...` lines, including one
 - **Development Accounts & Usable Credentials:**
   | Account | Email | Password | Role | Purpose |
   |---|---|---|---|---|
-  | Primary Seller | `demo.seller@marketplace.local` | `password` | `seller` | Owns all 45 seeded catalog products |
+  | Primary Seller | `demo.seller@marketplace.local` | `password` | `seller` | Owns all 47 seeded catalog products |
   | Alternate Seller | `seller@example.com` | `password` | `seller` | Convenient standard email for seller testing |
   | Primary Buyer | `user@example.com` | `password` | `buyer` | Standard buyer account for checkout and auth testing |
   | Alternate Buyer | `demo.buyer@marketplace.local` | `password` | `buyer` | Local domain buyer account |
@@ -148,7 +148,7 @@ statement as `INFO sqlalchemy.engine.Engine ...` lines, including one
     - **PowerShell:** `Remove-Item marketplace.db -ErrorAction SilentlyContinue; python -m src.seed`
     - **Command Prompt:** `if exist marketplace.db del marketplace.db & python -m src.seed`
     - **macOS / Linux:** `rm -f marketplace.db && python -m src.seed`
-- Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 45) and ensures password hashes on existing seed users are populated.
+- Running `python -m src.seed` again adds nothing (`Added: 0 products`, total still 47) and ensures password hashes on existing seed users are populated.
 - A database that already holds other products reports a different total. Use a new database file for a fresh-machine check.
 - Optional: `python -m src.database` creates the missing tables and runs migrations without sample data and prints `Database initialization completed successfully.`
 - The database file `marketplace.db` is created in the repository root and is ignored by Git. Never commit it.
@@ -175,8 +175,8 @@ Leave this terminal open while you use the app; stop it with `Ctrl+C`.
 
 | Check | Exact expected result |
 |---|---|
-| http://127.0.0.1:8000/products | Heading "Products" and 20 product cards. The first card shows "Wireless Mouse", "180.000 ₫" and "In Stock". Images show a grey placeholder because the seeded image URLs are not served. |
-| http://127.0.0.1:8000/api/v1/products?page=1&limit=20 | JSON with 20 items in `data`, the first with `"code": "P-100"`, and `"meta": {"current_page": 1, "limit": 20, "total": 45, "total_pages": 3}` |
+| http://127.0.0.1:8000/products | Heading "Products" and 20 product cards on a fresh seed. The `P-100` listing is the AULA S13 wired gaming mouse; images use their source URLs and fall back to a placeholder if unavailable. |
+| http://127.0.0.1:8000/api/v1/products?page=1&limit=20 | JSON with 20 items in `data`, the first with `"code": "P-100"`, and `"meta": {"current_page": 1, "limit": 20, "total": 47, "total_pages": 3}` |
 | http://127.0.0.1:8000/health | `{"status":"ok","version":"0.1.0","environment":"development","database":"connected"}` |
 | http://127.0.0.1:8000/ | A browser is sent to `/products`; `curl http://127.0.0.1:8000/` (no HTML `Accept` header) gets JSON with `"status": "running"` |
 | http://127.0.0.1:8000/docs | Swagger UI listing the API |
@@ -344,10 +344,10 @@ See [checkout verification](evidence/us04.md) for the buyer checkout/receipt flo
 
 ### 8.1 Choose the dataset
 
-`python -m src.seed` keeps the original 45-product catalog command and automated
-walking-skeleton contract. Use `python -m src.seed --demo` for the full P0 demo.
+`python -m src.seed` loads the current 47-product catalog; the walking-skeleton
+contract for a 45-product input remains independently tested. Use `python -m src.seed --demo` for the full P0 demo.
 The CLI applies schema initialization/migrations first, then inserts accounts,
-catalog and all requested demo scenarios in a single data transaction. On a clean database: 4 users, 51 products (50 visible in catalog),
+catalog and all requested demo scenarios in a single data transaction. On a clean database: 5 users, 53 products (52 visible in catalog),
 1 cart line, 4 orders, 4 seller orders, 4 order items. Active out-of-stock products
 are intentionally hidden from the catalog but accessible by their detail URL.
 
@@ -418,10 +418,10 @@ python -m ruff check src tests
 python -m src.main
 ```
 
-First run core output: Added: 45 products; Total products: 45; Active products: 45;
-then Demo scenarios: added and Products after demo seed: 51. Second run core output:
-Added: 0 products; Total products: 51; then Demo scenarios: already installed
-(unchanged), final products 51. Stop the server with Ctrl+C when finished.
+First run core output: Added: 47 products; Total products: 47; Active products: 47;
+then Demo scenarios: added and Products after demo seed: 53. Second run core output:
+Added: 0 products; Total products: 53; then Demo scenarios: already installed
+(unchanged), final products 53. Stop the server with Ctrl+C when finished.
 DATABASE_URL/DEBUG process variables override .env and must remain set when starting
 that server. If you use another terminal, set the same variables there.
 
@@ -472,7 +472,7 @@ A tester other than the current SETUP author must perform the fresh run and
 complete [the #84 evidence record](evidence/setup84.md). The old #52 check in
 section 7 does not satisfy this requirement for the current commit.
 
-Check /health, /products and /api/v1/products?limit=100 (total 50 on a fresh demo).
+Check /health, /products and /api/v1/products?limit=100 (total 52 on a fresh demo).
 Check /products/P-DEMO-OUT for out-of-stock detail. Log in each buyer and compare
 cart states; the primary total is 200000 VND. Use the primary buyer to load a seeded
 receipt (derive its actual ID from database/API; never assume ID=1). Log in each

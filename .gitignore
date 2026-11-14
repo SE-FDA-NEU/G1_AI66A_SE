@@ -5,6 +5,9 @@
 *.pem
 *.key
 credentials.json
+.local-secrets/
+# Firebase service-account keys downloaded for this project
+mini-marketplace-se-*.json
 
 # Databases and dumps
 *.sqlite

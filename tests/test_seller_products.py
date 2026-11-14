@@ -625,12 +625,13 @@ def test_form_page_and_its_assets_are_served_to_anyone(api):
         ("description", "Description *"),
         ("price", "Price (₫) *"),
         ("stock_quantity", "Stock quantity *"),
-        ("image_url", "Image URL or upload *"),
+        ("image_url", "Image URL"),
     ]:
         assert f'name="{field}"' in html
         assert f">{label}</label>" in html
         assert f'id="{field}-error"' in html
     assert "Create listing" in html and 'role="alert"' in html
+    assert "<legend>Image URL or upload *</legend>" in html
     assert 'name="image_file"' in html
     for asset, content_type in [
         ("/static/seller-product-new.js", "javascript"),

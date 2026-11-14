@@ -1,2 +1,0 @@
-# Optional dependency used only by scripts/seed_firestore.py.
-firebase-admin>=6.5.0

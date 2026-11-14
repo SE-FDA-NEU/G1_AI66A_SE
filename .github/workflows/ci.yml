@@ -79,6 +79,8 @@ jobs:
           node tests/notification_badge_ui.mjs
           node tests/catalog_ui.mjs
           node tests/buyer_returns_ui.mjs
+          node tests/backend_runtime_ui.mjs
+          node tests/google_signin_ui.mjs
 
       - name: Publish test summary
         if: always()
@@ -153,3 +155,53 @@ jobs:
             exit 1
           fi
           echo "Clean."
+
+  deploy_firebase:
+    name: Deploy Firebase Hosting
+    needs: [detect, python, node, secrets]
+    if: >-
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.detect.result == 'success' && needs.python.result == 'success' &&
+      needs.secrets.result == 'success' &&
+      (needs.detect.outputs.node != 'true' || needs.node.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: firebase-hosting-live
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify this commit is still the tip of main
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo '::error::A newer commit is on main; refusing to deploy an older run.'
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate deployment settings and export frontend
+        env:
+          MARKETPLACE_API_ORIGIN: ${{ vars.MARKETPLACE_API_ORIGIN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$MARKETPLACE_API_ORIGIN" ] || [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo '::error::Configure MARKETPLACE_API_ORIGIN and FIREBASE_SERVICE_ACCOUNT first.'
+            exit 1
+          fi
+          python scripts/export_frontend.py
+
+      - name: Deploy live Hosting site
+        uses: FirebaseExtended/action-hosting-deploy@7c850a480ce753f4f06f010801fc5a43787740bb # v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          firebaseToolsVersion: 15.12.0
+          projectId: mini-marketplace-se
+          channelId: live

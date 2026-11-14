@@ -10,6 +10,10 @@ from src.models.cart_item import CartItem
 from src.models.product import Product
 from src.models.user import User
 
+# High fixed ids cannot collide with auto-numbered users created by other test modules.
+BUYER_ID = 9020
+SELLER_ID = 9021
+
 
 @pytest.fixture(autouse=True)
 def clean_detail_data():
@@ -17,22 +21,32 @@ def clean_detail_data():
     with Session(engine) as session:
         session.exec(delete(CartItem))
         session.exec(delete(Product))
-        session.exec(delete(User).where(User.id == 20))
+        session.exec(delete(User).where(User.id.in_([BUYER_ID, SELLER_ID])))
         session.commit()
         session.add(
             User(
-                id=20,
+                id=SELLER_ID,
+                name="Detail Seller",
+                email="detail.seller@marketplace.local",
+                role="seller",
+                password_hash=hash_password("password"),
+            )
+        )
+        session.add(
+            User(
+                id=BUYER_ID,
                 name="Detail Buyer",
                 email="detail.buyer@marketplace.local",
                 role="buyer",
                 password_hash=hash_password("password"),
             )
         )
+        session.commit()  # parents must exist before products reference the seller
         session.add_all(
             [
                 Product(
                     code="DETAIL-1",
-                    seller_id=1,
+                    seller_id=SELLER_ID,
                     name="Detail product",
                     description="A full product description.",
                     price=125,
@@ -42,7 +56,7 @@ def clean_detail_data():
                 ),
                 Product(
                     code="EMPTY-1",
-                    seller_id=1,
+                    seller_id=SELLER_ID,
                     name="Empty product",
                     price=125,
                     stock_quantity=0,
@@ -50,7 +64,7 @@ def clean_detail_data():
                 ),
                 Product(
                     code="HIDDEN-1",
-                    seller_id=1,
+                    seller_id=SELLER_ID,
                     name="Hidden product",
                     price=125,
                     stock_quantity=5,
@@ -63,13 +77,13 @@ def clean_detail_data():
     with Session(engine) as session:
         session.exec(delete(CartItem))
         session.exec(delete(Product))
-        session.exec(delete(User).where(User.id == 20))
+        session.exec(delete(User).where(User.id.in_([BUYER_ID, SELLER_ID])))
         session.commit()
 
 
 def buyer_headers() -> dict[str, str]:
     with Session(engine) as session:
-        buyer = session.get(User, 20)
+        buyer = session.get(User, BUYER_ID)
         assert buyer is not None
         return {"Authorization": f"Bearer {create_access_token(buyer)}"}
 
@@ -132,7 +146,7 @@ def select_cart_item():
     """Keep the test query local and explicit."""
     from sqlmodel import select
 
-    return select(CartItem).where(CartItem.buyer_id == 20)
+    return select(CartItem).where(CartItem.buyer_id == BUYER_ID)
 
 
 def test_guest_cannot_add_product_to_cart(client: TestClient) -> None:
@@ -187,7 +201,7 @@ def test_database_failure_returns_json_error_contract() -> None:
     from src.main import create_app
 
     with Session(engine) as s:
-        seeded_buyer = s.get(User, 20)
+        seeded_buyer = s.get(User, BUYER_ID)
 
     class BrokenSession:
         def get(self, model, ident):
@@ -258,7 +272,7 @@ def setup_concurrency_db(tmp_path: Path, stock_qty: int = 6, initial_cart_qty: i
             password_hash=hash_password("password"),
         )
         buyer = User(
-            id=20,
+            id=BUYER_ID,
             name="Detail Buyer",
             email="detail.buyer@marketplace.local",
             role="buyer",
@@ -276,7 +290,7 @@ def setup_concurrency_db(tmp_path: Path, stock_qty: int = 6, initial_cart_qty: i
         )
         session.add_all([seller, buyer, product])
         if initial_cart_qty > 0:
-            session.add(CartItem(buyer_id=20, product_id=1, quantity=initial_cart_qty))
+            session.add(CartItem(buyer_id=BUYER_ID, product_id=1, quantity=initial_cart_qty))
         session.commit()
         token = create_access_token(buyer)
 
