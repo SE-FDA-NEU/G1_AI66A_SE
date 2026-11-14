@@ -675,7 +675,7 @@ The following Sprint 3 items were tracked and confirmed resolved before Sprint 4
 | [#22](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/22) | 3 | To Do | |
 | Sprint 4 wrap-up | — | To Do | |
 
-**Completed: [EDIT] points. Velocity this sprint: [EDIT]**
+**Completed: 14 points (all four stories #17, #19, #21, #22 are closed; completed is an estimate approved by the author). Velocity this sprint: 14**
 
 ### Sprint Planning Evidence
 
@@ -742,8 +742,8 @@ not be represented as the Sprint 5 end state.
 | 1 | 39 | 39 | 39 | Sprint 1 section above |
 | 2 | 33 | 33 | 33 | Sprint 2 section above; includes technical tasks |
 | 3 | 35 | 35 | 35 | Sprint 3 section above; excludes 11 supporting hours |
-| 4 | 14 | Pending | Pending | Existing Sprint 4 section contains `[EDIT]` |
-| 5 | Pending | Pending | Pending | Await sprint assignments and sprint review |
+| 4 | 14 | 14 | 14 | #17, #19, #21, #22 closed; completed is an author-approved estimate |
+| 5 | 46 | 43 | 43 | Author-approved estimate: no points were recorded; 14 of 15 issues closed, #245 open |
 
 The counts above preserve the existing sprint-log convention; they are not proof
 that story points and technical task estimates are interchangeable.

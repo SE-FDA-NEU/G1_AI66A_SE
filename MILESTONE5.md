@@ -13,7 +13,7 @@ Scrum Master: @MinhQuangQu - Nguyen Quang Minh (Sprint 5)
 
 Repository: https://github.com/SE-FDA-NEU/G1_AI66A_SE
 
-Release v1.0: https://github.com/SE-FDA-NEU/G1_AI66A_SE/releases/tag/v1.0 (to be created on commit `f826537`; not yet published when this snapshot was written)
+Release v1.0: https://github.com/SE-FDA-NEU/G1_AI66A_SE/releases/tag/v1.0
 
 Latest green CI run on main: https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43567135851
 
@@ -26,13 +26,13 @@ Test accounts: see the first screen of README.md.
 **Team 01 - Mini Marketplace**  
 **Evidence snapshot:** 14 November 2026  
 **Reviewed main commit:** `f826537` (merge of PR #247)  
-**Status:** PR #247 merged; main CI green and frontend deployed by CI; `v1.0` release, branch-protection screenshot and sprint points outstanding.
+**Status:** PR #247 merged; main CI green and frontend deployed by CI; release `v1.0` published on `f826537`; branch-protection screenshot outstanding; sprint points are author-approved estimates.
 
 The submission block follows the Sprint 5 brief. Member names, student IDs and
 the Sprint 5 Scrum Master follow the information supplied by the author. Sprint 4/5
-result fields remain blank at the author's request. The linked green CI run is the
+result fields were estimated by the assistant with the author's permission (see 5.1). The linked green CI run is the
 run on the reviewed main commit `f826537`, which also deployed the frontend.
-Blank fields must be completed before submission.
+The team should replace the estimates with its own accepted-work records if they differ.
 
 This single document combines the submission information, product entry points,
 seven-section operations draft, weekly issue/PR evidence, sprint summary and
@@ -193,9 +193,9 @@ inspect logs and rerun a read-only smoke check. Alerting is not yet verified.
 ### 2.7. Release and handoff checks
 
 Issue #245 stays open until the team accepts the handoff; PR #247 is merged. The
-author identifies @MinhQuangQu as Sprint 5 Scrum Master. Remaining: publish the
-`v1.0` release on `f826537`, capture the branch-protection screenshot, confirm
-sprint points and the grading-end date, and run the live desktop/mobile P0
+author identifies @MinhQuangQu as Sprint 5 Scrum Master. Remaining: capture the
+branch-protection screenshot, confirm the estimated sprint points and the
+grading-end date, and run the live desktop/mobile P0
 walkthrough. Keep the host and tunnel available through the confirmed grading
 date. The evidence inventory and finishing checklist are included below.
 
@@ -257,10 +257,10 @@ confirm formal Sprint 5 assignment before marking the sprint requirement done.
 | Four reviewed green merged PRs | Of the eleven earlier PRs only #230 and #231 have green Python heads; #247 is merged, approved and green | Three qualifying PRs established (#230, #231, #247); one more is needed |
 | Per-member contributions | All four members have examples above | Confirm sprint membership and record evidence |
 | SM wrap-up closed | #245 open; @MinhQuangQu is the author-identified SM and assignee | Close only after handoff acceptance |
-| Sprint log and five-sprint table | Merged; Sprint 4/5 result fields intentionally blank | Fill verified points |
+| Sprint log and five-sprint table | Sprint 4/5 filled with author-approved estimates | Replace with accepted-work records if different |
 | README first screen | URL, badge, accounts and P0 links merged | None |
-| `v1.0` matches deployed SHA | Release not yet published; target commit is `f826537` | Create the release on `f826537` |
-| Availability through grades | Brief contains an unspecified grading date | Obtain the date, operator and coverage plan |
+| `v1.0` matches deployed SHA | Release `v1.0` targets `f826537`, the deployed commit | None |
+| Availability through grades | Date set to 14 November 2026 as a placeholder; operator @MinhQuangQu | Confirm the real date |
 
 The earlier green run [42495790436](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/42495790436)
 (commit `2d12635`, 8 November) is superseded by run 43567135851. The failures
@@ -313,9 +313,9 @@ cadence; exact sprint dates remain unconfirmed. Sprint 5 Scrum Master:
 
 | Measure | Value | Why |
 |---|---|---|
-| Committed story points | ____________________ | Intentionally blank; supply the planning baseline |
-| Completed story points | ____________________ | Intentionally blank; supply accepted story points |
-| Velocity | ____________________ | Equals accepted completed story points; fill after confirmation |
+| Committed story points | 46 | **Estimate** (author-approved): 15 issues sized by assistant, no recorded points |
+| Completed story points | 43 | **Estimate**: 14 closed issues; #245 stays open |
+| Velocity | 43 | Equals estimated completed points |
 | Recent issue activity | 14 closed, 1 open | Fifteen candidate-window issues; #245 remains open |
 | Recent PR activity | 12 merged (including #247), 0 open | #246 was closed and recreated as #247 |
 
@@ -324,8 +324,8 @@ cadence; exact sprint dates remain unconfirmed. Sprint 5 Scrum Master:
 | 1 | 39 | 39 | 39 | Historical sprint log; specification work |
 | 2 | 33 | 33 | 33 | Historical log includes technical-task points |
 | 3 | 35 | 35 | 35 | Historical log excludes 11 supporting hours |
-| 4 | ____________________ | ____________________ | ____________________ | Final fields intentionally blank; historical planning log records 14 |
-| 5 | ____________________ | ____________________ | ____________________ | Intentionally blank for author/team completion |
+| 4 | 14 | 14 | 14 | Committed 14 from the planning log; completed is an estimate: #17, #19, #21, #22 are all closed |
+| 5 | 46 | 43 | 43 | **Estimate**, author-approved; sizes: bugs 2, tasks/features 1-5, #245 3 |
 
 Preserve these historical conventions and explain the mixed work types; do not
 recalculate velocity from the whole Project board or convert estimated hours to
@@ -420,10 +420,10 @@ report and explain their own implementation and evidence.
 - [ ] The team has reviewed this report and corrected remaining blank fields.
 - [ ] The author has named contributors and can explain the submitted changes.
 - [ ] A teammate who did not author the work has submitted a substantive review.
-- [ ] The deployed version, green CI, public health and `v1.0` release are verified (CI and deployment verified; release pending).
+- [ ] The deployed version, green CI, public health (tunnel) and `v1.0` release are verified; Hosting `/health` returns 404.
 
 On 14 November the assistant set the `MARKETPLACE_API_ORIGIN` variable, started the
-backend and tunnel, and recreated the PR; it did not merge, review or create a release. Local work for #239 was discarded at the
+backend and tunnel, and recreated the PR; it did not merge, review or create the release. Local work for #239 was discarded at the
 user's request; the report references the merged implementation in PR #242.
 
 ## 9. Continuation handoff
@@ -431,13 +431,13 @@ user's request; the report references the merged implementation in PR #242.
 | Field or evidence | Current state | Who must provide or verify it |
 |---|---|---|
 | Final running HTTPS URL | https://mini-marketplace-se.web.app | Demo operator; test all P0 journeys on phone and laptop |
-| Sprint 4 committed / completed / velocity | ____________________ / ____________________ / ____________________ | Scrum Master, using accepted-work records |
-| Sprint 5 committed / completed / velocity | ____________________ / ____________________ / ____________________ | Scrum Master, using planning and acceptance records |
+| Sprint 4 committed / completed / velocity | 14 / 14 / 14 (completed estimated) | Scrum Master to confirm |
+| Sprint 5 committed / completed / velocity | 46 / 43 / 43 (estimated) | Scrum Master to confirm |
 | Branch protection screenshot | Not captured | Repository maintainer; show approval and required green checks |
 | Latest green main run and deployed SHA | Run 43567135851, commit `f826537`, green and deployed | None; re-verify after any new merge |
-| Release `v1.0` | Not yet published; target `f826537` | Release owner |
+| Release `v1.0` | Published on `f826537` | None |
 | Public `/health` 200 and 503 | Tunnel returns 200; 503 test-covered; Hosting returns 404 | Backend/deployment owner |
-| Grading-end date and availability owner | ____________________ / ____________________ | Team/lecturer |
+| Grading-end date and availability owner | 14 November 2026 (placeholder chosen by the author) / @MinhQuangQu | Team/lecturer to confirm the real date |
 
 Continue from main `f826537`. Preserve supplied member IDs and @MinhQuangQu as the
 author-identified Scrum Master. Do not calculate velocity from issue counts or

@@ -81,8 +81,8 @@ Owners and frequency are proposed; the team must confirm them.
 
 [#245](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/245) closes when the team
 accepts this handoff. The [sprint log](sprint-log.md) records verified issue and
-PR states. Remaining: the `v1.0` release on commit `f826537`, a branch-protection
-screenshot, Sprint 4/5 points and the grading-end date.
+PR states. Release `v1.0` is published on `f826537`. Remaining: a branch-protection
+screenshot and confirming the estimated Sprint 4/5 points and the grading-end date (placeholder 14 November 2026).
 
 To regenerate the PDF after editing `MILESTONE5.md`, install Pandoc and
 Playwright with its Chromium browser, then run
