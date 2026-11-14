@@ -1,9 +1,9 @@
-https://mini-marketplace-se--demo-st26hys4.web.app
+https://mini-marketplace-se.web.app
 
-> **Preview, not the final M5 release:** availability depends on the demo host
-> and tunnel; this preview expires, is not automatically deployed from `main`,
-> and its `/health` route does not yet reach the backend. See
-> [operations](docs/operations.md) for the actual status.
+> The frontend is deployed by CI to Firebase Hosting after every green merge to
+> `main`; the API runs on the demo host behind a temporary Cloudflare Quick Tunnel,
+> so availability depends on that host. The Hosting URL has no `/health` route:
+> probe `<tunnel>/health`. See [operations](docs/operations.md).
 
 [![CI](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/workflows/ci.yml)
 

@@ -1,58 +1,57 @@
 # M5 operations and handoff
 
-Status checked 2026-11-12 (Asia/Shanghai). This is a working draft, not evidence
-of a completed release or the availability required through the grading date.
+Status checked 2026-11-14. Live URL: <https://mini-marketplace-se.web.app>.
+Availability depends on the demo host and a temporary tunnel (see risks below).
 
 ## 1. How to run and release
 
-The [Firebase Hosting preview](https://mini-marketplace-se--demo-st26hys4.web.app)
-serves static assets; a Cloudflare Quick Tunnel forwards API requests to FastAPI
-and SQLite on the demo host. Follow [deployment.md](deployment.md) and
-[demo-sqlite.md](demo-sqlite.md). The current preview was manually deployed.
-This branch adds a CI-gated live Hosting deploy, but it is not active on `main`
-or verified until the branch is merged, credentials configured and a run passes.
-The team must also decide on stable backend hosting. Roll back a
-broken frontend using Firebase Hosting's previous release, and roll back backend
-code by redeploying a previously verified commit; restore data only from a
-verified backup after stopping writes. Preview expiration and the machine being
-offline interrupt the site.
+Firebase Hosting serves the static frontend at
+<https://mini-marketplace-se.web.app>; a Cloudflare Quick Tunnel forwards API
+requests to FastAPI and SQLite on the demo host. Follow [deployment.md](deployment.md)
+and [demo-sqlite.md](demo-sqlite.md). A release is: pull request, review, merge
+into `main`, CI green, then the `Deploy Firebase Hosting` job publishes the
+frontend (verified on main run 43567135851, commit `f826537`). When the tunnel
+URL changes, update the `MARKETPLACE_API_ORIGIN` Actions variable and redeploy.
+Roll back a broken frontend with Firebase Hosting's previous release, or
+`git revert` through a reviewed PR and let CI deploy again. Roll back backend
+code by restarting a previously verified commit; restore data only from a
+verified backup after stopping writes.
 
 ## 2. The CI pipeline
 
-`.github/workflows/ci.yml` detects the stack, installs Python dependencies,
-runs pytest/coverage and browser-script checks, and scans tracked files for
-secrets. The Node job is conditional on a package manifest. Ruff is currently
-warning-only. The [latest checked main run](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43063328416)
-failed with 16 Python tests. The preceding run took about 8 minutes 13 seconds.
-The
-[last green main run found](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/42495790436)
-was on 2026-11-08. It is not the latest commit. Verify required PR review and
-green checks in repository settings; branch-protection access returned 404 and
-no screenshot has been obtained.
+`.github/workflows/ci.yml` detects the stack, installs Python 3.12 dependencies,
+runs pytest with coverage, runs the JavaScript page-script checks, scans tracked
+files for secrets, and on `main` only, after all of those succeed, exports and
+deploys the frontend to Firebase Hosting. The Node job runs only if a package
+manifest exists. Ruff is warning-only. The latest run on `main`
+([43567135851](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43567135851),
+commit `f826537`) is green: 1802 tests passed in about 12 minutes, and the
+deploy job succeeded. Branch protection for `main` is a repository setting;
+attach a screenshot of it before submission.
 
 ## 3. Monitoring
 
 Uvicorn and application logs appear in the backend process terminal; tunnel
-logs appear in the `cloudflared` terminal. Access logs may include client IPs and
-paths, and debug SQL may expose values: keep `DEBUG=false`, restrict log access
-and verify redaction before claiming sensitive data is excluded. Backend
-`/health` checks the database connection with `SELECT 1`; the current deployed
-backend reports `database: disconnected` in a 200 response. This branch changes
-that backend contract to 503, but has not been deployed. Hosting `/health`
-currently returns 404. The team must configure monitoring for error rate and
-response time and assign alert thresholds and owners; no alerts are verified.
+logs appear in the `cloudflared` terminal. Passwords, tokens and request bodies
+must not be logged; keep `DEBUG=false` and restrict log access. Backend
+`/health` runs `SELECT 1` and returns 200 when the database is connected and
+503 when it is not. It is served by the backend, so probe `<tunnel>/health`;
+the Hosting URL has no `/health` route. Watch two numbers: the 5xx error rate
+and response time. Proposed thresholds are 5xx above 1% and p95 above two
+seconds over five minutes; no automated alert exists, so the demo operator
+checks the logs and `/health` daily.
 
 ## 4. Known risks and technical debt
 
 | Item | Layer | What could happen | Plan |
 |---|---|---|---|
-| Latest main CI fails | tests | Broken changes can reach manual preview | #245: triage failed seed counts, snapshots and required labels; obtain a green run. |
-| Deploy pipeline unverified | infrastructure | URL does not match a CI-approved main commit | #245: merge and verify deploy-after-green before release. |
+| Required checks not enforced | tests | A red change could be merged | #245: require the CI checks in the `main` ruleset. |
+| Deploy needs a live tunnel URL | infrastructure | A changed tunnel URL breaks the deployed frontend | #245: update `MARKETPLACE_API_ORIGIN` and redeploy on every tunnel change. |
 | Quick Tunnel and local host | infrastructure | Website API becomes unavailable or URL changes | #245: agree stable endpoint, monitoring and recovery procedure. |
-| Hosted `/health` missing | infrastructure | External readiness check cannot validate service | #245: route a same-origin probe to the backend and verify 200/503 publicly. |
+| `/health` not on the Hosting URL | infrastructure | A probe of the public URL cannot see backend state | #245: probe the tunnel `/health`; accepted until stable hosting exists. |
 | SQLite and uploads on one machine | data | Hardware loss or inconsistent backup loses data | #245: test database and upload backup/restore together. |
 | Google sign-in account linking | code | Existing password users cannot use Google with the same email | #245: carry forward a safe authenticated linking flow; #243 was closed. |
-| M5 evidence incomplete | docs | Submission can misrepresent release readiness | #245: obtain board evidence, CI, tag and team confirmation. |
+| Sprint 4/5 points missing | docs | Velocity table is incomplete | #245: Scrum Master fills verified points. |
 
 ## 5. Maintenance plan
 
@@ -80,14 +79,12 @@ Owners and frequency are proposed; the team must confirm them.
 
 ## 7. Sprint 5 handoff
 
-[#245](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/245) remains open. The
-[sprint log](sprint-log.md) records verified issue/PR states and unknowns;
-the Project board screenshot and end-of-sprint numbers are pending a screenshot,
-sprint assignments and team confirmation. Do not tag `v1.0` or submit the draft until the team has
-reviewed the remaining checks and the URL actually meets the milestone.
+[#245](https://github.com/SE-FDA-NEU/G1_AI66A_SE/issues/245) closes when the team
+accepts this handoff. The [sprint log](sprint-log.md) records verified issue and
+PR states. Remaining: the `v1.0` release on commit `f826537`, a branch-protection
+screenshot, Sprint 4/5 points and the grading-end date.
 
-To regenerate the draft PDF after editing `Team01_M5.md`, install Pandoc and
+To regenerate the PDF after editing `MILESTONE5.md`, install Pandoc and
 Playwright with its Chromium browser, then run
 `python scripts/export_m5_pdf.py --font-dir /path/to/Windows/Fonts`. The folder
-must contain `times.ttf` and `timesbd.ttf`; the script embeds those fonts in the
-PDF. Do not commit the font files. Verify the generated PDF before submission.
+must contain `times.ttf` and `timesbd.ttf`. Do not commit the font files.

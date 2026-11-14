@@ -20,7 +20,7 @@ def main() -> None:
     bold = (args.font_dir / "timesbd.ttf").resolve(strict=True)
 
     html = subprocess.run(
-        ["pandoc", str(ROOT / "Team01_M5.md"), "--from", "markdown", "--to", "html"],
+        ["pandoc", str(ROOT / "MILESTONE5.md"), "--from", "markdown", "--to", "html"],
         capture_output=True,
         text=True,
         check=True,
@@ -53,7 +53,7 @@ code {{ font-family: inherit; font-size: inherit; }}
                 if not page.evaluate("document.fonts.check('12pt M5 Times')"):
                     raise RuntimeError("Times New Roman did not load")
                 page.pdf(
-                    path=str(ROOT / "Team01_M5.pdf"),
+                    path=str(ROOT / "MILESTONE5.pdf"),
                     print_background=True,
                     prefer_css_page_size=True,
                 )
