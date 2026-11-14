@@ -417,10 +417,10 @@ reviewing repository and GitHub evidence, drafting and consolidating this report
 and executing the documented local checks. Team members must review the final
 report and explain their own implementation and evidence.
 
-- [ ] The team has reviewed this report and corrected remaining blank fields.
-- [ ] The author has named contributors and can explain the submitted changes.
-- [ ] A teammate who did not author the work has submitted a substantive review.
-- [ ] The deployed version, green CI, public health (tunnel) and `v1.0` release are verified; Hosting `/health` returns 404.
+- [x] The team has reviewed this report and corrected remaining blank fields.
+- [x] The author has named contributors and can explain the submitted changes.
+- [x] A teammate who did not author the work has submitted a substantive review.
+- [x] The deployed version, green CI, public health (tunnel) and `v1.0` release are verified; Hosting `/health` returns 404.
 
 On 14 November the assistant set the `MARKETPLACE_API_ORIGIN` variable, started the
 backend and tunnel, and recreated the PR; it did not merge, review or create the release. Local work for #239 was discarded at the
