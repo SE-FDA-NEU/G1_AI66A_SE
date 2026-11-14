@@ -33,12 +33,13 @@ body {{ font-family: 'M5 Times', serif; font-size: 12pt; line-height: 1.5; color
 p {{ margin: 0 0 14pt; }}
 a {{ color: #164c9d; overflow-wrap: anywhere; }}
 code {{ font-family: inherit; font-size: inherit; }}
+img {{ max-width: 100%; }}
 """
     with tempfile.TemporaryDirectory(prefix="marketplace-m5-") as tmp:
         path = Path(tmp) / "submission.html"
         path.write_text(
             '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            f"<title>Team 01 M5</title></head><body>{html}</body></html>",
+            f"<base href='{ROOT.as_uri()}/'><title>Team 01 M5</title></head><body>{html}</body></html>",
             encoding="utf-8",
         )
         with sync_playwright() as playwright:

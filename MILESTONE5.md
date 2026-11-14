@@ -135,8 +135,15 @@ tests and deployed the frontend:
 [43567135851](https://github.com/SE-FDA-NEU/G1_AI66A_SE/actions/runs/43567135851).
 The previous main run, 43063328416, had failed with 16 failures and 18 errors.
 Main's active ruleset requires one PR approval; it lists no required status
-checks. Configure those checks and capture a genuine settings screenshot. No such
-screenshot is included here.
+checks. Evidence from the repository page on 14 November: the main page shows
+all checks passed (4 successful, 1 skipped), and the Rulesets page shows the
+organization ruleset `main-protection` (3 branch rules) applying to `main`.
+The screenshots do not show a required-status-check rule, so that rule is not
+claimed.
+
+![Checks on main: all passed, including Deploy Firebase Hosting](docs/images/m5/main-checks-passed.png)
+
+![Organization ruleset main-protection applying to main](docs/images/m5/main-protection-ruleset.png)
 
 ### 2.3. Monitoring
 
@@ -193,9 +200,8 @@ inspect logs and rerun a read-only smoke check. Alerting is not yet verified.
 ### 2.7. Release and handoff checks
 
 Issue #245 stays open until the team accepts the handoff; PR #247 is merged. The
-author identifies @MinhQuangQu as Sprint 5 Scrum Master. Remaining: capture the
-branch-protection screenshot, confirm the estimated sprint points and the
-grading-end date, and run the live desktop/mobile P0
+author identifies @MinhQuangQu as Sprint 5 Scrum Master. Remaining: optionally require the `Python tests` check, confirm the
+estimated sprint points and the grading-end date, and run the live desktop/mobile P0
 walkthrough. Keep the host and tunnel available through the confirmed grading
 date. The evidence inventory and finishing checklist are included below.
 
@@ -253,7 +259,7 @@ confirm formal Sprint 5 assignment before marking the sprint requirement done.
 | Backend available | Backend and a Cloudflare Quick Tunnel were started on 14 November; the deployed frontend points at it | Keep the host awake; redeploy if the tunnel URL changes |
 | Green main CI | Run 43567135851 on `f826537`: 1,802 passed, deploy job succeeded | None |
 | CI-gated deployment | `Deploy Firebase Hosting` ran after green checks on main | Re-verify on the next merge |
-| Protected main | Active organization ruleset requires one approval; no required-status-check rule listed | Require relevant CI checks and attach a genuine settings screenshot |
+| Protected main | Organization ruleset `main-protection` (3 rules, one PR approval) applies to main; screenshots in 2.2; no required-status-check rule listed | Optionally require the `Python tests` check |
 | Four reviewed green merged PRs | Of the eleven earlier PRs only #230 and #231 have green Python heads; #247 is merged, approved and green | Three qualifying PRs established (#230, #231, #247); one more is needed |
 | Per-member contributions | All four members have examples above | Confirm sprint membership and record evidence |
 | SM wrap-up closed | #245 open; @MinhQuangQu is the author-identified SM and assignee | Close only after handoff acceptance |
