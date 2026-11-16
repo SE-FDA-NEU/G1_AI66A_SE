@@ -114,7 +114,7 @@ def _make_item(session, seller_order_id, product_id, qty, price):
 
 
 @pytest.fixture()
-def us18_data():
+def us18_data(request):
     """Insert isolated test rows; teardown deletes only those rows by ID.
 
     No wholesale DELETE is issued on shared tables, so parallel or sequential
@@ -267,7 +267,7 @@ def us18_data():
              product_inactive.id, product_other.id]
         )
 
-        today = datetime.now(UTC)
+        today = getattr(request, "param", None) or datetime.now(UTC)
         yesterday = today - timedelta(days=1)
 
         # Order 1 (COMPLETED, today): 2×PA + 1×PB → revenue = 400 000
@@ -324,6 +324,7 @@ def us18_data():
             "seller_order_ids": seller_order_ids,
             "product_ids": product_ids,
             "user_ids": user_ids,
+            "today": today.date(),
         }
 
     # ---- targeted teardown (only rows we created) -------------------------
@@ -565,9 +566,21 @@ class TestRevenueAnalytics:
                 session.exec(delete(Order).where(Order.id.in_(tracked_orders)))
                 session.commit()
 
-    def test_weekly_metrics_use_the_weekly_bucket(self, client: TestClient, us18_data):
+    @pytest.mark.parametrize(
+        "us18_data,expected_gross,expected_completed,expected_orders,expected_items",
+        [
+            (datetime(2026, 11, 16, 12, tzinfo=UTC), 500_000, 400_000, 1, 3),
+            (datetime(2026, 11, 17, 12, tzinfo=UTC), 1_000_000, 900_000, 2, 8),
+        ],
+        indirect=["us18_data"],
+        ids=["monday-excludes-sunday", "tuesday-includes-monday"],
+    )
+    def test_weekly_metrics_use_the_weekly_bucket(
+        self, client: TestClient, us18_data, expected_gross, expected_completed,
+        expected_orders, expected_items,
+    ):
         seller = us18_data["seller"]
-        today = datetime.now(UTC).date()
+        today = us18_data["today"]
         monday = today - timedelta(days=today.weekday())
         sunday = monday + timedelta(days=6)
         body = client.get(
@@ -578,16 +591,16 @@ class TestRevenueAnalytics:
         assert body["meta"]["period"] == "weekly"
         assert len(body["data"]) == 1
         bucket = body["data"][0]
-        # Yesterday Order 2: 500k COMPLETED, Today Order 1: 400k COMPLETED, Order 3: 100k PENDING
-        assert bucket["gross_order_value"] == 1_000_000
-        assert bucket["completed_revenue"] == 900_000
+        # Yesterday's completed order belongs to the prior week on Monday.
+        assert bucket["gross_order_value"] == expected_gross
+        assert bucket["completed_revenue"] == expected_completed
         assert bucket["pending_escrow_revenue"] == 100_000
-        assert bucket["revenue"] == 900_000
-        assert bucket["orders"] == 2
-        assert bucket["items_sold"] == 8
+        assert bucket["revenue"] == expected_completed
+        assert bucket["orders"] == expected_orders
+        assert bucket["items_sold"] == expected_items
         assert bucket["cancellation_rate"] == 0.0
-        assert body["meta"]["gross_order_value"] == 1_000_000
-        assert body["meta"]["completed_revenue"] == 900_000
+        assert body["meta"]["gross_order_value"] == expected_gross
+        assert body["meta"]["completed_revenue"] == expected_completed
         assert body["meta"]["pending_escrow_revenue"] == 100_000
 
     def test_monthly_metrics_use_monthly_bucket(self, client: TestClient, us18_data):
