@@ -20,7 +20,7 @@ def main() -> None:
     bold = (args.font_dir / "timesbd.ttf").resolve(strict=True)
 
     html = subprocess.run(
-        ["pandoc", str(ROOT / "Team01_M5.md"), "--from", "markdown", "--to", "html"],
+        ["pandoc", str(ROOT / "MILESTONE5.md"), "--from", "markdown", "--to", "html"],
         capture_output=True,
         text=True,
         check=True,
@@ -33,12 +33,18 @@ body {{ font-family: 'M5 Times', serif; font-size: 12pt; line-height: 1.5; color
 p {{ margin: 0 0 14pt; }}
 a {{ color: #164c9d; overflow-wrap: anywhere; }}
 code {{ font-family: inherit; font-size: inherit; }}
+img {{ max-width: 100%; }}
+table {{ border-collapse: collapse; width: 100%; margin: 0 0 14pt; font-size: 10.5pt; line-height: 1.3; }}
+th, td {{ border: 1px solid #222; padding: 4pt 6pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
+th {{ background: #f0f0f0; }}
+tr {{ break-inside: avoid; }}
+thead {{ display: table-header-group; }}
 """
     with tempfile.TemporaryDirectory(prefix="marketplace-m5-") as tmp:
         path = Path(tmp) / "submission.html"
         path.write_text(
             '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            f"<title>Team 01 M5</title></head><body>{html}</body></html>",
+            f"<base href='{ROOT.as_uri()}/'><title>Team 01 M5</title></head><body>{html}</body></html>",
             encoding="utf-8",
         )
         with sync_playwright() as playwright:
@@ -53,7 +59,7 @@ code {{ font-family: inherit; font-size: inherit; }}
                 if not page.evaluate("document.fonts.check('12pt M5 Times')"):
                     raise RuntimeError("Times New Roman did not load")
                 page.pdf(
-                    path=str(ROOT / "Team01_M5.pdf"),
+                    path=str(ROOT / "MILESTONE5.pdf"),
                     print_background=True,
                     prefer_css_page_size=True,
                 )
